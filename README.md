@@ -14,7 +14,7 @@ clone the project:
 After it, choose the version you would like to build:
 
 	$ cd aquaris-5HD/
-	$ git checkout 1.2.0_20140616-1427
+	$ git checkout 1.0.2_20140616-1427
 	
 Finally, build the kernel:
 	
