@@ -22,6 +22,9 @@
 #include <mach/upmu_common_sw.h>
 #include <mach/upmu_hw.h>
 #include <mach/mt_pmic_wrap.h>
+#include <mach/upmu_common.h>
+
+
 
 static unsigned int interval = 0; /* seconds, 0 : no auto polling */
 static unsigned int trip_temp[10] = {120000,110000,100000,90000,80000,70000,65000,60000,55000,50000};
@@ -66,6 +69,13 @@ static kal_int32 g_o_slope_sign = 0;
 static kal_int32 g_id = 0;
 
 extern int PMIC_IMM_GetOneChannelValue(int dwChannel, int deCount, int trimd);
+
+/*Patch for CR ALPS00804150 & ALPS00804802 PMIC temp not correct issue*/
+extern int accdet_cable_type_state(void);
+extern kal_uint32 upmu_get_reg_value(kal_uint32 reg);
+/*Patch for CR ALPS00804150 & ALPS00804802 PMIC temp not correct issue*/
+
+
 #define y_pmic_repeat_times	1
 
 static u16 pmic_read(u16 addr)
@@ -172,7 +182,46 @@ static int pre_temp1=0, PMIC_counter=0;
 static int mtktspmic_get_hw_temp(void)
 {
 	int temp=0, temp1=0;
-	
+	int earphone=0;
+    U32 val=0;
+
+
+    /*Patch for CR ALPS00804150 & ALPS00804802 PMIC temp not correct issue*/
+	earphone = accdet_cable_type_state();
+    if(earphone != 0 ){ //with EAR phone
+
+		val=upmu_get_pmu_thr_status();
+		/*Temp have +- 15 degree */
+		if (val == 0x0){
+			// T_PMIC < 110'c
+			temp1 = 25000;
+		}
+		else if (val == 0x1){
+			// 110'c  <= T_PMIC < 125'c
+			temp1 = 110000;
+		}
+		else if (val == 0x3){
+			// 125'c  <= T_PMIC < 150'c
+			temp1 = 125000;
+		}
+		else if (val == 0x7){
+			// 150'c  <= T_PMIC
+			temp1 = 150000;
+		}
+		else{
+	        // error
+	        temp1 = 25000; //25 degree
+	        printk("upmu_get_pmu_thr_status err");
+		}
+		// debug
+		printk("[with_EAR_phone] val=%d, Reg[0x506]=0x%x", val, upmu_get_reg_value(0x506));
+        mtktspmic_dprintk("[mtktspmic_get_hw_temp] T=%d\n",temp1);
+
+        return temp1;
+    }
+	/*Patch for CR ALPS00804150 & ALPS00804802 PMIC temp not correct issue*/
+
+
 	mutex_lock(&TSPMIC_lock);
 	
 	temp = PMIC_IMM_GetOneChannelValue(4, y_pmic_repeat_times , 2);
@@ -190,12 +239,12 @@ static int mtktspmic_get_hw_temp(void)
 	
 	if((temp1>150000) || (temp1<-50000))
 	{
-		printk("[Power/PMIC_Thermal] drop this data\n");
+		printk("[Power/PMIC_Thermal] drop this data,temp1=%d,pre_temp1=%d\n",temp1,pre_temp1);
 		temp1 = pre_temp1;
 	}
 	else if( (PMIC_counter!=0) && (((pre_temp1-temp1)>30000) || ((temp1-pre_temp1)>30000)) )
 	{
-		printk("[Power/PMIC_Thermal] drop this data 2\n");
+		printk("[Power/PMIC_Thermal] drop this data 2,temp1=%d,pre_temp1=%d\n",temp1,pre_temp1);
 		temp1 = pre_temp1;
 	}	
 	else
@@ -559,7 +608,7 @@ cooldev5=%s,cooldev6=%s,cooldev7=%s,cooldev8=%s,cooldev9=%s\n",
 		interval=time_msec / 1000;
 
 		mtktspmic_dprintk("[mtktspmic_write] trip_0_temp=%d,trip_1_temp=%d,trip_2_temp=%d,trip_3_temp=%d,trip_4_temp=%d,\
-trip_5_temp=%d,trip_6_temp=%d,trip_7_temp=%d,trip_8_temp=%d,trip_9_temp=%d,time_ms=%d\n", 
+trip_5_temp=%d,trip_6_temp=%d,trip_7_temp=%d,trip_8_temp=%d,trip_9_temp=%d,time_ms=%d\n",
 						trip_temp[0],trip_temp[1],trip_temp[2],trip_temp[3],trip_temp[4],
 						trip_temp[5],trip_temp[6],trip_temp[7],trip_temp[8],trip_temp[9],interval*1000);
 													

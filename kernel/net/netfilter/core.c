@@ -186,8 +186,10 @@ next_hook:
 	if (verdict == NF_ACCEPT || verdict == NF_STOP) {
 		ret = 1;
 	} else if ((verdict & NF_VERDICT_MASK) == NF_DROP) {
-		printk(KERN_INFO "[mtk_net]nf_hook_slow drop! len = %d, pf =%d, hook = %d\n",
-			skb->len, pf, hook);
+		#ifdef CONFIG_MTK_NET_LOGGING  
+		printk(KERN_INFO "[mtk_net][netfilter]nf_hook_slow drop! len = %d, pf =%d, hook = %d, dev = %s\n",
+			skb->len, pf, hook, skb->dev->name);
+		#endif
 		kfree_skb(skb);
 		ret = NF_DROP_GETERR(verdict);
 		if (ret == 0)

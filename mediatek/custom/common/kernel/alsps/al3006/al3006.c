@@ -40,13 +40,27 @@
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
 
+/******************************************************************************
+ * extern functions  ruo add
+*******************************************************************************/
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
 
+
+
+/**ruo mark
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
 extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
 extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
 extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+***/
 /*-------------------------MT6516&MT6573 define-------------------------------*/
 
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
@@ -68,6 +82,8 @@ extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_
 /******************************************************************************
  * extern functions
 *******************************************************************************/
+
+/**ruo mark
 #ifdef MT6516
 extern void MT6516_EINTIRQUnmask(unsigned int line);
 extern void MT6516_EINTIRQMask(unsigned int line);
@@ -78,6 +94,7 @@ extern void MT6516_EINT_Registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
                                      kal_bool auto_umask);
 #endif
+***/
 /*----------------------------------------------------------------------------*/
 #define mt6516_I2C_DATA_PORT        ((base) + 0x0000)
 #define mt6516_I2C_SLAVE_ADDR       ((base) + 0x0004)
@@ -846,7 +863,9 @@ static void al3006_eint_work(struct work_struct *work)
 		APS_ERR("call hwmsen_get_interrupt_data fail = %d\n", err);
 	  }
 	}
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
 	
+	/*** ruo mark
 	#ifdef MT6516
 	MT6516_EINTIRQUnmask(CUST_EINT_ALS_NUM);      
 	#endif     
@@ -859,6 +878,7 @@ static void al3006_eint_work(struct work_struct *work)
 	#ifdef MT6577
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
 	#endif
+	****/
 }
 
 /*----------------------------------------------------------------------------*/
@@ -874,12 +894,18 @@ int al3006_setup_eint(struct i2c_client *client)
     mt_set_gpio_dir(GPIO_ALS_EINT_PIN, GPIO_DIR_IN);
 	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, GPIO_PULL_ENABLE);
 	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
+
+
+	// ruo add
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, al3006_eint_func, 0);
 	
 	//mt_set_gpio_dir(GPIO_ALS_EINT_PIN, GPIO_DIR_IN);
 	//mt_set_gpio_mode(GPIO_ALS_EINT_PIN, GPIO_ALS_EINT_PIN_M_EINT);
 	//mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, GPIO_PULL_ENABLE);
 	//mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
-
+	
+/*** ruo mark 
 #ifdef MT6516
 
 	MT6516_EINT_Set_Sensitivity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
@@ -914,7 +940,7 @@ int al3006_setup_eint(struct i2c_client *client)
 		mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, al3006_eint_func, 0);
 		mt65xx_eint_unmask(CUST_EINT_ALS_NUM);	
 #endif  
-
+***/
 
     return 0;
 }
@@ -1111,6 +1137,7 @@ static ssize_t al3006_show_status(struct device_driver *ddri, char *buf)
 		len += snprintf(buf+len, PAGE_SIZE-len, "CUST: NULL\n");
 	}
 
+	/**
 	#ifdef MT6516
 	len += snprintf(buf+len, PAGE_SIZE-len, "EINT: %d (%d %d %d %d)\n", mt_get_gpio_in(GPIO_ALS_EINT_PIN),
 				CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_DEBOUNCE_CN);
@@ -1119,6 +1146,7 @@ static ssize_t al3006_show_status(struct device_driver *ddri, char *buf)
 				mt_get_gpio_dir(GPIO_ALS_EINT_PIN), mt_get_gpio_mode(GPIO_ALS_EINT_PIN), 
 				mt_get_gpio_pull_enable(GPIO_ALS_EINT_PIN), mt_get_gpio_pull_select(GPIO_ALS_EINT_PIN));
 	#endif
+	**/
 
 	len += snprintf(buf+len, PAGE_SIZE-len, "MISC: %d %d\n", atomic_read(&al3006_obj->als_suspend), atomic_read(&al3006_obj->ps_suspend));
 
@@ -2076,10 +2104,15 @@ static int al3006_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 	exit_kfree:
 	kfree(obj);
 	exit:
-	al3006_i2c_client = NULL;           
-	#ifdef MT6516        
-	MT6516_EINTIRQMask(CUST_EINT_ALS_NUM);  /*mask interrupt if fail*/
-	#endif
+	al3006_i2c_client = NULL;
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
+	
+	//ruo mark
+	
+	//#ifdef MT6516        
+	//MT6516_EINTIRQMask(CUST_EINT_ALS_NUM);  /*mask interrupt if fail*/
+	//#endif
+	
 	APS_ERR("%s: err = %d\n", __func__, err);
 	return err;
 }

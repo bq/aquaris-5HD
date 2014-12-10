@@ -54,31 +54,8 @@ static fm_s32 MT6620fm_cust_config_print(fm_cust_cfg *cfg)
     WCN_DBG(FM_NTC | MAIN, "MT6620 scan_hole_low:\t%d\n", cfg->tx_cfg.scan_hole_low);
     WCN_DBG(FM_NTC | MAIN, "MT6620 scan_hole_high:\t%d\n", cfg->tx_cfg.scan_hole_high);
     WCN_DBG(FM_NTC | MAIN, "MT6620 power_level:\t%d\n", cfg->tx_cfg.power_level);
-#if 0
-    WCN_DBG(FM_NTC | MAIN, "MT6620 rssi_l:\t0x%04x\n", cfg->rx_cfg.long_ana_rssi_th);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 rssi_s:\t0x%04x\n", cfg->rx_cfg.short_ana_rssi_th);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 mr_th:\t0x%04x\n", cfg->rx_cfg.mr_th);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 cqi_th:\t0x%04x\n", cfg->rx_cfg.cqi_th);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 smg_th:\t0x%04x\n", cfg->rx_cfg.smg_th);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 scan_ch_size:\t%d\n", cfg->rx_cfg.scan_ch_size);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 seek_space:\t%d\n", cfg->rx_cfg.seek_space);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 band:\t%d\n", cfg->rx_cfg.band);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 band_freq_l:\t%d\n", cfg->rx_cfg.band_freq_l);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 band_freq_h:\t%d\n", cfg->rx_cfg.band_freq_h);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 scan_sort:\t%d\n", cfg->rx_cfg.scan_sort);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 fake_ch_num:\t%d\n", cfg->rx_cfg.fake_ch_num);
-    WCN_DBG(FM_NTC | MAIN, "MT6620 fake_ch_rssi_th:\t%d\n", cfg->rx_cfg.fake_ch_rssi_th);
 
-    for (i = 0; i < cfg->rx_cfg.fake_ch_num; i++) {
-        WCN_DBG(FM_NTC | MAIN, "fake_ch:\t%d\n", cfg->rx_cfg.fake_ch[i]);
-    }
-
-    WCN_DBG(FM_NTC | MAIN, "de_emphasis:\t%d\n", cfg->rx_cfg.deemphasis);
-    WCN_DBG(FM_NTC | MAIN, "osc_freq:\t%d\n", cfg->rx_cfg.osc_freq);
-    WCN_DBG(FM_NTC | MAIN, "scan_hole_low:\t%d\n", cfg->tx_cfg.scan_hole_low);
-    WCN_DBG(FM_NTC | MAIN, "scan_hole_high:\t%d\n", cfg->tx_cfg.scan_hole_high);
-    WCN_DBG(FM_NTC | MAIN, "power_level:\t%d\n", cfg->tx_cfg.power_level);
-#endif
+    WCN_DBG(FM_NTC | MAIN, "aud path[%d]I2S state[%d]mode[%d]rate[%d]\n", cfg->aud_cfg.aud_path,cfg->aud_cfg.i2s_info.status,cfg->aud_cfg.i2s_info.mode,cfg->aud_cfg.i2s_info.rate);
     return 0;
 }
 
@@ -198,6 +175,25 @@ static fm_s32 MT6620fm_cust_config_default(fm_cust_cfg *cfg)
     cfg->tx_cfg.scan_hole_high = FM_TX_SCAN_HOLE_HIGH_MT6620;
     cfg->tx_cfg.power_level = FM_TX_PWR_LEVEL_MAX_MT6620;
 
+#if (defined MTK_MERGE_INTERFACE_SUPPORT) || (defined FM_DIGITAL_INPUT)
+    cfg->aud_cfg.aud_path = FM_AUD_I2S;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_OFF;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_SLAVE;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_44K;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_IO;
+#elif defined FM_ANALOG_INPUT
+    cfg->aud_cfg.aud_path = FM_AUD_ANALOG;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_STATE_ERR;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_MODE_ERR;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_SR_ERR;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_ERR;
+#else
+    cfg->aud_cfg.aud_path = FM_AUD_ERR;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_STATE_ERR;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_MODE_ERR;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_SR_ERR;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_ERR;
+#endif
     return 0;
 }
 

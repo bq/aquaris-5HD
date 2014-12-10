@@ -727,6 +727,10 @@ static kal_uint16 OV5647MIPIReg2Gain(const kal_uint8 iReg)
  kal_uint8 OV5647MIPIGain2Reg(const kal_uint16 iGain)
 {
     kal_uint16 iReg = 0x00;
+	if(iGain>=(16*BASEGAIN)){
+		SENSORDB("[Waring] OV5647MIPI_SetGain, The Max iGain must < 16xBaseGain!");
+		}
+		
 	iReg = ((iGain / BASEGAIN) << 4) + ((iGain % BASEGAIN) * 16 / BASEGAIN);
 	iReg = iReg & 0xFF;
     return (kal_uint8)iReg;
@@ -1054,87 +1058,87 @@ inline static kal_bool OV5647MIPI_set_sensor_item_info(MSDK_SENSOR_ITEM_INFO_STR
 static void OV5647MIPI_Sensor_Init(void)
 {
 
-  //@@ global setting																  
-OV5647MIPI_write_cmos_sensor(0x0100,0x00);
-OV5647MIPI_write_cmos_sensor(0x0103,0x01);
+	//@@ global setting																  
+	OV5647MIPI_write_cmos_sensor(0x0100,0x00);
+	OV5647MIPI_write_cmos_sensor(0x0103,0x01);
 	//(5ms)		
-//	kal_sleep_task(2);
-    mdelay(6);
+	//	kal_sleep_task(2);
+	mdelay(6);
 
 
 	OV5647MIPI_write_cmos_sensor(0x3035, 0x11); //  system clk div
 	OV5647MIPI_write_cmos_sensor(0x303c, 0x11); //PLL ctrol
-	OV5647MIPI_write_cmos_sensor(0x370c, 0x03); // no
-	
+	OV5647MIPI_write_cmos_sensor(0x370c, 0x0f); //0x03  //modify by nick at 1/24 for ob uniform
+
 	OV5647MIPI_write_cmos_sensor(0x5000, 0x06); //isp control
-OV5647MIPI_write_cmos_sensor(0x5003,0x08);
-OV5647MIPI_write_cmos_sensor(0x5a00,0x08);
-	
+	OV5647MIPI_write_cmos_sensor(0x5003,0x08);
+	OV5647MIPI_write_cmos_sensor(0x5a00,0x08);
+
 	OV5647MIPI_write_cmos_sensor(0x3000, 0xff); //system control
-OV5647MIPI_write_cmos_sensor(0x3001,0xff);
-OV5647MIPI_write_cmos_sensor(0x3002,0xff);
-OV5647MIPI_write_cmos_sensor(0x301d,0xf0);
-OV5647MIPI_write_cmos_sensor(0x3a18,0x00);
-OV5647MIPI_write_cmos_sensor(0x3a19,0xf8);
+	OV5647MIPI_write_cmos_sensor(0x3001,0xff);
+	OV5647MIPI_write_cmos_sensor(0x3002,0xff);
+	OV5647MIPI_write_cmos_sensor(0x301d,0xf0);
+	OV5647MIPI_write_cmos_sensor(0x3a18,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3a19,0xf8);
 	//OV5647MIPI_write_cmos_sensor(0x3a18, 0x01);
 	//OV5647MIPI_write_cmos_sensor(0x3a19, 0xe0);
-	
-	
-OV5647MIPI_write_cmos_sensor(0x3c01,0x80);
-OV5647MIPI_write_cmos_sensor(0x3b07,0x0c);
-OV5647MIPI_write_cmos_sensor(0x3708,0x64);
-OV5647MIPI_write_cmos_sensor(0x3630,0x2e);
-OV5647MIPI_write_cmos_sensor(0x3632,0xe2);
-OV5647MIPI_write_cmos_sensor(0x3633,0x23);
-OV5647MIPI_write_cmos_sensor(0x3634,0x44);
-OV5647MIPI_write_cmos_sensor(0x3620,0x64);
-OV5647MIPI_write_cmos_sensor(0x3621,0xe0);
-OV5647MIPI_write_cmos_sensor(0x3600,0x37);
-OV5647MIPI_write_cmos_sensor(0x3704,0xa0);
-OV5647MIPI_write_cmos_sensor(0x3703,0x5a);
-OV5647MIPI_write_cmos_sensor(0x3715,0x78);
-OV5647MIPI_write_cmos_sensor(0x3717,0x01);
-OV5647MIPI_write_cmos_sensor(0x3731,0x02);
-OV5647MIPI_write_cmos_sensor(0x370b,0x60);
-OV5647MIPI_write_cmos_sensor(0x3705,0x1a);
-OV5647MIPI_write_cmos_sensor(0x3f05,0x02);
-OV5647MIPI_write_cmos_sensor(0x3f06,0x10);
-OV5647MIPI_write_cmos_sensor(0x3f01,0x0a);
+
+
+	OV5647MIPI_write_cmos_sensor(0x3c01,0x80);
+	OV5647MIPI_write_cmos_sensor(0x3b07,0x0c);
+	OV5647MIPI_write_cmos_sensor(0x3708,0x64);
+	OV5647MIPI_write_cmos_sensor(0x3630,0x2e);
+	OV5647MIPI_write_cmos_sensor(0x3632,0xe2);
+	OV5647MIPI_write_cmos_sensor(0x3633,0x23);
+	OV5647MIPI_write_cmos_sensor(0x3634,0x44);
+	OV5647MIPI_write_cmos_sensor(0x3620,0x64);
+	OV5647MIPI_write_cmos_sensor(0x3621,0xe0);
+	OV5647MIPI_write_cmos_sensor(0x3600,0x37);
+	OV5647MIPI_write_cmos_sensor(0x3704,0xa0);
+	OV5647MIPI_write_cmos_sensor(0x3703,0x5a);
+	OV5647MIPI_write_cmos_sensor(0x3715,0x78);
+	OV5647MIPI_write_cmos_sensor(0x3717,0x01);
+	OV5647MIPI_write_cmos_sensor(0x3731,0x02);
+	OV5647MIPI_write_cmos_sensor(0x370b,0x60);
+	OV5647MIPI_write_cmos_sensor(0x3705,0x1a);
+	OV5647MIPI_write_cmos_sensor(0x3f05,0x02);
+	OV5647MIPI_write_cmos_sensor(0x3f06,0x10);
+	OV5647MIPI_write_cmos_sensor(0x3f01,0x0a);
 	//OV5647MIPI_write_cmos_sensor(0x3a08, 0x01);
 	OV5647MIPI_write_cmos_sensor(0x3a08, 0x00);
-OV5647MIPI_write_cmos_sensor(0x3a0f,0x58);
-OV5647MIPI_write_cmos_sensor(0x3a10,0x50);
-OV5647MIPI_write_cmos_sensor(0x3a1b,0x58);
-OV5647MIPI_write_cmos_sensor(0x3a1e,0x50);
-OV5647MIPI_write_cmos_sensor(0x3a11,0x60);
-OV5647MIPI_write_cmos_sensor(0x3a1f,0x28);
-	
-	OV5647MIPI_write_cmos_sensor(0x4001, 0x02);  //blc
-OV5647MIPI_write_cmos_sensor(0x4000,0x09);
+	OV5647MIPI_write_cmos_sensor(0x3a0f,0x58);
+	OV5647MIPI_write_cmos_sensor(0x3a10,0x50);
+	OV5647MIPI_write_cmos_sensor(0x3a1b,0x58);
+	OV5647MIPI_write_cmos_sensor(0x3a1e,0x50);
+	OV5647MIPI_write_cmos_sensor(0x3a11,0x60);
+	OV5647MIPI_write_cmos_sensor(0x3a1f,0x28);
 
-OV5647MIPI_write_cmos_sensor(0x3000,0x00);
-OV5647MIPI_write_cmos_sensor(0x3001,0x00);
+	OV5647MIPI_write_cmos_sensor(0x4001, 0x02);  //blc
+	OV5647MIPI_write_cmos_sensor(0x4000,0x09);
+
+	OV5647MIPI_write_cmos_sensor(0x3000,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3001,0x00);
 	OV5647MIPI_write_cmos_sensor(0x3002, 0x00); //modify
-OV5647MIPI_write_cmos_sensor(0x3017,0xe0);
-OV5647MIPI_write_cmos_sensor(0x301c,0xfc);
-OV5647MIPI_write_cmos_sensor(0x3636,0x06);
-OV5647MIPI_write_cmos_sensor(0x3016,0x08);
-OV5647MIPI_write_cmos_sensor(0x3827,0xec);
-OV5647MIPI_write_cmos_sensor(0x3018,0x44);
-    OV5647MIPI_write_cmos_sensor(0x3035, 0x21);
+	OV5647MIPI_write_cmos_sensor(0x3017,0xe0);
+	OV5647MIPI_write_cmos_sensor(0x301c,0xfc);
+	OV5647MIPI_write_cmos_sensor(0x3636,0x06);
+	OV5647MIPI_write_cmos_sensor(0x3016,0x08);
+	OV5647MIPI_write_cmos_sensor(0x3827,0xec);
+	OV5647MIPI_write_cmos_sensor(0x3018,0x44);
+	OV5647MIPI_write_cmos_sensor(0x3035, 0x21);
 	OV5647MIPI_write_cmos_sensor(0x3106, 0xf5);
-    OV5647MIPI_write_cmos_sensor(0x3034, 0x1a);
-OV5647MIPI_write_cmos_sensor(0x301c,0xf8);
-	
- 
-	
+	OV5647MIPI_write_cmos_sensor(0x3034, 0x1a);
+	OV5647MIPI_write_cmos_sensor(0x301c,0xf8);
+
+
+
 	OV5647MIPI_write_cmos_sensor(0x3503, 0x07);
 	//OV5647MIPI_write_cmos_sensor(0x3501, 0x3c);
 	//OV5647MIPI_write_cmos_sensor(0x3502, 0x00);
 
 	OV5647MIPI_write_cmos_sensor(0x3501, 0x10);
 	OV5647MIPI_write_cmos_sensor(0x3502, 0x80);
-	
+
 	OV5647MIPI_write_cmos_sensor(0x350a, 0x00);
 	OV5647MIPI_write_cmos_sensor(0x350b, 0x7f);
 	OV5647MIPI_write_cmos_sensor(0x5001, 0x01);
@@ -1151,52 +1155,53 @@ OV5647MIPI_write_cmos_sensor(0x301c,0xf8);
 	OV5647MIPI_write_cmos_sensor(0x4000, 0x09);		//add							  
 	//OV5647MIPI_write_cmos_sensor(0x0010, 0x01);	    //add
 
-	OV5647MIPI_write_cmos_sensor(0x3013,0x00);//liurui modfiy
+	OV5647MIPI_write_cmos_sensor(0x3013,0x00);//
 	OV5647MIPI_write_cmos_sensor(0x4005,0x18);//gain triger
 	OV5647MIPI_write_cmos_sensor(0x4050,0x37);//blc max
 	OV5647MIPI_write_cmos_sensor(0x4051,0x8f);//blc level trigger
 	OV5647MIPI_write_cmos_sensor(0x0100,0x01);   //modify
-	
+
 
 }   /*  OV5647MIPI_Sensor_Init  */   /*  OV5647MIPI_Sensor_Init  */
 static void OV5647MIPI_Sensor_1080P(void) 
 {
 	SENSORDB("OV5647MIPIVideo Setting \n");
 
-OV5647MIPI_write_cmos_sensor(0x0100,0x00);      
-OV5647MIPI_write_cmos_sensor(0x3036, 0x64);
-OV5647MIPI_write_cmos_sensor(0x3612, 0x5b);
-OV5647MIPI_write_cmos_sensor(0x3618, 0x04);
-OV5647MIPI_write_cmos_sensor(0x3709, 0x12);
-OV5647MIPI_write_cmos_sensor(0x3800, 0x01);
-OV5647MIPI_write_cmos_sensor(0x3801, 0x5c);
-OV5647MIPI_write_cmos_sensor(0x3802, 0x01);
-OV5647MIPI_write_cmos_sensor(0x3803, 0xb2);
-OV5647MIPI_write_cmos_sensor(0x3804, 0x08);
-OV5647MIPI_write_cmos_sensor(0x3805, 0xe3);
-OV5647MIPI_write_cmos_sensor(0x3806, 0x05);
-OV5647MIPI_write_cmos_sensor(0x3807, 0xf1);
-OV5647MIPI_write_cmos_sensor(0x3808,0x07);
-OV5647MIPI_write_cmos_sensor(0x3809,0x80);
-OV5647MIPI_write_cmos_sensor(0x380a,0x04);
-OV5647MIPI_write_cmos_sensor(0x380b,0x38);       
-OV5647MIPI_write_cmos_sensor(0x380c,0x09);       
-OV5647MIPI_write_cmos_sensor(0x380d,0x70);
-OV5647MIPI_write_cmos_sensor(0x380e,0x04);      
-OV5647MIPI_write_cmos_sensor(0x380f,0x50);       
-OV5647MIPI_write_cmos_sensor(0x3814,0x11);
-OV5647MIPI_write_cmos_sensor(0x3815,0x11);              
-OV5647MIPI_write_cmos_sensor(0x3821,0x00);//0x01
-OV5647MIPI_write_cmos_sensor(0x3820,0x06);//0x47
-OV5647MIPI_write_cmos_sensor(0x3a09,0x4b);
-OV5647MIPI_write_cmos_sensor(0x3a0a,0x01);
-OV5647MIPI_write_cmos_sensor(0x3a0b,0x13);       
-OV5647MIPI_write_cmos_sensor(0x3a0d,0x04);
-OV5647MIPI_write_cmos_sensor(0x3a0e,0x03);       
-OV5647MIPI_write_cmos_sensor(0x4004, 0x04);
-OV5647MIPI_write_cmos_sensor(0x4005,0x18);//gain triger
-OV5647MIPI_write_cmos_sensor(0x4837,0x19);             
-OV5647MIPI_write_cmos_sensor(0x0100,0x01);
+	OV5647MIPI_write_cmos_sensor(0x0100,0x00);      
+	OV5647MIPI_write_cmos_sensor(0x3036, 0x64);
+	OV5647MIPI_write_cmos_sensor(0x3612, 0x5b);
+	OV5647MIPI_write_cmos_sensor(0x3618, 0x04);
+	OV5647MIPI_write_cmos_sensor(0x3709, 0x12);
+	OV5647MIPI_write_cmos_sensor(0x3800, 0x01);
+	OV5647MIPI_write_cmos_sensor(0x3801, 0x5c);
+	OV5647MIPI_write_cmos_sensor(0x3802, 0x01);
+	OV5647MIPI_write_cmos_sensor(0x3803, 0xb2);
+	OV5647MIPI_write_cmos_sensor(0x3804, 0x08);
+	OV5647MIPI_write_cmos_sensor(0x3805, 0xe3);
+	OV5647MIPI_write_cmos_sensor(0x3806, 0x05);
+	OV5647MIPI_write_cmos_sensor(0x3807, 0xf1);
+	OV5647MIPI_write_cmos_sensor(0x3808,0x07);
+	OV5647MIPI_write_cmos_sensor(0x3809,0x80);
+	OV5647MIPI_write_cmos_sensor(0x380a,0x04);
+	OV5647MIPI_write_cmos_sensor(0x380b,0x38);       
+	OV5647MIPI_write_cmos_sensor(0x380c,0x09);       
+	OV5647MIPI_write_cmos_sensor(0x380d,0x70);
+	OV5647MIPI_write_cmos_sensor(0x380e,0x04);      
+	OV5647MIPI_write_cmos_sensor(0x380f,0x50);       
+	OV5647MIPI_write_cmos_sensor(0x3814,0x11);
+	OV5647MIPI_write_cmos_sensor(0x3815,0x11);              
+	OV5647MIPI_write_cmos_sensor(0x3821,0x00);//0x01
+	OV5647MIPI_write_cmos_sensor(0x3820,0x06);//0x47
+	OV5647MIPI_write_cmos_sensor(0x3a09,0x4b);
+	OV5647MIPI_write_cmos_sensor(0x3a0a,0x01);
+	OV5647MIPI_write_cmos_sensor(0x3a0b,0x13);       
+	OV5647MIPI_write_cmos_sensor(0x3a0d,0x04);
+	OV5647MIPI_write_cmos_sensor(0x3a0e,0x03);       
+	OV5647MIPI_write_cmos_sensor(0x4004, 0x04);
+	//OV5647MIPI_write_cmos_sensor(0x4005,0x18);//gain triger
+	OV5647MIPI_write_cmos_sensor(0x4005,0x1a);//gain triger
+	OV5647MIPI_write_cmos_sensor(0x4837,0x19);             
+	OV5647MIPI_write_cmos_sensor(0x0100,0x01);
 
 
 }
@@ -1226,35 +1231,35 @@ static void OV5647MIPI_Sensor_1M(void)
 	
 	SENSORDB("OV5647MIPIPreview Setting \n");
 	OV5647MIPI_write_cmos_sensor(0x0100, 0x00);	
-    OV5647MIPI_write_cmos_sensor(0x3036, 0x46);	
-OV5647MIPI_write_cmos_sensor(0x3612,0x59);
+	OV5647MIPI_write_cmos_sensor(0x3036, 0x46);	
+	OV5647MIPI_write_cmos_sensor(0x3612,0x59);
 	OV5647MIPI_write_cmos_sensor(0x3618, 0x00);	
-OV5647MIPI_write_cmos_sensor(0x3709,0x52);
-OV5647MIPI_write_cmos_sensor(0x3800,0x00);
-OV5647MIPI_write_cmos_sensor(0x3801,0x08);
-OV5647MIPI_write_cmos_sensor(0x3802,0x00);
-OV5647MIPI_write_cmos_sensor(0x3803,0x02);
-OV5647MIPI_write_cmos_sensor(0x3804,0x0a);
-OV5647MIPI_write_cmos_sensor(0x3805,0x37);
-OV5647MIPI_write_cmos_sensor(0x3806,0x07);
-OV5647MIPI_write_cmos_sensor(0x3807,0xa1);
-OV5647MIPI_write_cmos_sensor(0x3808,0x05);
-OV5647MIPI_write_cmos_sensor(0x3809,0x10);
-OV5647MIPI_write_cmos_sensor(0x380a,0x03);
-OV5647MIPI_write_cmos_sensor(0x380b,0xcc);
-OV5647MIPI_write_cmos_sensor(0x380c,0x07);
-OV5647MIPI_write_cmos_sensor(0x380d,0x68);
-OV5647MIPI_write_cmos_sensor(0x380e,0x03);
-OV5647MIPI_write_cmos_sensor(0x380f,0xd8);
+	OV5647MIPI_write_cmos_sensor(0x3709,0x52);
+	OV5647MIPI_write_cmos_sensor(0x3800,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3801,0x08);
+	OV5647MIPI_write_cmos_sensor(0x3802,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3803,0x02);
+	OV5647MIPI_write_cmos_sensor(0x3804,0x0a);
+	OV5647MIPI_write_cmos_sensor(0x3805,0x37);
+	OV5647MIPI_write_cmos_sensor(0x3806,0x07);
+	OV5647MIPI_write_cmos_sensor(0x3807,0xa1);
+	OV5647MIPI_write_cmos_sensor(0x3808,0x05);
+	OV5647MIPI_write_cmos_sensor(0x3809,0x10);
+	OV5647MIPI_write_cmos_sensor(0x380a,0x03);
+	OV5647MIPI_write_cmos_sensor(0x380b,0xcc);
+	OV5647MIPI_write_cmos_sensor(0x380c,0x07);
+	OV5647MIPI_write_cmos_sensor(0x380d,0x68);
+	OV5647MIPI_write_cmos_sensor(0x380e,0x03);
+	OV5647MIPI_write_cmos_sensor(0x380f,0xd8);
 	OV5647MIPI_write_cmos_sensor(0x3814, 0x31);	
 	OV5647MIPI_write_cmos_sensor(0x3815, 0x31);	
-OV5647MIPI_write_cmos_sensor(0x3821,0x01);
-OV5647MIPI_write_cmos_sensor(0x3820,0x47);
-OV5647MIPI_write_cmos_sensor(0x3a09,0x27);
-OV5647MIPI_write_cmos_sensor(0x3a0a,0x00);
-OV5647MIPI_write_cmos_sensor(0x3a0b,0xf6);
-OV5647MIPI_write_cmos_sensor(0x3a0d,0x04);
-OV5647MIPI_write_cmos_sensor(0x3a0e,0x03);
+	OV5647MIPI_write_cmos_sensor(0x3821,0x01);
+	OV5647MIPI_write_cmos_sensor(0x3820,0x47);
+	OV5647MIPI_write_cmos_sensor(0x3a09,0x27);
+	OV5647MIPI_write_cmos_sensor(0x3a0a,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3a0b,0xf6);
+	OV5647MIPI_write_cmos_sensor(0x3a0d,0x04);
+	OV5647MIPI_write_cmos_sensor(0x3a0e,0x03);
 	OV5647MIPI_write_cmos_sensor(0x4004, 0x02);	
 	OV5647MIPI_write_cmos_sensor(0x4005,0x18);//gain triger
 	OV5647MIPI_write_cmos_sensor(0x4837, 0x23);
@@ -1284,34 +1289,34 @@ static void OV5647MIPI_Sensor_5M(void)
 		
 	OV5647MIPI_write_cmos_sensor(0x0100,0x00); 	
 	OV5647MIPI_write_cmos_sensor(0x3036,0x64); 	
-OV5647MIPI_write_cmos_sensor(0x3612,0x5b);
+	OV5647MIPI_write_cmos_sensor(0x3612,0x5b);
 	OV5647MIPI_write_cmos_sensor(0x3618,0x04); 
-OV5647MIPI_write_cmos_sensor(0x3709,0x12);      
-OV5647MIPI_write_cmos_sensor(0x3800,0x00);
-OV5647MIPI_write_cmos_sensor(0x3801,0x0c);
-OV5647MIPI_write_cmos_sensor(0x3802,0x00);
-OV5647MIPI_write_cmos_sensor(0x3803,0x04);
-OV5647MIPI_write_cmos_sensor(0x3804,0x0a);
-OV5647MIPI_write_cmos_sensor(0x3805,0x33);
-OV5647MIPI_write_cmos_sensor(0x3806,0x07);
-OV5647MIPI_write_cmos_sensor(0x3807,0xa3);
-OV5647MIPI_write_cmos_sensor(0x3808,0x0a);
-OV5647MIPI_write_cmos_sensor(0x3809,0x20);
-OV5647MIPI_write_cmos_sensor(0x380a,0x07);
-OV5647MIPI_write_cmos_sensor(0x380b,0x98);      
+	OV5647MIPI_write_cmos_sensor(0x3709,0x12);      
+	OV5647MIPI_write_cmos_sensor(0x3800,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3801,0x0c);
+	OV5647MIPI_write_cmos_sensor(0x3802,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3803,0x04);
+	OV5647MIPI_write_cmos_sensor(0x3804,0x0a);
+	OV5647MIPI_write_cmos_sensor(0x3805,0x33);
+	OV5647MIPI_write_cmos_sensor(0x3806,0x07);
+	OV5647MIPI_write_cmos_sensor(0x3807,0xa3);
+	OV5647MIPI_write_cmos_sensor(0x3808,0x0a);
+	OV5647MIPI_write_cmos_sensor(0x3809,0x20);
+	OV5647MIPI_write_cmos_sensor(0x380a,0x07);
+	OV5647MIPI_write_cmos_sensor(0x380b,0x98);      
 	OV5647MIPI_write_cmos_sensor(0x380c,0x0a); 	
-OV5647MIPI_write_cmos_sensor(0x380d,0xc0);
+	OV5647MIPI_write_cmos_sensor(0x380d,0xc0);
 	OV5647MIPI_write_cmos_sensor(0x380e,0x07); 	
 	OV5647MIPI_write_cmos_sensor(0x380f,0xb6); 	
 	OV5647MIPI_write_cmos_sensor(0x3814,0x11); 	
 	OV5647MIPI_write_cmos_sensor(0x3815,0x11); 	
-OV5647MIPI_write_cmos_sensor(0x3821,0x00);//0x01
-OV5647MIPI_write_cmos_sensor(0x3820,0x06); //0x47     
-OV5647MIPI_write_cmos_sensor(0x3a09,0x28);       
-OV5647MIPI_write_cmos_sensor(0x3a0a,0x00);
-OV5647MIPI_write_cmos_sensor(0x3a0b,0xf6);       
-OV5647MIPI_write_cmos_sensor(0x3a0d,0x08);
-OV5647MIPI_write_cmos_sensor(0x3a0e,0x06);       
+	OV5647MIPI_write_cmos_sensor(0x3821,0x00);//0x01
+	OV5647MIPI_write_cmos_sensor(0x3820,0x06); //0x47     
+	OV5647MIPI_write_cmos_sensor(0x3a09,0x28);       
+	OV5647MIPI_write_cmos_sensor(0x3a0a,0x00);
+	OV5647MIPI_write_cmos_sensor(0x3a0b,0xf6);       
+	OV5647MIPI_write_cmos_sensor(0x3a0d,0x08);
+	OV5647MIPI_write_cmos_sensor(0x3a0e,0x06);       
 	OV5647MIPI_write_cmos_sensor(0x4004,0x04); 
 	OV5647MIPI_write_cmos_sensor(0x4005,0x1a);//always triger
 	OV5647MIPI_write_cmos_sensor(0x4837,0x19);
@@ -1418,7 +1423,8 @@ UINT32 OV5647MIPIGetSensorID(UINT32 *sensorID)
 #ifdef OV5647MIPI_DRIVER_TRACE
 	SENSORDB("OV5647MIPIOpen, sensor_id:%x \n",*sensorID);
 #endif		
-	if (*sensorID != OV5647MIPI_SENSOR_ID) {		
+	if (*sensorID != OV5647MIPI_SENSOR_ID) {
+		*sensorID = 0xFFFFFFFF;
 		return ERROR_SENSOR_CONNECT_FAIL;
 	}
 	
@@ -1575,20 +1581,20 @@ UINT32 OV5647MIPICapture(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&ov5647mipi_drv_lock);
 
 
-		OV5647MIPI_Sensor_5M();
-		spin_lock(&ov5647mipi_drv_lock);
-		OV5647MIPI_sensor.pv_mode = KAL_FALSE;
-	
-		OV5647MIPI_sensor.pclk = OV5647MIPI_CAPTURE_CLK;
-		spin_unlock(&ov5647mipi_drv_lock);
-		cap_fps = OV5647MIPI_FPS(15);
+	OV5647MIPI_Sensor_5M();
+	spin_lock(&ov5647mipi_drv_lock);
+	OV5647MIPI_sensor.pv_mode = KAL_FALSE;
 
-		OV5647MIPI_Set_Dummy(0, 0);
-		spin_lock(&ov5647mipi_drv_lock);
-		OV5647MIPI_sensor.line_length = OV5647MIPI_FULL_PERIOD_PIXEL_NUMS;
-		OV5647MIPI_sensor.frame_height = OV5647MIPI_FULL_PERIOD_LINE_NUMS;
-		spin_unlock(&ov5647mipi_drv_lock);
-        mdelay(40);
+	OV5647MIPI_sensor.pclk = OV5647MIPI_CAPTURE_CLK;
+	spin_unlock(&ov5647mipi_drv_lock);
+	cap_fps = OV5647MIPI_FPS(15);
+
+	OV5647MIPI_Set_Dummy(0, 0);
+	spin_lock(&ov5647mipi_drv_lock);
+	OV5647MIPI_sensor.line_length = OV5647MIPI_FULL_PERIOD_PIXEL_NUMS;
+	OV5647MIPI_sensor.frame_height = OV5647MIPI_FULL_PERIOD_LINE_NUMS;
+	spin_unlock(&ov5647mipi_drv_lock);
+    mdelay(40);
 
 	return ERROR_NONE;
 }   /* OV5647MIPI_Capture() */
@@ -1599,9 +1605,9 @@ UINT32 OV5647MIPI3DPreview(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	kal_uint16 dummy_line;
 	
 	OV5647MIPI_Sensor_1080P();
-		spin_lock(&ov5647mipi_drv_lock);
+	spin_lock(&ov5647mipi_drv_lock);
 	OV5647MIPI_sensor.pv_mode = KAL_TRUE;
-		spin_unlock(&ov5647mipi_drv_lock);
+	spin_unlock(&ov5647mipi_drv_lock);
 	
 	//OV5647MIPIZsdCameraPreview=KAL_FALSE;
 	
@@ -1621,12 +1627,12 @@ UINT32 OV5647MIPI3DPreview(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 		dummy_line = 0;
 		break;
 	}
-		spin_lock(&ov5647mipi_drv_lock);
+	spin_lock(&ov5647mipi_drv_lock);
 	OV5647MIPI_sensor.line_length = OV5647MIPI_PV_PERIOD_PIXEL_NUMS;
 	OV5647MIPI_sensor.frame_height = OV5647MIPI_PV_PERIOD_LINE_NUMS+dummy_line;
 
 	OV5647MIPI_sensor.pclk = OV5647MIPI_PREVIEW_CLK;
-		spin_unlock(&ov5647mipi_drv_lock);
+	spin_unlock(&ov5647mipi_drv_lock);
 
 	OV5647MIPI_Set_Dummy(0, dummy_line); /* modify dummy_pixel must gen AE table again */
 	//OV5647MIPI_Write_Shutter(OV5647MIPI_sensor.shutter);
@@ -1879,7 +1885,7 @@ UINT32 OV5647MIPISetVideoMode(UINT16 u2FrameRate)
 	spin_lock(&ov5647mipi_drv_lock);
 	OV5647MIPI_sensor.video_mode = KAL_TRUE;
 	spin_unlock(&ov5647mipi_drv_lock);
-
+	#if 0
 	if(u2FrameRate == 30){
 		spin_lock(&ov5647mipi_drv_lock);
 		OV5647MIPI_sensor.NightMode = KAL_FALSE;
@@ -1888,7 +1894,10 @@ UINT32 OV5647MIPISetVideoMode(UINT16 u2FrameRate)
 	    spin_lock(&ov5647mipi_drv_lock);
 		OV5647MIPI_sensor.NightMode = KAL_TRUE;
 		spin_unlock(&ov5647mipi_drv_lock);
-	}else{
+	}
+	#endif
+	if((u2FrameRate<0)||(u2FrameRate> 30))
+	{
 		SENSORDB("[soso][OV5647MIPISetMaxFrameRate],Error Framerate, u2FrameRate=%d",u2FrameRate);
 		return ERROR_NONE;
 		// TODO: Wrong configuratioin
@@ -1905,7 +1914,7 @@ UINT32 OV5647MIPISetVideoMode(UINT16 u2FrameRate)
 	
 	OV5647MIPISetMaxFrameRate(u2FrameRate);
 	OV5647MIPI_Write_Shutter(OV5647MIPI_sensor.shutter);//From Meimei Video issue
-    return TRUE;
+    return ERROR_NONE;
 }
 
 UINT32 OV5647MIPISetAutoFlickerMode(kal_bool bEnable, UINT16 u2FrameRate)
@@ -1927,7 +1936,7 @@ UINT32 OV5647MIPISetAutoFlickerMode(kal_bool bEnable, UINT16 u2FrameRate)
 		if((OV5647MIPI_sensor.FixedFps == 30)&&(OV5647MIPI_sensor.video_mode==KAL_TRUE))
 			OV5647MIPISetMaxFrameRate(300);
 	}
-	return TRUE;
+	return ERROR_NONE;
 }
 
 UINT32 OV5647MIPISetCalData(PSET_SENSOR_CALIBRATION_DATA_STRUCT pSetSensorCalData){

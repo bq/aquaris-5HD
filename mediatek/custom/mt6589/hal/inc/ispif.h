@@ -621,6 +621,18 @@ typedef union {
     };
 } ISP_NVRAM_LSC_T;
 
+typedef union {
+    enum { COUNT = 6 };
+    MUINT32 set[COUNT];
+    struct {
+        ISP_NVRAM_LSC_CTL1_T    ctl1;
+        ISP_NVRAM_LSC_CTL2_T    ctl2;
+        ISP_NVRAM_LSC_CTL3_T    ctl3;
+        ISP_NVRAM_LSC_LBLOCK_T  lblock;
+        ISP_NVRAM_LSC_RATIO_T   ratio;
+        ISP_NVRAM_LSC_GAIN_TH_T gain_th;
+    };
+} ISP_NVRAM_LSC_CFG_T;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Pre-gain
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

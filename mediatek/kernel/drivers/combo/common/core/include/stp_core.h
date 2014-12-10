@@ -25,6 +25,12 @@
 */
 
 #define CONFIG_POWER_SAVING_SUPPORT
+#if WMT_UART_RX_MODE_WORK
+#define CFG_STP_CORE_CTX_SPIN_LOCK 0
+#else
+#define CFG_STP_CORE_CTX_SPIN_LOCK 1
+#endif
+
 
 
 #define PFX                         "[STP] "
@@ -37,9 +43,9 @@
 extern unsigned int gStpDbgLvl;
 
 #define STP_DBG_FUNC(fmt, arg...)    if(gStpDbgLvl >= STP_LOG_DBG){  osal_dbg_print(PFX "%s: "  fmt, __FUNCTION__ ,##arg);}
-#define STP_INFO_FUNC(fmt, arg...)   if(gStpDbgLvl >= STP_LOG_INFO){ osal_dbg_print(PFX "%s:[I] "  fmt, __FUNCTION__ ,##arg);}
-#define STP_WARN_FUNC(fmt, arg...)   if(gStpDbgLvl >= STP_LOG_WARN){ osal_dbg_print(PFX "%s:[W] "  fmt, __FUNCTION__ ,##arg);}
-#define STP_ERR_FUNC(fmt, arg...)    if(gStpDbgLvl >= STP_LOG_ERR){  osal_dbg_print(PFX "%s:[E] "   fmt, __FUNCTION__ ,##arg);}
+#define STP_INFO_FUNC(fmt, arg...)   if(gStpDbgLvl >= STP_LOG_INFO){ osal_info_print(PFX "%s:[I] "  fmt, __FUNCTION__ ,##arg);}
+#define STP_WARN_FUNC(fmt, arg...)   if(gStpDbgLvl >= STP_LOG_WARN){ osal_warn_print(PFX "%s:[W] "  fmt, __FUNCTION__ ,##arg);}
+#define STP_ERR_FUNC(fmt, arg...)    if(gStpDbgLvl >= STP_LOG_ERR){  osal_err_print(PFX "%s:[E] "   fmt, __FUNCTION__ ,##arg);}
 #define STP_TRC_FUNC(f)              if(gStpDbgLvl >= STP_LOG_DBG){  osal_dbg_print(PFX "<%s> <%d>\n", __FUNCTION__, __LINE__);}
 
 #define STP_DUMP_PACKET_HEAD(a, b, c)     if(gStpDbgLvl >= STP_LOG_PKHEAD){stp_dump_data(a, b, c);}
@@ -182,7 +188,11 @@ typedef struct
     mtkstp_parser_context_struct parser;        // current rx pkt's content
     mtkstp_sequence_context_struct sequence;    // state machine's current status
     //MTK_WCN_MUTEX stp_mutex;
+    #if CFG_STP_CORE_CTX_SPIN_LOCK
     OSAL_UNSLEEPABLE_LOCK stp_mutex;
+    #else
+    OSAL_SLEEPABLE_LOCK stp_mutex;
+    #endif
     //MTK_WCN_TIMER tx_timer; // timer for tx timeout handling
     OSAL_TIMER tx_timer;
 
@@ -205,6 +215,8 @@ typedef struct
     
     /* Flag to indicate the last WMT CLOSE*/
     UINT32 f_wmt_last_close;
+	/* Flag to indicate evt err has triggered assert or not*/
+	UINT32 f_evt_err_assert;
 }mtkstp_context_struct;
 
 /*******************************************************************************
@@ -536,6 +548,12 @@ extern INT32 mtk_wcn_stp_notify_sleep_for_thermal(void);
 
 
 extern INT32 mtk_wcn_stp_set_wmt_last_close(UINT32 value);
+
+extern INT32 mtk_wcn_stp_wmt_evt_err_trg_assert(VOID);
+extern UINT32 mtk_wcn_stp_get_wmt_evt_err_trg_assert(VOID);
+extern VOID mtk_wcn_stp_set_wmt_evt_err_trg_assert(UINT32 value);
+extern INT32 mtk_wcn_stp_coredump_timeout_handle(VOID);
+
 
 /*******************************************************************************
 *                              F U N C T I O N S

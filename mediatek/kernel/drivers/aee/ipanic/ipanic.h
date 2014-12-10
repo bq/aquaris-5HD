@@ -1,11 +1,13 @@
 #if !defined(__AEE_IPANIC_H__)
 #define __AEE_IPANIC_H__
 
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/kallsyms.h>
 #include <linux/xlog.h>
+#include <linux/kmsg_dump.h>
 //#include "partition_define.h"
 #include "../../../../../../kernel/drivers/staging/android/logger.h"
+#include "ipanic_version.h"
 
 #define AEE_IPANIC_PLABEL "expdb"
 
@@ -48,7 +50,21 @@ struct ipanic_header {
 
 	u32 mmprofile_offset;
 	u32 mmprofile_length;
+	
+	u32 mini_rdump_offset;
+	u32 mini_rdump_length;
 };
+
+#ifndef MTK_EMMC_SUPPORT
+struct mtd_ipanic_data {
+	struct mtd_info	*mtd;
+	struct ipanic_header curr;
+	void *bounce;
+	u32 blk_offset[512];
+
+	struct proc_dir_entry *oops;
+};
+#endif
 
 #define IPANIC_OOPS_HEADER_PROCESS_NAME_LENGTH 256
 #define IPANIC_OOPS_HEADER_BACKTRACE_LENGTH 3840
@@ -69,19 +85,9 @@ struct ipanic_ops {
 
 void register_ipanic_ops(struct ipanic_ops *op);
 
-extern int log_buf_copy2(char *dest, int dest_len, int log_copy_start, int log_copy_end);
-
 struct aee_oops *ipanic_oops_copy(void);
 
 void ipanic_oops_free(struct aee_oops *oops, int erase);
-
-extern unsigned log_start;
-
-extern unsigned log_end;
-
-extern unsigned ipanic_detail_start;
-
-extern unsigned ipanic_detail_end;
 
 extern struct ipanic_oops_header oops_header;
 
@@ -151,4 +157,5 @@ sizeof(struct ipanic_oops_header) + __LOG_BUF_LEN +  \
 /* for WDT timeout case : dump timer/schedule/irq/softirq etc... debug information */
 extern void aee_wdt_dump_info(void);
 
+int ipanic_kmsg_dump3(struct kmsg_dumper *dumper, char *buf, size_t len);
 #endif

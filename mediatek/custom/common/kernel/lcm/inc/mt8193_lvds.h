@@ -4,6 +4,7 @@
 #define LVDS_OUTPUT_CTRL   0x0818
   #define RG_LVDSRX_FIFO_EN  0x80000000  //[31] lvdsrx fifo enable
   #define RG_DPMODE          0x00000008  //[3] Reserved for ASFIFO test
+  #define RG_SYNC_TRIG_MODE  0x00000004  //[2] lvds 7-> trig vsync mode enable  
   #define RG_OUT_FIFO_EN     0x00000002  //[1] lvds output fifo enable
   #define RG_LVDS_E          0x00000001  //[0] lvds 7bit-4bit fifo enable
       
@@ -30,7 +31,7 @@ typedef enum
 // 2.VESA Standard 8Bit/6Bit encoder
 #define LVDS_FMT_CTRL      0x0800
   #define RG_8BIT_FORMAT     0x00000000  //[6:4] Data format select 8-bit mode, 000->8bit mode
-  #define RG_6BIT_FORMAT     0x00000030  //[6:4] Data format select 8-bit mode, 011->6bit mode
+  #define RG_6BIT_FORMAT     0x00000010  //[6:4] Data format select 8-bit mode, 001->6bit mode
   #define RG_DE_INV          0x00000004  //[2] Input DE invert
   #define RG_VSYNC_INV       0x00000002  //[1] Input VSYNC invert
   #define RG_HSYNC_INV       0x00000001  //[0] Input HSYNC invert
@@ -130,8 +131,9 @@ typedef enum
 // DGI0 (Base Address:+400h/+500h)
 // 1.Basic setting
 #define DGI0_DEC_CTRL      0x0400
-  #define RESET_COUNTER      0x08008000  //[27] reset the counter for timing generate
-  #define CLEAR_COUNTER      0x00008000
+  #define FIFO_WRITE_EN      0x00008000  //[15] fifo write enable
+  #define RESET_COUNTER      0x08000000  //[27] reset the counter for timing generate
+  #define CLEAR_COUNTER      0x00000000
 	
 #define DGI0_FIFO_CTRL     0x0404
   #define SW_RST             0x00080000  //[19] soft reset
@@ -333,6 +335,7 @@ typedef enum
   #define RG_VPLL_DPIX_CKSEL 0x00001000  //[13:12]VPLL_DPIX_CLK Selection
   #define RG_LVDS_DELAY      0x00000080  //[10:8]LVDS_DPIX_CLK Delay setting 70ps / step
   #define RG_VPLL_MKVCO      0x00000040  //[7]VCO Range From    160 MHz~ 390 MHz
+  #define RG_VPLL_POSTDIV_EN 0x00000010  //[4]
 
 #define REG_LVDS_ANACFG4   0x1320
   #define RG_VPLL_RST        0x00800000  //[23]

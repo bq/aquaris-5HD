@@ -49,8 +49,6 @@
 #include "internal.h"
 #include "mount.h"
 
-#include <mach/mt_io_logger.h>
-
 #define VFS_CREATE_LIMIT   1
 #if VFS_CREATE_LIMIT
 #include <linux/statfs.h>
@@ -2260,7 +2258,7 @@ int vfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	const char *mnt_point;
 	struct super_block *mnt_sb;
 	struct kstatfs stat;
-	char *file_list[10] = {"ccci_fsd", NULL};
+	char *file_list[10] = {"ccci_fsd", "ccci2_fsd", "eemcs_fsd", NULL};
 	int num = 0;
 #endif
 
@@ -3077,18 +3075,9 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 	struct dentry *dentry;
 	struct nameidata nd;
 	struct inode *inode = NULL;
-#if IO_LOGGER_ENABLE
-	unsigned long long time1 = 0,timeoffset = 0;
-#endif
 	error = user_path_parent(dfd, pathname, &nd, &name);
 	if (error)
 		return error;
-#if IO_LOGGER_ENABLE
-if(unlikely(en_IOLogger())){
-	time1 = sched_clock();
-	AddIOTrace(IO_LOGGER_MSG_VFS_OPEN_INTFS,vfs_unlink,name);
-}
-#endif
 	error = -EISDIR;
 	if (nd.last_type != LAST_NORM)
 		goto exit1;
@@ -3123,18 +3112,6 @@ exit3:
 		iput(inode);	/* truncate the inode here */
 exit1:
 	path_put(&nd.path);
-#if IO_LOGGER_ENABLE
-if(unlikely(en_IOLogger())){
-	timeoffset = sched_clock()-time1;
-	if(BEYOND_TRACE_LOG_TIME(timeoffset))
-	{
-		 AddIOTrace(IO_LOGGER_MSG_VFS_OPEN_INTFS_END,vfs_unlink,name,timeoffset);	
-		 if(BEYOND_DUMP_LOG_TIME(timeoffset))
-			DumpIOTrace(timeoffset);
-		
-	}
-}
-#endif
 	putname(name);
 	return error;
 

@@ -12,7 +12,7 @@ getSensorOrientation()
 {
     static SensorOrientation_T const inst = {
         u4Degree_0  : 90,   //  main sensor in degree (0, 90, 180, 270)
-        u4Degree_1  : 0,    //  sub  sensor in degree (0, 90, 180, 270)
+        u4Degree_1  : 270,    //  sub  sensor in degree (0, 90, 180, 270)
         u4Degree_2  : 90,   //  main2 sensor in degree (0, 90, 180, 270) 
     };
     return inst;
@@ -52,7 +52,6 @@ MBOOL isRetFakeMain2Orientation()
 {
 	return MFALSE;
 }
-
 
 /*******************************************************************************
 * Sensor Input Data Bit Order
@@ -126,6 +125,24 @@ getSensorFacingDirection(EDevId const eDevId)
     }
     return  -1;
 }
+/*******************************************************************************
+* Image Sensor Module FOV
+*******************************************************************************/
+SensorViewAngle_T const&
+getSensorViewAngle()
+{
+    static SensorViewAngle_T const inst = {
+        MainSensorHorFOV  : 63,   
+        MainSensorVerFOV  : 49,    
+        SubSensorHorFOV  : 60,   
+        SubSensorVerFOV  : 40,
+        Main2SensorHorFOV  : 0,   //not support
+        Main2SensorVerFOV  : 0,
+    };
+    return inst;
+
+}
+
 };
 
 //#endif //  _CFG_SETTING_IMGSENSOR_H_

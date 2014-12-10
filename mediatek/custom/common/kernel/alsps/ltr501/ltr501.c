@@ -57,10 +57,23 @@
 #define APS_FUN(f)               printk( APS_TAG"%s\n", __FUNCTION__)
 #define APS_ERR(fmt, args...)    printk(KERN_ERR  APS_TAG"%s %d : "fmt, __FUNCTION__, __LINE__, ##args)
 #define APS_LOG(fmt, args...)    printk(APS_TAG fmt, ##args)
-#define APS_DBG(fmt, args...)    printk(APS_TAG fmt, ##args)                 
+#define APS_DBG(fmt, args...)    printk(APS_TAG fmt, ##args)       
+
+/******************************************************************************
+ * extern functions  ruo add
+*******************************************************************************/
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
+
 /******************************************************************************
  * extern functions
 *******************************************************************************/
+/*** ruo mark
 #ifdef MT6573
 	extern void mt65xx_eint_unmask(unsigned int line);
 	extern void mt65xx_eint_mask(unsigned int line);
@@ -104,7 +117,7 @@ extern void MT6516_EINT_Registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool auto_umask);
 #endif
 
-
+*///
 /*----------------------------------------------------------------------------*/
 
 static struct i2c_client *ltr501_i2c_client = NULL;
@@ -449,7 +462,8 @@ static int ltr501_ps_enable(int gainrange)
 				goto EXIT_ERR;
 				return ltr501_ERR_I2C;
 			}
-			mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
+			//mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
+			mt_eint_unmask(CUST_EINT_ALS_NUM);
 	
 		}
 	
@@ -479,7 +493,8 @@ static int ltr501_ps_disable(void)
 	if(0 == obj->hw->polling_mode_ps)
 	{
 		cancel_work_sync(&obj->eint_work);
-		mt65xx_eint_mask(CUST_EINT_ALS_NUM);
+		//mt65xx_eint_mask(CUST_EINT_ALS_NUM);
+		mt_eint_mask(CUST_EINT_ALS_NUM);
 	}
 	
 	return error;
@@ -661,12 +676,19 @@ int ltr501_setup_eint(struct i2c_client *client)
 	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, TRUE);
 	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, ltr501_eint_func, 0);
+
+	mt_eint_unmask(CUST_EINT_ALS_NUM); 
+
+	/** ruo mark
 	mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
 	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
 	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
 	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, ltr501_eint_func, 0);
 
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
+	**/
     return 0;
 }
 
@@ -1155,7 +1177,8 @@ static void ltr501_eint_work(struct work_struct *work)
 		}
 	}
 	ltr501_clear_intr(obj->client);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
+	//mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
 }
 
 

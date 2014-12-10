@@ -759,7 +759,7 @@ saaFsmRunEventTxDone (
 
     ASSERT(prStaRec);
 
-    DBGLOG(SAA, LOUD, ("EVENT-TX DONE: Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(SAA, LOUD, ("EVENT-TX DONE: Current Time = %u\n", kalGetTimeTick()));
 
     eNextState = prStaRec->eAuthAssocState;
 
@@ -887,7 +887,7 @@ saaFsmRunEventTxReqTimeOut (
         return;
     }
 
-    DBGLOG(SAA, LOUD, ("EVENT-TIMER: TX REQ TIMEOUT, Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(SAA, LOUD, ("EVENT-TIMER: TX REQ TIMEOUT, Current Time = %u\n", kalGetTimeTick()));
 
     switch (prStaRec->eAuthAssocState) {
     case SAA_STATE_SEND_AUTH1:
@@ -922,7 +922,7 @@ saaFsmRunEventRxRespTimeOut (
     ENUM_AA_STATE_T eNextState;
 
 
-    DBGLOG(SAA, LOUD, ("EVENT-TIMER: RX RESP TIMEOUT, Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(SAA, LOUD, ("EVENT-TIMER: RX RESP TIMEOUT, Current Time = %u\n", kalGetTimeTick()));
 
     ASSERT(prStaRec);
     if(!prStaRec) {

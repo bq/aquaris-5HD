@@ -56,12 +56,9 @@
 #define INFO(fmt, args...) yprintk(KERN_INFO, fmt, ## args)
 #define ERR(fmt, args...) yprintk(KERN_ERR, fmt, ## args)
 
-
-
-
 #define xprintk(level,  format, args...) do { \
 	if (_dbg_level(level)) { \
-        if(musb_UART_debug){\
+        if(musb_uart_debug){\
 			printk(KERN_NOTICE "[MUSB]%s %d: " format , \
 				__func__, __LINE__ , ## args); \
 		}\
@@ -72,7 +69,7 @@
 	} } while (0)
 
 extern unsigned musb_debug;
-extern unsigned musb_UART_debug;
+extern unsigned musb_uart_debug;
 
 static inline int _dbg_level(unsigned level)
 {

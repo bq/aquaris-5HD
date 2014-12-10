@@ -378,40 +378,17 @@ rlmObssScanTimeout (
     ASSERT(prBssInfo);
 
 #if CFG_ENABLE_WIFI_DIRECT
-    if(prAdapter->fgIsP2PRegistered &&
-        (IS_NET_ACTIVE(prAdapter, prBssInfo->ucNetTypeIndex))) {
+    /* AP mode */
+    if (prAdapter->fgIsP2PRegistered &&
+        (IS_NET_ACTIVE(prAdapter, prBssInfo->ucNetTypeIndex)) &&
+        (prBssInfo->eCurrentOPMode == OP_MODE_ACCESS_POINT)) {
 
-        /* AP mode */
-        if (prBssInfo->eCurrentOPMode == OP_MODE_ACCESS_POINT) {
+        prBssInfo->fgObssActionForcedTo20M = FALSE;
 
-            prBssInfo->fgObssActionForcedTo20M = FALSE;
-
-            /* Check if Beacon content need to be updated */
-            rlmUpdateParamsForAP(prAdapter, prBssInfo, FALSE);
-            
-            return;
-        }
-
-        #if CFG_SUPPORT_WFD
-        /* WFD streaming */
-        else {            
-            P_WFD_CFG_SETTINGS_T prWfdCfgSettings = &prAdapter->rWifiVar.prP2pFsmInfo->rWfdConfigureSettings;
-            P_BSS_INFO_T prP2pBssInfo = &prAdapter->rWifiVar.arBssInfo[NETWORK_TYPE_P2P_INDEX];
-
-            /* If WFD is enabled & connected */
-            if (prWfdCfgSettings->ucWfdEnable && 
-                (prWfdCfgSettings->u4WfdFlag & BIT(0)) && 
-                RLM_NET_PARAM_VALID(prP2pBssInfo)) {
-
-                /* Skip OBSS scan */
-                prBssInfo->u2ObssScanInterval = 0;
-                
-                DBGLOG(RLM, INFO, ("WFD is running. Stop net[%lu] OBSS scan.\n", prBssInfo->ucNetTypeIndex));
-                
-                return;
-            }
-        }
-        #endif
+        /* Check if Beacon content need to be updated */
+        rlmUpdateParamsForAP(prAdapter, prBssInfo, FALSE);
+        
+        return;
     }
 #endif /* end of CFG_ENABLE_WIFI_DIRECT */
 

@@ -120,6 +120,18 @@ public:     ////    Operations.
     );
 
     virtual
+    EIndex_CCM_T
+    evaluate_CCM_index (
+        RAWIspCamInfo const& rCamInfo
+    );
+
+    virtual
+    MBOOL
+    is_to_invoke_dynamic_ccm(
+        RAWIspCamInfo const& rCamInfo
+    );
+
+    virtual
     EIndex_PCA_LUT_T
     evaluate_PCA_LUT_index  (
         RAWIspCamInfo const& rCamInfo
@@ -155,116 +167,7 @@ public:     ////    Operations.
     evaluate_Shading_CCT_index  (
             RAWIspCamInfo const& rCamInfo
     ) const;
-/*
-    virtual
-    MBOOL
-    is_to_invoke_offline_capture(
-        RAWIspCamInfo const& rCamInfo
-    ) const;
 
-
-
-    virtual
-    MVOID
-    refine_NR1(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_NR1_T& rNR1
-    );
-
-    virtual
-    MVOID
-    refine_DP(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_DP_T& rDP
-    );
-
-    virtual
-    MVOID
-    refine_NR2(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_NR2_T& rNR2
-    );
-
-    virtual
-    MVOID
-    refine_DM(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_DEMOSAIC_T& rDM
-    );
-*/
-
-
-/*
-    virtual
-    MVOID
-    refine_Saturation(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_SATURATION_T& rSaturation
-    );
-
-    virtual
-    MVOID
-    refine_Contrast(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_CONTRAST_T& rContrast
-    );
-
-    virtual
-    MVOID
-    refine_Hue(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_HUE_T& rHue
-    );
-
-    virtual
-    MVOID
-    refine_CCM(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_CCM_T& rCCM
-    );
-
-
-
-    virtual
-    MVOID
-    refine_GammaECO(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_GAMMA_ECO_T& rGammaECO
-    );
-
-    virtual
-    MVOID
-    refine_RGB2YCC_YOfst(
-        RAWIspCamInfo const& rCamInfo, ISP_NVRAM_RGB2YCC_YOFST_T& rRGB2YCC_YOfst
-    );
-
-    virtual
-    MVOID
-    prepare_edge_gamma(ISP_NVRAM_EDGE_GAMMA_T& rEGamma);
-
-public:     ////    Color Temperature Index: CCM, Shading
-
-    virtual
-    EIndex_CCM_CCT_T
-    evaluate_CCM_CCT_index  (
-        EIndex_CCM_CCT_T const eIdx_CCM_CCT_old,
-        MINT32 const i4CCT,
-        MINT32 const i4FluorescentIndex
-    ) const;
-
-
-public:     ////    ISO
-
-
-
-public:     ////    Effect
-
-    template <EIndex_Effect_T eEffect>
-    MVOID
-    prepare_effect(ISP_EFFECT_T& rEffect);
-
-
-
-
-public:     ////    End-User Setting Level.
-    template <class ISP_NVRAM_xxx_T>
-    MUINT32
-    map_user_setting_to_nvram_index(
-        MUINT8 const u8Idx_nvram_current,
-        IspUsrSelectLevel_T const& rUsr
-    );
-*/
 };
 
 

@@ -7,7 +7,7 @@
 #include "mt8193edid.h"
 #include "mt8193cec.h"
 
-#define AVD_TMR_ISR_TICKS   5
+#define AVD_TMR_ISR_TICKS   10
 #define MDI_BOUCING_TIMING  50//20 //20ms
 
 typedef enum
@@ -56,8 +56,9 @@ typedef enum
 typedef enum
 {
 	HDMI_VIDEO_720x480p_60Hz = 0,
-	HDMI_VIDEO_1280x720p_60Hz,
-	HDMI_VIDEO_1920x1080p_30Hz,
+	HDMI_VIDEO_1280x720p_60Hz =2,
+	HDMI_VIDEO_1920x1080p_30Hz =6,
+	HDMI_VIDEO_1920x1080p_60Hz = 0x0b,
 	HDMI_VIDEO_RESOLUTION_NUM
 }HDMI_VIDEO_RESOLUTION;
 #endif
@@ -98,6 +99,13 @@ typedef enum{
     HDMI_OUTPUT_MODE_DPI_BYPASS
 }HDMI_OUTPUT_MODE;
 
+typedef enum{
+    HDMI_CABLE,
+    MHL_CABLE,
+    MHL_SMB_CABLE,
+    MHL_2_CABLE ///MHL 2.0
+}HDMI_CABLE_TYPE;
+
 typedef struct
 {
 	unsigned int width;
@@ -134,16 +142,17 @@ typedef struct
 
     unsigned int scaling_factor; // determine the scaling of output screen size, valid value 0~10
                                  // 0 means no scaling, 5 means scaling to 95%, 10 means 90%
+    HDMI_CABLE_TYPE cabletype;                                 
+     bool NeedSwHDCP;
 }HDMI_PARAMS;
 
 typedef enum{
 	HDMI_STATE_NO_DEVICE,
 	HDMI_STATE_ACTIVE,
-	#if defined(MTK_MT8193_HDMI_SUPPORT)
+	HDMI_STATE_CONNECTING,
 	HDMI_STATE_PLUGIN_ONLY,
 	HDMI_STATE_EDID_UPDATE,
 	HDMI_STATE_CEC_UPDATE
-	#endif
 }HDMI_STATE;
 
 // ---------------------------------------------------------------------------
@@ -202,6 +211,8 @@ typedef struct
 	void (*setceccmd)(CEC_SEND_MSG_T* msg);
 	void (*cecenable)(u8 u1EnCec);
 	void (*getcecaddr)(CEC_ADDRESS *cecaddr);
+	void (*mutehdmi)(u8 u1flagvideomute, u8 u1flagaudiomute);
+	u8 (*checkedidheader)(void);
 	#endif
 } HDMI_DRIVER;
 

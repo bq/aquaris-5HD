@@ -105,7 +105,7 @@
 
 #include "yusu_android_speaker.h"
 #if defined(CONFIG_MTK_COMBO) || defined(CONFIG_MTK_COMBO_MODULE)
-#include <mach/mt_combo.h>
+#include <mach/mtk_wcn_cmb_stub.h>
 #endif
 
 #if defined(MTK_MT5192) || defined(MTK_MT5193)
@@ -113,8 +113,8 @@ extern int cust_matv_gpio_on(void);
 extern int cust_matv_gpio_off(void);
 #endif
 
-#define GPIO_WR32(addr, data)   __raw_writel(data, addr)
-#define GPIO_RD32(addr)         __raw_readl(addr)
+//#define GPIO_WR32(addr, data)   __raw_writel(data, addr)
+//#define GPIO_RD32(addr)         __raw_readl(addr)
 
 /*****************************************************************************
 *           DEFINE AND CONSTANT
@@ -131,6 +131,11 @@ extern int cust_matv_gpio_off(void);
 #define AFE_INT_TIMEOUT       (10)
 #define AFE_UL_TIMEOUT       (10)
 
+#ifdef MTK_3MIC_SUPPORT
+// add for 3 mic switch enable , GPIO is not fixed
+#define  GPIO_MIC_ANALOGSWITCH_EN (116)
+#endif
+
 /*****************************************************************************
 *           V A R I A B L E     D E L A R A T I O N
 *******************************************************************************/
@@ -143,6 +148,7 @@ static bool   AudIrqReset                              = false; // flag when irq
 static bool   AuddrvSpkStatus                     = false;
 static bool   AuddrvAeeEnable                    = false;
 static volatile kal_uint8	 Afe_irq_status  = 0;
+static bool   AuddrSuspendEver                    = true;
 
 #define WriteArrayMax (6)
 #define WriteWarningTrigger (3)
@@ -710,6 +716,7 @@ void Auddrv_UL_Interrupt_Handler(void)  // irq2 ISR handler
 void Auddrv_DL_Interrupt_Handler(void)  // irq1 ISR handler
 {
     unsigned long flags;
+    bool overflowflag = false;
     kal_int32 Afe_consumed_bytes = 0;
     kal_int32 HW_memory_index =0;
     kal_int32 HW_Cur_ReadIdx = 0;
@@ -741,12 +748,13 @@ void Auddrv_DL_Interrupt_Handler(void)  // irq1 ISR handler
     if((Afe_consumed_bytes & 0x1f) != 0 ){
         PRINTK_AUDDRV("[Auddrv] DMA address is not aligned 32 bytes \n");
      }
+
      /*
      PRINTK_AUDDRV("+Auddrv_DL_Interrupt_Handler ReadIdx:%x WriteIdx:%x, DataRemained:%x, Afe_consumed_bytes:%x HW_memory_index = %x \n",
          Afe_Block->u4DMAReadIdx,Afe_Block->u4WriteIdx,Afe_Block->u4DataRemained,Afe_consumed_bytes,HW_memory_index);
          */
 
-     if(Afe_Block->u4DataRemained < Afe_consumed_bytes || Afe_Block->u4DataRemained == 0 || AudIrqReset)
+     if(Afe_Block->u4DataRemained < Afe_consumed_bytes || Afe_Block->u4DataRemained <= 0 ||Afe_Block->u4DataRemained  > Afe_Block->u4BufferSize || AudIrqReset)
      {
          // buffer underflow --> clear  whole buffer
          memset(Afe_Block->pucVirtBufAddr,0,Afe_Block->u4BufferSize);
@@ -758,6 +766,7 @@ void Auddrv_DL_Interrupt_Handler(void)  // irq1 ISR handler
          PRINTK_AUDDRV("-DL_Handling underflow ReadIdx:%x WriteIdx:%x, DataRemained:%x, Afe_consumed_bytes %x \n",
              Afe_Block->u4DMAReadIdx,Afe_Block->u4WriteIdx,Afe_Block->u4DataRemained,Afe_consumed_bytes);
          AudIrqReset = false;
+         overflowflag = true;
      }
      else
      {
@@ -776,6 +785,10 @@ void Auddrv_DL_Interrupt_Handler(void)  // irq1 ISR handler
     DL1_wait_queue_flag =1;
     wake_up_interruptible(&DL1_Wait_Queue);
     spin_unlock_irqrestore(&auddrv_irqstatus_lock, flags);
+    if(overflowflag == true)
+    {
+        kill_fasync(&AudDrv_async, SIGIO, POLL_IN); // notify the user space
+    }
 
 }
 
@@ -798,7 +811,7 @@ static void CheckInterruptTiming(void)
             Irq_time_t2 = Irq_time_t1 - Irq_time_t2;
             if(Irq_time_t2 > DL1_Interrupt_Interval_Limit*1000000)
             {
-                PRINTK_AUDDRV("CheckInterruptTiming interrupt may be blocked Irq_time_t2 = llu DL1_Interrupt_Interval_Limit = %d\n",
+                PRINTK_AUDDRV("CheckInterruptTiming interrupt may be blocked Irq_time_t2 = %llu DL1_Interrupt_Interval_Limit = %d\n",
                     Irq_time_t2,DL1_Interrupt_Interval_Limit);
             }
         }
@@ -919,8 +932,15 @@ static int AudDrv_probe(struct platform_device *dev)
    #endif
 
    PRINTK_AUDDRV("-AudDrv_probe \n");
-   power_init();
    Speaker_Init();
+   if(Auddrv_First_bootup == true)
+   {
+       power_init();
+   }
+   else
+   {
+
+   }
    return 0;
 }
 
@@ -1192,6 +1212,7 @@ static int AudDrv_suspend(struct platform_device *dev, pm_message_t state)
 
    if( AudDrvSuspendStatus == false)
    {
+      AuddrSuspendEver = true;
       AudDrv_Store_reg_AFE();
       AudDrv_Suspend_Clk_Off();  // turn off asm afe clock
       AudioWayEnable();
@@ -1216,16 +1237,50 @@ static int AudDrv_resume(struct platform_device *dev) // wake up
    //PRINTK_AUDDRV("+AudDrv_resume AudDrvSuspendStatus= %d\n",AudDrvSuspendStatus);
    if(AudDrvSuspendStatus == true)
    {
+       AFE_BLOCK_T *Afe_Block;
        AudioWayDisable();
        AudDrv_Suspend_Clk_On();
        AudDrv_Recover_reg_AFE();
        AudDrvSuspendStatus = false;
-       AFE_BLOCK_T *Afe_Block = &(AFE_dL1_Control_context.rBlock);
+       Afe_Block = &(AFE_dL1_Control_context.rBlock);
        memset(Afe_Block->pucVirtBufAddr,0,Afe_Block->u4BufferSize);
    }
    //PRINTK_AUDDRV("-AudDrv_resume \n");
    return 0;
 }
+
+#ifdef CONFIG_PM
+
+static int AudDrv_pm_ops_suspend_ipo(struct device *device)
+{
+    struct platform_device *pdev = to_platform_device(device);
+    printk("%s",__func__);
+    return AudDrv_suspend(pdev, PMSG_SUSPEND);
+}
+
+static int AudDrv_pm_ops_resume_ipo(struct device *device)
+{
+    struct platform_device *pdev = to_platform_device(device);
+    printk("%s",__func__);
+    return AudDrv_resume(pdev);
+}
+
+static int AudDrv_pm_ops_suspend(struct device *device)
+{
+    struct platform_device *pdev = to_platform_device(device);
+    return AudDrv_suspend(pdev, PMSG_SUSPEND);
+}
+
+static int AudDrv_pm_ops_resume(struct device *device)
+{
+    struct platform_device *pdev = to_platform_device(device);
+    return AudDrv_resume(pdev);
+}
+#else
+#define AudDrv_pm_ops_suspend NULL
+#define AudDrv_pm_ops_resume NULL
+
+#endif
 
 
 /*****************************************************************************
@@ -1861,6 +1916,201 @@ void AudDrv_Mem_Reset(void)
     }
 }
 
+/*****************************************************************************
+ * FUNCTION
+ *  AudDrv_GET_DL1_REMAIN_TIME
+ *
+ * DESCRIPTION
+ *  Get DL1 buffer remained time
+ *
+ ******************************************************************************/
+int AudDrv_GET_DL1_REMAIN_TIME(struct file *fp)
+{
+    int ret = 0;
+
+    unsigned long flags;
+    kal_int32 Afe_consumed_bytes = 0;
+    kal_int32 HW_memory_index = 0;
+    kal_int32 HW_Cur_ReadIdx = 0;
+    kal_int32 RemainSize = 0;
+    AFE_BLOCK_T *Afe_Block = &(AFE_dL1_Control_context.rBlock);
+
+    kal_uint32 samplerate = Afe_Get_Reg(AFE_IRQ_MCU_CON);
+    samplerate = (samplerate >> 4) & 0x0000000f;
+    samplerate = AudDrv_SampleRateIndexConvert(samplerate);
+    //PRINTK_AUDDRV("AudDrv_GET_DL1_REMAIN_TIME samplerate=%d\n",samplerate);
+
+    //spin lock with interrupt disable
+    spin_lock_irqsave(&auddrv_irqstatus_lock, flags);
+
+    HW_Cur_ReadIdx = Afe_Get_Reg(AFE_DL1_CUR);
+    if (HW_Cur_ReadIdx == 0)
+    {
+        PRINTK_AUDDRV("[Auddrv] AudDrv_GET_DL1_REMAIN_TIME HW_Cur_ReadIdx ==0 \n");
+        HW_Cur_ReadIdx = Afe_Block->pucPhysBufAddr;
+    }
+    HW_memory_index = (HW_Cur_ReadIdx - Afe_Block->pucPhysBufAddr);
+    /*
+    PRINTK_AUDDRV("[Auddrv] HW_Cur_ReadIdx=0x%x HW_memory_index = 0x%x Afe_Block->pucPhysBufAddr = 0x%x\n",
+        HW_Cur_ReadIdx,HW_memory_index,Afe_Block->pucPhysBufAddr);*/
+
+    // get hw consume bytes
+    if (HW_memory_index > Afe_Block->u4DMAReadIdx)
+    {
+        Afe_consumed_bytes = HW_memory_index - Afe_Block->u4DMAReadIdx;
+    }
+    else if (HW_memory_index == Afe_Block->u4DMAReadIdx)
+    {
+        Afe_consumed_bytes = 0;
+    }
+    else
+    {
+        Afe_consumed_bytes = Afe_Block->u4BufferSize + HW_memory_index - Afe_Block->u4DMAReadIdx ;
+    }
+
+    if ((Afe_consumed_bytes & 0x07) != 0)
+    {
+        PRINTK_AUDDRV("[Auddrv] GET_DL1_REMAIN_SIZE DMA address is not aligned 8 bytes. Afe_consumed_bytes = [0x%x] \n", Afe_consumed_bytes);
+    }
+    /*
+    PRINTK_AUDDRV("+Auddrv_DL_Interrupt_Handler ReadIdx:%x WriteIdx:%x, DataRemained:%x, Afe_consumed_bytes:%x HW_memory_index = %x \n",
+        Afe_Block->u4DMAReadIdx,Afe_Block->u4WriteIdx,Afe_Block->u4DataRemained,Afe_consumed_bytes,HW_memory_index);
+        */
+
+    RemainSize = Afe_Block->u4DataRemained - Afe_consumed_bytes;
+    if (RemainSize < 0)
+    {
+        RemainSize = 0;
+        /*
+            PRINTK_AUDDRV("GET_DL1 ReadIdx:%x WriteIdx:%x, DataRemained:%x, Afe_consumed_bytes:%x HW_memory_index = %x, RemainSize=%d \n",
+            Afe_Block->u4DMAReadIdx,Afe_Block->u4WriteIdx,Afe_Block->u4DataRemained,Afe_consumed_bytes,HW_memory_index,RemainSize);
+        */
+    }
+    spin_unlock_irqrestore(&auddrv_irqstatus_lock, flags);
+
+    //ret = (((RemainSize * 1000) / 4) / samplerate);
+    ret = RemainSize;
+
+    //PRINTK_AUDDRV("AudDrv_GET_DL1_REMAIN_TIME samplerate=%d,RemainSize=%d, ret=%d\n",samplerate,RemainSize, ret);
+
+    return ret;
+}
+
+
+/*****************************************************************************
+ * FUNCTION
+ *  AudDrv_GET_UL_REMAIN_TIME
+ *
+ * DESCRIPTION
+ *  Get UL buffer remained time
+ *
+ ******************************************************************************/
+int AudDrv_GET_UL_REMAIN_TIME(struct file *fp)
+{
+    AFE_MEM_CONTROL_T *pAfe_MEM_ConTrol = NULL;
+    AFE_BLOCK_T  *Afe_Block = NULL;
+    unsigned long flags;
+    kal_uint32 samplerate = 0;
+    kal_uint32 HW_Cur_ReadIdx = 0;
+    kal_int32 Hw_Get_bytes = 0;
+    kal_uint32 HW_Remain_Size = 0;
+    int ret = 0;
+
+    // check which memif need to be read
+    pAfe_MEM_ConTrol = Auddrv_Find_MemIF_Fp(fp);
+    Afe_Block = &(pAfe_MEM_ConTrol->rBlock);
+    if (pAfe_MEM_ConTrol == NULL)
+    {
+        PRINTK_AUDDRV("AudDrv_GET_UL_REMAIN_TIME cannot find MEM control !!!!!!!");
+        return -1;
+    }
+    if (!Auddrv_CheckRead_MemIF_Fp(pAfe_MEM_ConTrol->MemIfNum))
+    {
+        PRINTK_AUDDRV("AudDrv_GET_UL_REMAIN_TIME cannot find matcg MemIfNum!!!");
+        return -1;
+    }
+
+    if (Afe_Block->u4BufferSize <= 0)
+    {
+        PRINTK_AUDDRV("AudDrv_GET_UL_REMAIN_TIME wrong buffer size!!!");
+        return -1;
+    }
+
+    samplerate = Afe_Get_Reg(AFE_DAC_CON1);
+
+    switch (pAfe_MEM_ConTrol->MemIfNum)
+    {
+        case MEM_VUL:
+            HW_Cur_ReadIdx = Afe_Get_Reg(AFE_VUL_CUR);
+            samplerate = (samplerate >> 16) & 0x0000000f;
+            samplerate = AudDrv_SampleRateIndexConvert(samplerate);
+            break;
+#if 1//6-5-8-2           
+        case MEM_DAI:
+            HW_Cur_ReadIdx = Afe_Get_Reg(AFE_DAI_CUR);
+            samplerate = (samplerate >> 20) & 0x00000001;
+            if (samplerate == 0)
+            {
+                samplerate = 8000;
+            }
+            else
+            {
+                samplerate = 16000;
+            }
+            break;
+#endif
+        case MEM_AWB:
+            HW_Cur_ReadIdx = Afe_Get_Reg(AFE_AWB_CUR);
+            samplerate = (samplerate >> 12) & 0x0000000f;
+            samplerate = AudDrv_SampleRateIndexConvert(samplerate);
+            break;
+        case MEM_MOD_DAI:
+            HW_Cur_ReadIdx = Afe_Get_Reg(AFE_MOD_PCM_CUR);
+            samplerate = (samplerate >> 30) & 0x00000001;
+            if (samplerate == 0)
+            {
+                samplerate = 8000;
+            }
+            else
+            {
+                samplerate = 16000;
+            }
+            break;
+    }
+
+    if (CheckSize(HW_Cur_ReadIdx))
+    {
+        return -1;
+    }
+    if (Afe_Block->pucVirtBufAddr  == NULL)
+    {
+        return -1;
+    }
+
+    spin_lock_irqsave(&auddrv_irqstatus_lock, flags);
+    // HW already fill in
+    Hw_Get_bytes = (HW_Cur_ReadIdx - Afe_Block->pucPhysBufAddr) - Afe_Block->u4WriteIdx;
+    if (Hw_Get_bytes < 0)
+    {
+        Hw_Get_bytes += Afe_Block->u4BufferSize;
+    }
+
+    HW_Remain_Size = Afe_Block->u4DataRemained + Hw_Get_bytes;
+
+    spin_unlock_irqrestore(&auddrv_irqstatus_lock, flags);
+
+    // buffer overflow
+    if (HW_Remain_Size > Afe_Block->u4BufferSize)
+    {
+        HW_Remain_Size = Afe_Block->u4BufferSize;
+    }
+
+    ret = (((HW_Remain_Size * 1000) / 4) / samplerate);
+    //PRINTK_AUDDRV("AudDrv_GET_UL_REMAIN_TIME HW_Remain_Size=%d, samplerate=%d, ms=%d",HW_Remain_Size,samplerate,ret);
+
+    return ret;
+
+}
 
 /*****************************************************************************
  * FILE OPERATION FUNCTION
@@ -2088,6 +2338,7 @@ static long AudDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
                 AudDrv_Clk_On();
                 AudDrv_Reg_Reset();
+                msleep(50);
                 AudDrv_Mem_Reset();
                 AudDrv_Clk_Off();
             }
@@ -2199,77 +2450,81 @@ static long AudDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 #if defined(CONFIG_MTK_COMBO) || defined(CONFIG_MTK_COMBO_MODULE)
         case AUDDRV_RESET_BT_FM_GPIO:
         {
-            PRINTK_AUDDRV("!! AudDrv, BT OFF, Analog FM, COMBO_AUDIO_STATE_1 \n");
-            mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_0);
+            PRINTK_AUDDRV("!! AudDrv, BT OFF, Analog FM, COMBO_AUDIO_STATE_0 \n");
+            //mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_0);
+            mtk_wcn_cmb_stub_audio_ctrl((CMB_STUB_AIF_X)CMB_STUB_AIF_0);
             break;
         }
         case AUDDRV_SET_BT_PCM_GPIO:
         {
             PRINTK_AUDDRV("!! AudDrv, BT ON, Analog FM, COMBO_AUDIO_STATE_1 \n");
-            mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_1);
+            //mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_1);
+            mtk_wcn_cmb_stub_audio_ctrl((CMB_STUB_AIF_X)CMB_STUB_AIF_1);
             break;
         }
         case AUDDRV_SET_FM_I2S_GPIO:
         {
             PRINTK_AUDDRV("!! AudDrv, BT OFF, Digital FM, COMBO_AUDIO_STATE_2 \n");
-            mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_2);
+            //mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_2);
+            mtk_wcn_cmb_stub_audio_ctrl((CMB_STUB_AIF_X)CMB_STUB_AIF_2);
             break;
         }
-		  case AUDDRV_SET_BT_FM_GPIO:
-		  {
-			  PRINTK_AUDDRV("!! AudDrv, BT ON, Digital FM, COMBO_AUDIO_STATE_3 \n");
-			  mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_3);
-			  break;
-		  }
+        case AUDDRV_SET_BT_FM_GPIO:
+        {
+            PRINTK_AUDDRV("!! AudDrv, BT ON, Digital FM, COMBO_AUDIO_STATE_3 \n");
+            //mt_combo_audio_ctrl((COMBO_AUDIO_STATE)COMBO_AUDIO_STATE_3);
+            mtk_wcn_cmb_stub_audio_ctrl((CMB_STUB_AIF_X)CMB_STUB_AIF_3);
+            break;
+        }
         case AUDDRV_RESET_FMCHIP_MERGEIF:
         {
             int i, j;
             PRINTK_AUDDRV("!! AudDrv, +RESET FM Chip MergeIF\n");
 
-            mt_set_gpio_mode(GPIO221, GPIO_MODE_00);//clk
-            mt_set_gpio_mode(GPIO222, GPIO_MODE_00);//sync
-            mt_set_gpio_mode(GPIO223, GPIO_MODE_00);
-            mt_set_gpio_mode(GPIO224, GPIO_MODE_00);
+            mt_set_gpio_mode(GPIO_COMBO_I2S_CK_PIN, GPIO_MODE_00);//clk
+            mt_set_gpio_mode(GPIO_COMBO_I2S_WS_PIN, GPIO_MODE_00);//sync
+            mt_set_gpio_mode(GPIO_COMBO_I2S_DAT_PIN, GPIO_MODE_00);
+            mt_set_gpio_mode(GPIO_PCM_DAIPCMOUT_PIN, GPIO_MODE_00);
 
-            mt_set_gpio_dir(GPIO221, GPIO_DIR_OUT); //output
-            mt_set_gpio_dir(GPIO222, GPIO_DIR_OUT); //output
-            mt_set_gpio_dir(GPIO223, GPIO_DIR_IN); //input
-            mt_set_gpio_dir(GPIO224, GPIO_DIR_OUT); //output
+            mt_set_gpio_dir(GPIO_COMBO_I2S_CK_PIN, GPIO_DIR_OUT); //output
+            mt_set_gpio_dir(GPIO_COMBO_I2S_WS_PIN, GPIO_DIR_OUT); //output
+            mt_set_gpio_dir(GPIO_COMBO_I2S_DAT_PIN, GPIO_DIR_IN); //input
+            mt_set_gpio_dir(GPIO_PCM_DAIPCMOUT_PIN, GPIO_DIR_OUT); //output
 
-            mt_set_gpio_out(GPIO222, GPIO_OUT_ZERO);//sync
-            mt_set_gpio_out(GPIO221, GPIO_OUT_ZERO);//clock
+            mt_set_gpio_out(GPIO_COMBO_I2S_WS_PIN, GPIO_OUT_ZERO);//sync
+            mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ZERO);//clock
             ndelay(170);//delay 170ns
-            for (j=0; j<3; j++)
+            for (j = 0; j < 3; j++)
             {
                 //-- gen sync
-                mt_set_gpio_out(GPIO222, GPIO_OUT_ONE);//sync
+                mt_set_gpio_out(GPIO_COMBO_I2S_WS_PIN, GPIO_OUT_ONE);//sync
                 ndelay(170);//delay 170ns
 
-                mt_set_gpio_out(GPIO221, GPIO_OUT_ONE);//clock
+                mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ONE);//clock
                 ndelay(170);//delay 170ns
-                mt_set_gpio_out(GPIO221, GPIO_OUT_ZERO);//clock
+                mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ZERO);//clock
                 ndelay(170);//delay 170ns
-                mt_set_gpio_out(GPIO222, GPIO_OUT_ZERO);//sync
+                mt_set_gpio_out(GPIO_COMBO_I2S_WS_PIN, GPIO_OUT_ZERO);//sync
                 ndelay(170);//delay 170ns
 
                 //-- send 56 clock to change state
-                for (i=0; i<56; i++)
+                for (i = 0; i < 56; i++)
                 {
-                    mt_set_gpio_out(GPIO221, GPIO_OUT_ONE);//clock
+                    mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ONE);//clock
                     ndelay(170);//delay 170ns
-                    mt_set_gpio_out(GPIO221, GPIO_OUT_ZERO);//clock
+                    mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ZERO);//clock
                     ndelay(170);//delay 170ns
                 }
             }
 
             //-- gen sync
-            mt_set_gpio_out(GPIO222, GPIO_OUT_ONE);//sync
+            mt_set_gpio_out(GPIO_COMBO_I2S_WS_PIN, GPIO_OUT_ONE);//sync
             ndelay(170);//delay 170ns
-            mt_set_gpio_out(GPIO221, GPIO_OUT_ONE);//clock
+            mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ONE);//clock
             ndelay(170);//delay 170ns
-            mt_set_gpio_out(GPIO221, GPIO_OUT_ZERO);//clock
+            mt_set_gpio_out(GPIO_COMBO_I2S_CK_PIN, GPIO_OUT_ZERO);//clock
             ndelay(170);//delay 170ns
-            mt_set_gpio_out(GPIO222, GPIO_OUT_ZERO);//sync
+            mt_set_gpio_out(GPIO_COMBO_I2S_WS_PIN, GPIO_OUT_ZERO);//sync
             PRINTK_AUDDRV("!! AudDrv, -RESET FM Chip MergeIF\n");
             break;
         }
@@ -2441,11 +2696,59 @@ static long AudDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
         }
         case AUDDRV_AEE_IOCTL:
         {
-            PRINTK_AUDDRV("AudDrv AUDDRV_AEE_IOCTL  arg = %d",arg);
+            PRINTK_AUDDRV("AudDrv AUDDRV_AEE_IOCTL  arg = %ld",arg);
             AuddrvAeeEnable = arg;
             break;
         }
-        default:{
+        case AUDDRV_GET_SUSPEND_EVER:
+        {
+            ret = AuddrSuspendEver;
+            break;
+        }
+        case AUDDRV_CLEAR_SUSPEND_EVER:
+        {
+            AuddrSuspendEver = false;
+            break;
+        }
+        #ifdef MTK_3MIC_SUPPORT
+        case YUSU_INFO_FROM_USER:
+        {
+            // get infor data from user space
+            struct _Info_Data InfoData;
+            PRINTK_AUDDRV("YUSU_INFO_FROM_USER\n");
+            if(copy_from_user((void *)(&InfoData), (const void __user *)( arg), sizeof(InfoData)))
+            {
+                return -EFAULT;
+            }
+            PRINTK_AUDDRV("YUSU_INFO_FROM_USER  Info:%d, param1:%d, param2:%d\n",InfoData.info, InfoData.param1, InfoData.param2);
+            switch(InfoData.info)
+            {
+            case INFO_U2K_MICANA_SWITCH:
+                PRINTK_AUDDRV("YUSU_INFO_FROM_USER INFO_U2K_MICANA_SWITCH InfoData.param1 = %d\n",InfoData.param1);
+                mt_set_gpio_dir(116,GPIO_DIR_OUT); // output
+                mt_set_gpio_out(116,InfoData.param1);
+                break;
+            default:
+                PRINTK_AUDDRV("YUSU_INFO_FROM_USER default \n");
+                break;
+            }
+        }
+        #endif
+
+        case AUDDRV_GET_DL1_REMAINDATA_TIME:
+        {
+            //PRINTK_AUDDRV("AudDrv AUDDRV_GET_DL1_REMAINDATA_TIME");
+            ret = AudDrv_GET_DL1_REMAIN_TIME(fp);
+            break;
+        }
+        case AUDDRV_GET_UL_REMAINDATA_TIME:
+        {
+            //PRINTK_AUDDRV("AudDrv AUDDRV_GET_UL_REMAINDATA_TIME");
+            ret = AudDrv_GET_UL_REMAIN_TIME(fp);
+            break;
+        }
+        default:
+        {
             PRINTK_AUD_ERROR("AudDrv Fail IOCTL command no such ioctl cmd = %x \n",cmd);
             ret = -1;
             break;
@@ -2510,10 +2813,17 @@ static ssize_t AudDrv_write(struct file *fp, const char __user *data, size_t cou
        spin_lock_irqsave(&auddrv_DLCtl_lock, flags);
        copy_size = Afe_Block->u4BufferSize - Afe_Block->u4DataRemained;  //  free space of the buffer
        spin_unlock_irqrestore(&auddrv_DLCtl_lock, flags);
-       if(count <= (kal_uint32) copy_size)
+       if(count <=  copy_size )
        {
-           copy_size = count;
-           //PRINTK_AUDDRV("AudDrv_write copy_size:%x \n", copy_size);	// (free  space of buffer)
+           if(copy_size < 0)
+           {
+               copy_size = 0;
+               msleep(DL1_Interrupt_Interval>>1);
+           }
+           else
+           {
+               copy_size = count;
+           }
        }
 
        if(copy_size != 0)
@@ -3042,6 +3352,18 @@ static struct miscdevice AudDrv_audio_device = {
    .fops = &AudDrv_fops,
 };
 
+
+struct dev_pm_ops Auddrv_pm_ops =
+{
+    .suspend = AudDrv_pm_ops_suspend,
+    .resume = AudDrv_pm_ops_resume,
+    .freeze = AudDrv_pm_ops_suspend_ipo,
+    .thaw = AudDrv_pm_ops_suspend_ipo,
+    .poweroff = AudDrv_pm_ops_suspend_ipo,
+    .restore = AudDrv_pm_ops_resume_ipo,
+    .restore_noirq = AudDrv_pm_ops_resume_ipo,
+};
+
 /***************************************************************************
  * FUNCTION
  *  AudDrv_mod_init / AudDrv_mod_exit
@@ -3058,6 +3380,9 @@ static struct platform_driver AudDrv_driver = {
    .suspend	 = AudDrv_suspend,
    .resume	 = AudDrv_resume,
    .driver   = {
+#ifdef CONFIG_PM
+        .pm     = &Auddrv_pm_ops,
+#endif
        .name = auddrv_name,
        },
 };

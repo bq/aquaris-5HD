@@ -3,7 +3,7 @@
  * Inventra (Multidrop) Highspeed Dual-Role Controllers:  (M)HDRC.
  *
  * Board initialization should put one of these into dev->platform_data,
- * probably on some platform_device named "musb_hdrc".  It encapsulates
+ * probably on some platform_device named "musb-hdrc".  It encapsulates
  * key configuration differences between boards.
  */
 
@@ -23,14 +23,14 @@ enum musb_mode {
 struct clk;
 
 enum musb_fifo_style {
-	FIFO_RXTX,
-	FIFO_TX,
-	FIFO_RX
+	MUSB_FIFO_RXTX,   //add MUSB_ prefix to avoid confilicts with musbfsh.h, gang
+	MUSB_FIFO_TX,
+	MUSB_FIFO_RX
 } __attribute__ ((packed));
 
 enum musb_buf_mode {
-	BUF_SINGLE,
-	BUF_DOUBLE
+	MUSB_BUF_SINGLE,  //add MUSB_ prefix to avoid confilicts with musbfsh.h, gang
+	MUSB_BUF_DOUBLE
 } __attribute__ ((packed));
 
 enum musb_ep_mode {
@@ -40,13 +40,12 @@ enum musb_ep_mode {
 	EP_ISO
 } __attribute__ ((packed));
 
-
 struct musb_fifo_cfg {
 	u8			hw_ep_num;
-	enum musb_ep_mode ep_mode;
 	enum musb_fifo_style	style;
 	enum musb_buf_mode	mode;
 	u16			maxpacket;
+	enum musb_ep_mode ep_mode;
 };
 
 #define MUSB_EP_FIFO(ep, st, m, pkt)		\
@@ -94,12 +93,6 @@ struct musb_hdrc_config {
 	u8		ram_bits;	/* ram address size */
 
 	struct musb_hdrc_eps_bits *eps_bits __deprecated;
-#ifdef CONFIG_BLACKFIN
-	/* A GPIO controlling VRSEL in Blackfin */
-	unsigned int	gpio_vrsel;
-	unsigned int	gpio_vrsel_active;
-#endif
-
 };
 
 struct musb_hdrc_platform_data {
@@ -127,33 +120,13 @@ struct musb_hdrc_platform_data {
 	/* Power the device on or off */
 	int		(*set_power)(int state);
 
-	/* Turn device clock on or off */
-	int		(*set_clock)(struct clk *clock, int is_on);
-
 	/* MUSB configuration-specific details */
 	struct musb_hdrc_config	*config;
 
 	/* Architecture specific board data	*/
 	void		*board_data;
+
+	/* Platform specific struct musb_ops pointer */
+	const void	*platform_ops;
 };
-
-
-/* TUSB 6010 support */
-
-#define	TUSB6010_OSCCLK_60	16667	/* psec/clk @ 60.0 MHz */
-#define	TUSB6010_REFCLK_24	41667	/* psec/clk @ 24.0 MHz XI */
-#define	TUSB6010_REFCLK_19	52083	/* psec/clk @ 19.2 MHz CLKIN */
-
-#ifdef	CONFIG_ARCH_OMAP2
-
-extern int __init tusb6010_setup_interface(
-		struct musb_hdrc_platform_data *data,
-		unsigned ps_refclk, unsigned waitpin,
-		unsigned async_cs, unsigned sync_cs,
-		unsigned irq, unsigned dmachan);
-
-extern int tusb6010_platform_retime(unsigned is_refclk);
-
-#endif	/* OMAP2 */
-
 #endif /* __LINUX_USB_MUSB_H */

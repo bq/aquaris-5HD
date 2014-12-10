@@ -1325,6 +1325,10 @@ g_CFG_RANDOM_PATTERN:
 	.ascii	"acon_setting\000"
 .LASF17:
 	.ascii	"p_src\000"
+.LASF26:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/hacc_hk.c\000"
 .LASF18:
 	.ascii	"src_len\000"
 .LASF11:
@@ -1339,6 +1343,9 @@ g_CFG_RANDOM_PATTERN:
 	.ascii	"short unsigned int\000"
 .LASF25:
 	.ascii	"GNU C 4.6.x-google 20120106 (prerelease)\000"
+.LASF27:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/out\000"
 .LASF20:
 	.ascii	"HACC_V3_Terminate\000"
 .LASF22:
@@ -1373,13 +1380,5 @@ g_CFG_RANDOM_PATTERN:
 	.ascii	"signed char\000"
 .LASF10:
 	.ascii	"_Bool\000"
-.LASF27:
-	.ascii	""
-	.ascii	"\000"
-.LASF26:
-	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
 	.ident	"GCC: (GNU) 4.6.x-google 20120106 (prerelease)"
 	.section	.note.GNU-stack,"",%progbits

@@ -70,6 +70,7 @@
 #include <mach/pmic_mt6320_sw.h>
 #include <mach/upmu_common.h>
 #include <mach/upmu_hw.h>
+#include <mach/mt_boot.h>
 
 #include "ncp1851.h"
 
@@ -157,6 +158,9 @@ extern int g_HW_stop_charging;
 extern int bat_volt_check_point;
 extern int gForceADCsolution;
 extern kal_bool batteryBufferFirst;
+
+#define AUTO_DETECT_RSENSE	0
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //// Define
@@ -2549,9 +2553,12 @@ void fgauge_Normal_Mode_Work(void)
             g_rtc_fg_soc = get_rtc_spare_fg_value();
 	          if(g_rtc_fg_soc >= gFG_capacity_by_v)
             {
-                if( ( g_rtc_fg_soc != 0	) &&					
+                if( (( g_rtc_fg_soc != 0	) &&					
 		            ( (g_rtc_fg_soc-gFG_capacity_by_v) < 20 ) &&
-                ( gFG_capacity_by_v > 5 )							  
+                ( gFG_capacity_by_v > 5 ))
+                    ||
+                    ( (g_rtc_fg_soc != 0) && 
+                     (g_boot_reason == BR_WDT_BY_PASS_PWK || g_boot_reason == BR_WDT || g_boot_mode == RECOVERY_BOOT))	  
                 )
                 {
                     gFG_capacity_by_v = g_rtc_fg_soc;			 
@@ -2562,9 +2569,12 @@ void fgauge_Normal_Mode_Work(void)
             }
             else
             {
-                if( ( g_rtc_fg_soc != 0 ) &&					
+                if( (( g_rtc_fg_soc != 0 ) &&					
                 ( (gFG_capacity_by_v-g_rtc_fg_soc) < 20 ) &&
-                ( gFG_capacity_by_v > 5 )							  
+                ( gFG_capacity_by_v > 5 ))
+                    ||
+                    ( (g_rtc_fg_soc != 0) && 
+                     (g_boot_reason == BR_WDT_BY_PASS_PWK || g_boot_reason == BR_WDT || g_boot_mode == RECOVERY_BOOT))
                 )
                 {
                     gFG_capacity_by_v = g_rtc_fg_soc;			 
@@ -2608,6 +2618,8 @@ void fgauge_Normal_Mode_Work(void)
         #endif        
 
         gFG_current_auto_detect_R_fg_result = gFG_current_auto_detect_R_fg_total / gFG_current_auto_detect_R_fg_count;
+
+#if AUTO_DETECT_RSENSE
         if(gFG_current_auto_detect_R_fg_result <= CURRENT_DETECT_R_FG)
         {
             gForceADCsolution=1;            
@@ -2619,6 +2631,7 @@ void fgauge_Normal_Mode_Work(void)
                 gFG_current_auto_detect_R_fg_count, gForceADCsolution);            
         }
         else
+#endif
         {
             if(gForceADCsolution == 0)
             {
@@ -2627,7 +2640,7 @@ void fgauge_Normal_Mode_Work(void)
                 xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[FGADC] Detect Rfg, use FG report. (%d=%d/%d)(%d)\r\n", 
                 gFG_current_auto_detect_R_fg_result, gFG_current_auto_detect_R_fg_total,
                 gFG_current_auto_detect_R_fg_count, gForceADCsolution);
-        }
+            }
             else
             {
                 xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[FGADC] Detect Rfg, but use AUXADC report. due to gForceADCsolution=%d \r\n", 

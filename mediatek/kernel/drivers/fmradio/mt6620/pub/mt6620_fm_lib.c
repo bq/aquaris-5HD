@@ -34,11 +34,6 @@ static struct fm_hw_info mt6620_hw_info = {
     .patch_ver = 0x00000111,
     .reserve = 0x00000000,
 };
-static struct fm_i2s_info mt6620_i2s_inf = {
-    .status = 0,    //i2s off
-    .mode = 0,      //slave mode
-    .rate = 48000,  //48000 sample rate
-};
 
 fm_s32 MT6620_HL_Side_Adj(fm_u16 freq, fm_s32 *hl);
 fm_s32 MT6620_ADPLL_Freq_Avoid(fm_u16 freq, fm_s32 *freqavoid);
@@ -58,7 +53,7 @@ static fm_u8 *cmd_buf = NULL;
 static struct fm_lock *cmd_buf_lock = NULL;
 static struct fm_callback *fm_cb_op;
 //static struct MT6620fm_priv priv_adv_6620;
-static ENUM_WMTHWVER_TYPE_T hw_ver=WMTHWVER_MT6620_E3;
+static ENUM_WMTHWVER_TYPE_T hw_ver=WMTHWVER_E3;
 static fm_s32 mt6620_pwron(fm_s32 data)
 {
     if (MTK_WCN_BOOL_FALSE == mtk_wcn_wmt_func_on(WMTDRV_TYPE_FM)) {
@@ -344,24 +339,13 @@ static fm_s32 mt6620_PowerUp(fm_u16 *chip_id, fm_u16 *device_id)
         WCN_DBG(FM_ALT | CHIP, "mt6620_pwrup_digital_init_3 failed\n");
         return ret;;
     }
-#ifdef FM_DIGITAL_INPUT
-  #ifdef MT6573 //for MT6573
-		if(get_chip_eco_ver() == CHIP_E1){
-			ret = mt6620_I2s_Setting(MT6620_I2S_ON, MT6620_I2S_MASTER, MT6620_I2S_48K);
-		}else{
-			ret = mt6620_I2s_Setting(MT6620_I2S_ON, MT6620_I2S_SLAVE, MT6620_I2S_48K);
-		}
-  #else
-		ret = mt6620_I2s_Setting(MT6620_I2S_ON, MT6620_I2S_SLAVE, MT6620_I2S_48K);
-  #endif
-		if(ret){
-			WCN_DBG(FM_ERR |CHIP,"pwron set I2S on error\n");
-			return ret;
-		}
-		//we will disable 6620 fm chip analog output when use I2S path, set 0x3A bit2 = 0
-		//mt6620_set_bits(0x3A, 0, MASK(2));
+    if ((mt6620_fm_config.aud_cfg.aud_path == FM_AUD_MRGIF)||(mt6620_fm_config.aud_cfg.aud_path == FM_AUD_I2S))
+    {
+        mt6620_I2s_Setting(FM_I2S_ON, mt6620_fm_config.aud_cfg.i2s_info.mode, mt6620_fm_config.aud_cfg.i2s_info.rate);
+        //mt_combo_audio_ctrl(COMBO_AUDIO_STATE_2);
+        mtk_wcn_cmb_stub_audio_ctrl((CMB_STUB_AIF_X)CMB_STUB_AIF_2);
 		WCN_DBG(FM_NTC |CHIP,"pwron set I2S on ok\n");
-#endif
+    }
 
     mt6620_hw_info.eco_ver = (fm_s32)mtk_wcn_wmt_hwver_get();
     WCN_DBG(FM_DBG | CHIP, "pwr on seq ok\n");
@@ -408,7 +392,7 @@ static fm_s32 mt6620_PowerUpTx(void)
        return ret;
     }
 #ifdef FM_DIGITAL_INPUT
-		ret = mt6620_I2s_Setting(MT6620_I2S_ON, MT6620_I2S_SLAVE, MT6620_I2S_48K);
+		ret = mt6620_I2s_Setting(FM_I2S_ON, FM_I2S_SLAVE, FM_I2S_48K);
 		if(ret){
 			WCN_DBG(FM_ERR |CHIP,"pwron tx set I2S on error\n");
 			return ret;
@@ -448,6 +432,8 @@ static fm_s32 mt6620_PowerDown(void)
 static fm_s32 mt6620_PowerDownTx(void)
 {
     fm_s32 ret = 0;
+    
+    mt6620_PowerDown();
 
    if(mtk_wcn_wmt_therm_ctrl(WMTTHERM_DISABLE) != fm_true)
    {
@@ -526,7 +512,7 @@ static fm_bool mt6620_SetFreq(fm_u16 freq)
 	WCN_DBG(FM_NTC |CHIP,"%s, adpll [freq_avoid=%d]\n", __func__, freq_avoid);
 	
 //	hw_ver = mtk_wcn_wmt_hwver_get();
-	if(hw_ver >= WMTHWVER_MT6620_E3)
+	if(hw_ver >= WMTHWVER_E3)
 	{
 		if((ret = MT6620_MCU_Freq_Avoid(freq, &freq_avoid)))
 			return ret;
@@ -1149,39 +1135,39 @@ static fm_s32 mt6620_I2s_Setting(fm_s32 onoff, fm_s32 mode, fm_s32 sample)
     fm_u16 tmp_sample = 0;
     fm_s32 ret = 0;
 
-    if (onoff == MT6620_I2S_ON) {
+    if (onoff == FM_I2S_ON) {
         tmp_state = 0x01; //I2S Frequency tracking on
-        mt6620_i2s_inf.status = 1;
-    } else if (onoff == MT6620_I2S_OFF) {
+        mt6620_fm_config.aud_cfg.i2s_info.status = FM_I2S_ON;
+    } else if (onoff == FM_I2S_OFF) {
         tmp_state = 0x00; //I2S Frequency tracking off
-        mt6620_i2s_inf.status = 0;
+        mt6620_fm_config.aud_cfg.i2s_info.status = FM_I2S_OFF;
     } else {
         WCN_DBG(FM_ERR | CHIP, "%s():[onoff=%d]\n", __func__, onoff);
         ret = -FM_EPARA;
         goto out;
     }
 
-    if (mode == MT6620_I2S_MASTER) {
+    if (mode == FM_I2S_MASTER) {
         tmp_mode = 0x03; //6620 as I2S master
-        mt6620_i2s_inf.mode = 1;
-    } else if (mode == MT6620_I2S_SLAVE) {
+        mt6620_fm_config.aud_cfg.i2s_info.mode = FM_I2S_MASTER;
+    } else if (mode == FM_I2S_SLAVE) {
         tmp_mode = 0x0B; //6620 as I2S slave
-        mt6620_i2s_inf.mode = 0;
+        mt6620_fm_config.aud_cfg.i2s_info.mode = FM_I2S_SLAVE;
     } else {
         WCN_DBG(FM_ERR | CHIP, "%s():[mode=%d]\n", __func__, mode);
         ret = -FM_EPARA;
         goto out;
     }
 
-    if (sample == MT6620_I2S_32K) {
+    if (sample == FM_I2S_32K) {
         tmp_sample = 0x0000; //6620 I2S 32KHz sample rate
-        mt6620_i2s_inf.rate = 32000;
-    } else if (sample == MT6620_I2S_44K) {
+        mt6620_fm_config.aud_cfg.i2s_info.rate = FM_I2S_32K;
+    } else if (sample == FM_I2S_44K) {
         tmp_sample = 0x0800; //6620 I2S 44.1KHz sample rate
-        mt6620_i2s_inf.rate = 44100;
-    } else if (sample == MT6620_I2S_48K) {
+        mt6620_fm_config.aud_cfg.i2s_info.rate = FM_I2S_44K;
+    } else if (sample == FM_I2S_48K) {
         tmp_sample = 0x1000; //6620 I2S 48KHz sample rate
-        mt6620_i2s_inf.rate = 48000;
+        mt6620_fm_config.aud_cfg.i2s_info.rate = FM_I2S_48K;
     } else {
         WCN_DBG(FM_ERR | CHIP, "%s():[sample=%d]\n", __func__, sample);
         ret = -FM_EPARA;
@@ -1198,8 +1184,8 @@ static fm_s32 mt6620_I2s_Setting(fm_s32 onoff, fm_s32 mode, fm_s32 sample)
         goto out;
 
     WCN_DBG(FM_NTC | CHIP, "[onoff=%s][mode=%s][sample=%d](0)33KHz,(1)44.1KHz,(2)48KHz\n",
-            (onoff == MT6620_I2S_ON) ? "On" : "Off",
-            (mode == MT6620_I2S_MASTER) ? "Master" : "Slave",
+            (onoff == FM_I2S_ON) ? "On" : "Off",
+            (mode == FM_I2S_MASTER) ? "Master" : "Slave",
             sample);
 out:
     return ret;
@@ -1275,6 +1261,20 @@ out:
     WCN_DBG(FM_NTC | CHIP,"-%s():[ret=%d]\n", __func__, ret);
     return ret; 
 }
+static fm_s32 mt6620_pre_search(void)
+{
+    mt6620_RampDown();
+    mt6620_Mute(fm_true);
+
+    FM_LOG_NTC(FM_NTC | CHIP, "search threshold: RSSI=%d,de-RSSI=%d,smg=%d %d\n", mt6620_fm_config.rx_cfg.long_ana_rssi_th,mt6620_fm_config.rx_cfg.desene_rssi_th,mt6620_fm_config.rx_cfg.smg_th);
+    return 0;
+}
+static fm_s32 mt6620_restore_search(void)
+{
+    mt6620_RampDown();
+    mt6620_Mute(fm_false);
+    return 0;
+}
 
 /*fm soft mute tune function*/
 static fm_s32 mt6620_soft_mute_tune(fm_u16 freq,fm_s32 *rssi,fm_bool *valid)
@@ -1343,15 +1343,22 @@ static fm_s32 mt6620_soft_mute_tune(fm_u16 freq,fm_s32 *rssi,fm_bool *valid)
 	WCN_DBG(FM_NTC | CHIP, "valid=%d\n",*valid);
 	return fm_true;
 }
+
+static fm_s32 mt6620fm_get_audio_info(fm_audio_info_t *data)
+{
+    memcpy(data,&mt6620_fm_config.aud_cfg,sizeof(fm_audio_info_t));
+    return 0;
+}
+
 static fm_s32 mt6620_i2s_info_get(fm_s32 *ponoff, fm_s32 *pmode, fm_s32 *psample)
 {
     FMR_ASSERT(ponoff);
     FMR_ASSERT(pmode);
     FMR_ASSERT(psample);
 
-    *ponoff = mt6620_i2s_inf.status;
-    *pmode = mt6620_i2s_inf.mode;
-    *psample = mt6620_i2s_inf.rate;
+    *ponoff = mt6620_fm_config.aud_cfg.i2s_info.status;
+    *pmode = mt6620_fm_config.aud_cfg.i2s_info.mode;
+    *psample = mt6620_fm_config.aud_cfg.i2s_info.rate;
 
     return 0;
 }
@@ -1534,6 +1541,39 @@ out:
 return fm_true;
 }
 
+/*
+parm: 
+	parm.th_type: 0, RSSI. 1,desense RSSI. 2,SMG.
+    parm.th_val: threshold value
+*/
+static fm_s32 mt6620_set_search_th(fm_s32 idx,fm_s32 val,fm_s32 reserve)
+{
+    switch (idx)
+    {
+        case 0:
+        {
+            mt6620_fm_config.rx_cfg.long_ana_rssi_th = val;
+            WCN_DBG(FM_NTC | CHIP, "set rssi th =%d\n",val);
+            break;
+        }
+        case 1:
+        {
+            mt6620_fm_config.rx_cfg.desene_rssi_th = val;
+            WCN_DBG(FM_NTC | CHIP, "set desense rssi th =%d\n",val);
+            break;
+        }
+        case 2:
+        {
+            mt6620_fm_config.rx_cfg.smg_th = val;
+            WCN_DBG(FM_NTC | CHIP, "set smg th =%d\n",val);
+            break;
+        }
+        default:
+            break;
+    }
+    return 0;
+}
+
 static const fm_u16 DesenseChMap[] = {
     0x0000, 0x0000, 0x0000, 0x0000, /* 7675~7600, 7755~7680, 7835~7760, 7915~7840 */
     0x0000, 0x0000, 0x0000, 0x0000, /* 7995~7920, 8075~8000, 8155~8080, 8235~8160 */
@@ -1631,6 +1671,8 @@ fm_s32 MT6620fm_low_ops_register(struct fm_lowlevel_ops *ops)
 	ops->bi.get_freq_cqi = mt6620_GetFreqCQI;
     ops->bi.hwinfo_get = mt6620_hw_info_get;
     ops->bi.fm_via_bt = MT6620_FMOverBT;
+    ops->bi.set_search_th = mt6620_set_search_th;
+    ops->bi.get_aud_info = mt6620fm_get_audio_info;
 	/*****tx function****/
 	ops->bi.tx_support = mt6620_Tx_Support;
 	ops->bi.pwrupseq_tx = mt6620_PowerUpTx;
@@ -1644,6 +1686,8 @@ fm_s32 MT6620fm_low_ops_register(struct fm_lowlevel_ops *ops)
     ops->bi.tx_pwr_ctrl = MT6620_TX_PWR_CTRL;
     ops->bi.rtc_drift_ctrl = MT6620_RTC_Drift_CTRL;
     ops->bi.tx_desense_wifi = MT6620_TX_DESENSE;
+    ops->bi.pre_search = mt6620_pre_search;
+    ops->bi.restore_search = mt6620_restore_search;
 
 	cmd_buf_lock = fm_lock_create("20_cmd");
 	ret = fm_lock_get(cmd_buf_lock);

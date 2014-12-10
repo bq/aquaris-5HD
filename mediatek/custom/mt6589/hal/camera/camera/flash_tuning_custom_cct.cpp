@@ -25,10 +25,18 @@
 #include "flash_param.h"
 #include "flash_tuning_custom.h"
 
+#include <cutils/xlog.h>
+#include "flash_feature.h"
+#include "flash_param.h"
+#include "flash_tuning_custom.h"
+#include <kd_camera_feature.h>
+
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-int getDefaultStrobeNVRam(int sensorType, void* data, int* ret_size)
+int getDefaultStrobeNVRam_sub(void* data, int* ret_size);
+
+int getDefaultStrobeNVRam_main(void* data, int* ret_size)
 {
 	//static NVRAM_CAMERA_STROBE_STRUCT strobeNVRam;
 	NVRAM_CAMERA_STROBE_STRUCT* p;
@@ -57,43 +65,43 @@ int getDefaultStrobeNVRam(int sensorType, void* data, int* ret_size)
 	//tuning para
 	p->tuningPara[0].yTar = 188;
 	p->tuningPara[0].antiIsoLevel = -5;
-	p->tuningPara[0].antiExpLevel = -5;
+	p->tuningPara[0].antiExpLevel = -8;
 	p->tuningPara[0].antiStrobeLevel = -10;
-	p->tuningPara[0].antiUnderLevel = -2;
-	p->tuningPara[0].antiOverLevel = 2;
-	p->tuningPara[0].foregroundLevel = 1;
+	p->tuningPara[0].antiUnderLevel = 0;
+	p->tuningPara[0].antiOverLevel = 3;
+	p->tuningPara[0].foregroundLevel = 3;
 	p->tuningPara[0].isRefAfDistance = 0;
-	p->tuningPara[0].accuracyLevel = -10;
+	p->tuningPara[0].accuracyLevel = 10;
 
 	p->tuningPara[1].yTar = 188;
 	p->tuningPara[1].antiIsoLevel = -5;
-	p->tuningPara[1].antiExpLevel = -5;
+	p->tuningPara[1].antiExpLevel = -8;
 	p->tuningPara[1].antiStrobeLevel = -10;
-	p->tuningPara[1].antiUnderLevel = -2;
-	p->tuningPara[1].antiOverLevel = 2;
-	p->tuningPara[1].foregroundLevel = 1;
+	p->tuningPara[1].antiUnderLevel = 0;
+	p->tuningPara[1].antiOverLevel = 3;
+	p->tuningPara[1].foregroundLevel = 3;
 	p->tuningPara[1].isRefAfDistance = 0;
-	p->tuningPara[1].accuracyLevel = -10;
+	p->tuningPara[1].accuracyLevel = 10;
 
 	p->tuningPara[2].yTar = 188;
 	p->tuningPara[2].antiIsoLevel = -5;
-	p->tuningPara[2].antiExpLevel = -5;
+	p->tuningPara[2].antiExpLevel = -8;
 	p->tuningPara[2].antiStrobeLevel = -10;
-	p->tuningPara[2].antiUnderLevel = -2;
-	p->tuningPara[2].antiOverLevel = 2;
-	p->tuningPara[2].foregroundLevel = 1;
+	p->tuningPara[2].antiUnderLevel = 0;
+	p->tuningPara[2].antiOverLevel = 3;
+	p->tuningPara[2].foregroundLevel = 3;
 	p->tuningPara[2].isRefAfDistance = 0;
-	p->tuningPara[2].accuracyLevel = -10;
+	p->tuningPara[2].accuracyLevel = 10;
 
 	p->tuningPara[3].yTar = 188;
 	p->tuningPara[3].antiIsoLevel = -5;
-	p->tuningPara[3].antiExpLevel = -5;
+	p->tuningPara[3].antiExpLevel = -8;
 	p->tuningPara[3].antiStrobeLevel = -10;
-	p->tuningPara[3].antiUnderLevel = -2;
-	p->tuningPara[3].antiOverLevel = 2;
-	p->tuningPara[3].foregroundLevel = 1;
+	p->tuningPara[3].antiUnderLevel = 0;
+	p->tuningPara[3].antiOverLevel = 3;
+	p->tuningPara[3].foregroundLevel = 3;
 	p->tuningPara[3].isRefAfDistance = 0;
-	p->tuningPara[3].accuracyLevel = -10;
+	p->tuningPara[3].accuracyLevel = 10;
 	//is eng level used (or by firmware)
 	p->isTorchEngUpdate =0;
 	p->isNormaEnglUpdate =0;
@@ -104,4 +112,22 @@ int getDefaultStrobeNVRam(int sensorType, void* data, int* ret_size)
 
 	*ret_size = sizeof(NVRAM_CAMERA_STROBE_STRUCT);
 	return 0;
+}
+
+
+int getDefaultStrobeNVRam(int sensorType, void* data, int* ret_size)
+{
+
+	if(sensorType==(int)DUAL_CAMERA_SUB_SENSOR)
+	{
+		XLOGD("getDefaultStrobeNVRam ln=%d sensorId=%d",__LINE__, sensorType);
+		return getDefaultStrobeNVRam_sub(data, ret_size);
+	}
+	else //DUAL_CAMERA_MAIN_SENSOR
+	{
+		XLOGD("getDefaultStrobeNVRam ln=%d sensorId=%d",__LINE__, sensorType);
+		return getDefaultStrobeNVRam_main(data, ret_size);
+
+
+	}
 }

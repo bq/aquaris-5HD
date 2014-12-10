@@ -15,10 +15,7 @@
 ** See the License for the specific language governing permissions and 
 ** limitations under the License.
 */
- -->
-
-<resources xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ --><resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="sdcard_missing_message">Il dispositivo non dispone di una scheda SD inserita.</string>
     <string name="sdcard_missing_message_nosdcard">Il dispositivo non dispone di memoria USB.</string>  
 </resources>

@@ -1,3 +1,5 @@
+#ifndef __SSW_H__
+#define __SSW_H__
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -31,7 +33,7 @@ static int dbg_en = 1;
 
 
 /*-------------------------variable define----------------------------------*/
-
+#if 0
 #ifndef SSW_DUAL_TALK
 #define SSW_DUAL_TALK 0
 #endif
@@ -39,7 +41,19 @@ static int dbg_en = 1;
 #ifndef SSW_SING_TALK
 #define SSW_SING_TALK 1
 #endif
+#endif
 
+/*------------------------Error Code---------------------------------------*/
+#define SSW_SUCCESS 			(0)
+#define SSW_INVALID_PARA		(-1)
 
+enum {
+	SSW_INVALID = 0xFFFFFFFF,
+	SSW_INTERN = 0,
+	SSW_EXT_FXLA2203 = 1,
+	SSW_EXT_SINGLE_COMMON = 2,
+};
+
+#endif
 
 

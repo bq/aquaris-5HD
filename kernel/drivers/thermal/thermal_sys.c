@@ -1242,6 +1242,8 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 	if (!tz)
 		return;
 
+    cancel_delayed_work_sync(&(tz->poll_queue));
+
 	mutex_lock(&thermal_list_lock);
 	list_for_each_entry(pos, &thermal_tz_list, node)
 	    if (pos == tz)
@@ -1258,7 +1260,7 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 	mutex_unlock(&thermal_list_lock);
 
     mutex_lock(&tz->lock); // avoid destroy a locked mutex
-	thermal_zone_device_set_polling(tz, 0);
+	//thermal_zone_device_set_polling(tz, 0);
 
 	if (tz->type[0])
 		device_remove_file(&tz->device, &dev_attr_type);
@@ -1390,6 +1392,7 @@ static int __init thermal_init(void)
 		idr_destroy(&thermal_cdev_idr);
 		mutex_destroy(&thermal_idr_lock);
 		mutex_destroy(&thermal_list_lock);
+		return result;
 	}
 	result = genetlink_init();
 	return result;

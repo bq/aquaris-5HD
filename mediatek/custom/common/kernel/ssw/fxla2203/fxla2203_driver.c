@@ -4,43 +4,31 @@
 //#include <mach/mt_gpio.h>
 
 
-#ifndef GPIO_SSW_CH_SWAP_PIN
-#define GPIO_SSW_CH_SWAP_PIN GPIO101
-#endif
-
-#ifndef GPIO_SSW_CH_SWAP_PIN_M_GPIO
-#define GPIO_SSW_CH_SWAP_PIN_M_GPIO GPIO_MODE_00
-#endif
-
-#ifndef GPIO_SSW_EN_PIN
-#define GPIO_SSW_EN_PIN GPIO105
-#endif
-
-#ifndef GPIO_SSW_EN_PIN_M_GPIO
-#define GPIO_SSW_EN_PIN_M_GPIO GPIO_MODE_00
-#endif
-
 
 unsigned int ch_swap;
 unsigned int en;
 unsigned int curr_ssw_mode = SSW_SING_TALK;
 struct mutex ssw_mutex;
 
+unsigned int get_sim_switch_type(void)
+{
+	printk("[ccci/ssw]FXLA2203\n");
+	return SSW_EXT_FXLA2203;
+}
+EXPORT_SYMBOL(get_sim_switch_type);
+
 
 //sim switch hardware initial
 static int ssw_init(unsigned int mode) 
 {
-	SSW_DBG("ssw_init: %s \n", mode?"Single Talk":"Dual Talk");
+	SSW_DBG("ssw_init: %d \n", mode);
 
 	unsigned int ch_mode, en_mode;
-	//ch_swap = GPIO_SSW_CH_SWAP_PIN;
-	//en = GPIO_SSW_EN_PIN;
-	//ch_mode = GPIO_SSW_CH_SWAP_PIN_M_GPIO;
-	//en_mode = GPIO_SSW_EN_PIN_M_GPIO;
-	ch_swap = GPIO101;
-	en = GPIO105;
-	ch_mode = GPIO_MODE_00;
-	en_mode = GPIO_MODE_00;
+	ch_swap = GPIO_SSW_CH_SWAP_PIN;
+	en = GPIO_SSW_EN_PIN;
+	ch_mode = GPIO_SSW_CH_SWAP_PIN_M_GPIO;
+	en_mode = GPIO_SSW_EN_PIN_M_GPIO;
+
 	
 	//initial Ch_Swap pin: 1, host1->sim slot1, host2->sim slot2; 0, host1->sim slot2, host2->sim slot1
 	mt_set_gpio_mode(ch_swap, ch_mode);
@@ -52,10 +40,10 @@ static int ssw_init(unsigned int mode)
 
 	curr_ssw_mode = mode;
 	if (mode == SSW_DUAL_TALK) {
-		mt_set_gpio_out(ch_swap, GPIO_OUT_ONE);
+		mt_set_gpio_out(ch_swap, SSW_DUAL_TALK);
 		
 	} else if (mode == SSW_SING_TALK) {
-		mt_set_gpio_out(ch_swap, GPIO_OUT_ZERO);
+		mt_set_gpio_out(ch_swap, SSW_SING_TALK);
 	}
 
 	mt_set_gpio_out(en, GPIO_OUT_ONE);
@@ -64,7 +52,7 @@ static int ssw_init(unsigned int mode)
 		ch_swap, ch_mode, mt_get_gpio_out(ch_swap),
 		en, en_mode, mt_get_gpio_out(en));
 
-	return 0;
+	return SSW_SUCCESS;
 }
 
 
@@ -72,8 +60,13 @@ int ssw_switch_mode(char *buf, unsigned int len)
 {
 	int ret = 0;
 	unsigned int mode = *((unsigned int *)buf);
+	unsigned int type = (mode&0xFFFF0000)>>16;
 
-	SSW_DBG("sim switch: %s(%d) \n", mode?"Single Talk":"Dual Talk", curr_ssw_mode);
+	if (type != get_sim_switch_type()) {
+		SSW_DBG("[Error]sim switch type is mis-match: type(%d, %d)", type, get_sim_switch_type());
+		return SSW_INVALID_PARA;
+	}
+	SSW_DBG("sim switch: %d -> %d \n", curr_ssw_mode, mode);
 
 	mutex_lock(&ssw_mutex);
 	
@@ -81,9 +74,9 @@ int ssw_switch_mode(char *buf, unsigned int len)
 		curr_ssw_mode = mode;
 		
 		if (curr_ssw_mode == SSW_DUAL_TALK)
-			mt_set_gpio_out(ch_swap, GPIO_OUT_ONE);		
+			mt_set_gpio_out(ch_swap, SSW_DUAL_TALK);		
 		else if (curr_ssw_mode == SSW_SING_TALK)
-			mt_set_gpio_out(ch_swap, GPIO_OUT_ZERO);		
+			mt_set_gpio_out(ch_swap, SSW_SING_TALK);		
 	}
 	
 	mutex_unlock(&ssw_mutex);
@@ -91,7 +84,7 @@ int ssw_switch_mode(char *buf, unsigned int len)
 	SSW_DBG("sim switch(%d) OK, ch_swap=%d, en=%d \n", curr_ssw_mode,
 		mt_get_gpio_out(ch_swap), mt_get_gpio_out(en));
 
-	return 0;
+	return SSW_SUCCESS;
 	
 }
 EXPORT_SYMBOL(ssw_switch_mode);
@@ -109,24 +102,24 @@ static int ssw_probe(struct platform_device *dev)
 
 static int ssw_remove(struct platform_device *dev)
 {
-	SSW_DBG("ssw_remove \n");
+	//SSW_DBG("ssw_remove \n");
 	return 0;
 }
 
 static void ssw_shutdown(struct platform_device *dev)
 {
-	SSW_DBG("ssw_shutdown \n");
+	//SSW_DBG("ssw_shutdown \n");
 }
 
 static int ssw_suspend(struct platform_device *dev, pm_message_t state)
 {
-	SSW_DBG("ssw_suspend \n");
+	//SSW_DBG("ssw_suspend \n");
 	return 0;
 }
 
 static int ssw_resume(struct platform_device *dev)
 {
-	SSW_DBG("ssw_resume \n");
+	//SSW_DBG("ssw_resume \n");
 	return 0;
 }
 

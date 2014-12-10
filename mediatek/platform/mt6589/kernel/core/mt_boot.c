@@ -29,9 +29,7 @@
 #define APHW_VER            (VER_BASE + 0x08)
 #define APSW_VER            (VER_BASE + 0x0C)
 
-/* this vairable will be set by mt6589_fixup */
-BOOTMODE g_boot_mode __nosavedata = UNKNOWN_BOOT;
-boot_reason_t g_boot_reason __nosavedata = BR_UNKNOWN;
+/* this vairable will be set by mt_fixup.c */
 META_COM_TYPE g_meta_com_type = META_UNKNOWN_COM;
 unsigned int g_meta_com_id = 0;
 
@@ -60,46 +58,22 @@ static struct meta_driver meta_com_id_info =
     .id_table = NULL,
 };
 
-static ssize_t (*md_show)(char*) = NULL;
-static ssize_t (*md_store)(const char*,size_t) = NULL;
-
-void boot_register_md_func(ssize_t (*show)(char*), ssize_t (*store)(const char*,size_t))
-{
-    md_show = show;
-    md_store = store;
-}
-
 static ssize_t boot_show(struct kobject *kobj, struct attribute *a, char *buf)
 {
-    if (!strncmp(a->name, MD_SYSFS_ATTR, strlen(MD_SYSFS_ATTR)) && md_show) 
+    if (!strncmp(a->name, INFO_SYSFS_ATTR, strlen(INFO_SYSFS_ATTR)))
     {
-        return md_show(buf);
-    }
-    else if (!strncmp(a->name, INFO_SYSFS_ATTR, strlen(INFO_SYSFS_ATTR)))
-    {
-        return sprintf(buf, "%04X%04X%04X%04X %x\n", get_chip_code(), get_chip_hw_subcode(),
-                            get_chip_hw_ver_code(), get_chip_sw_ver_code(), mt_get_chip_sw_ver());
+        return sprintf(buf, "%04X%04X%04X%04X %04X %04X\n", get_chip_code(), get_chip_hw_subcode(),
+                            get_chip_hw_ver_code(), get_chip_sw_ver_code(), 
+                            mt_get_chip_sw_ver(), mt_get_chip_id());
     }
     else
     {
-        return sprintf(buf, "%d\n", g_boot_mode);
+        return sprintf(buf, "%d\n", get_boot_mode());
     }
 }
 
 static ssize_t boot_store(struct kobject *kobj, struct attribute *a, const char *buf, size_t count)
-{
-
-#ifndef MTK_EMMC_SUPPORT
-    /* check sbchk engine before booting up modem */
-    // FIX-ME : marked for early porting
-    //sbchk_base();	
-#endif
-	
-    if (!strncmp(a->name, MD_SYSFS_ATTR, strlen(MD_SYSFS_ATTR)) && md_store) 
-    {
-        return md_store(buf, count);
-    }
-    
+{    
     return count;
 }
 
@@ -113,11 +87,9 @@ static struct sysfs_ops boot_sysfs_ops = {
 
 /* boot attribute */
 struct attribute boot_attr = {BOOT_SYSFS_ATTR, 0644};
-struct attribute md_attr = {MD_SYSFS_ATTR, 0664};
 struct attribute info_attr = {INFO_SYSFS_ATTR, 0644};
 static struct attribute *boot_attrs[] = {
     &boot_attr,
-    &md_attr,
     &info_attr,
     NULL
 };
@@ -144,13 +116,6 @@ static struct file_operations boot_fops = {
 static struct class *boot_class;
 static struct device *boot_device;
 
-
-/* return boot mode */
-BOOTMODE get_boot_mode(void)
-{
-    return g_boot_mode;
-}
-
 /* return hardware version */
 unsigned int get_chip_code(void)
 {     
@@ -172,43 +137,27 @@ unsigned int get_chip_hw_subcode(void)
     return DRV_Reg32(APHW_SUBCODE);
 }
 
-CHIP_SW_VER mt_get_chip_sw_ver(void)
-{
-    return (CHIP_SW_VER)get_chip_sw_ver_code();
-}
 
 CHIP_VER get_chip_eco_ver(void) /*TO BE REMOVED*/
 {   
     return DRV_Reg32(APHW_VER);
 }
-/* for convenience, simply check is meta mode or not */
-bool is_meta_mode(void)
-{   
-    if(g_boot_mode == META_BOOT)
-    {   
-        return true;
-    }
-    else
-    {   
-        return false;
-    }
+
+unsigned int mt_get_chip_id(void)
+{
+    unsigned int chip_id = get_chip_code();
+    /*convert id if necessary*/
+    return chip_id;
 }
 
-bool is_advanced_meta_mode(void)
+CHIP_SW_VER mt_get_chip_sw_ver(void)
 {
-    if (g_boot_mode == ADVMETA_BOOT)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    return (CHIP_SW_VER)get_chip_sw_ver_code();
 }
 
 bool com_is_enable(void)  // usb android will check whether is com port enabled default. in normal boot it is default enabled. 
 {	
-    if(g_boot_mode == NORMAL_BOOT)
+    if(get_boot_mode() == NORMAL_BOOT)
 	{	
         return false;
 	}
@@ -218,41 +167,20 @@ bool com_is_enable(void)  // usb android will check whether is com port enabled 
 	}
 }
 
-static int boot_mode_proc(char *page, char **start, off_t off,int count, int *eof, void *data)
+void set_meta_com(META_COM_TYPE type, unsigned int id)
 {
-    char *p = page;
-    int len = 0; 
+    g_meta_com_type = type;
+    g_meta_com_id = id;
+}
 
-    p += sprintf(p, "\n\rMT6589 BOOT MODE : " );
-    switch(g_boot_mode)
-    {
-        case NORMAL_BOOT :
-            p += sprintf(p, "NORMAL BOOT\n");
-            break;
-        case META_BOOT :
-            p += sprintf(p, "META BOOT\n");
-            break;
-        case ADVMETA_BOOT :
-            p += sprintf(p, "Advanced META BOOT\n");
-            break;   
-        case ATE_FACTORY_BOOT :
-            p += sprintf(p, "ATE_FACTORY BOOT\n");
-            break;
-        case ALARM_BOOT :
-            p += sprintf(p, "ALARM BOOT\n");
-            break;
-        default :
-            p += sprintf(p, "UNKNOWN BOOT\n");
-            break;
-    }  
-    *start = page + off;
-    len = p - page;
-    if (len > off)
-        len -= off;
-    else
-        len = 0;
+META_COM_TYPE get_meta_com_type(void)
+{
+    return g_meta_com_type;
+}
 
-    return len < count ? len  : count;     
+unsigned int get_meta_com_id(void)
+{
+    return g_meta_com_id;
 }
 
 static ssize_t meta_com_type_show(struct device_driver *driver, char *buf)
@@ -286,6 +214,7 @@ DRIVER_ATTR(meta_com_id_info, 0644, meta_com_id_show, meta_com_id_store);
 static int __init boot_mod_init(void)
 {
     int ret;
+    BOOTMODE bm = get_boot_mode();
 
     /* allocate device major number */
     if (alloc_chrdev_region(&boot_dev_num, 0, 1, BOOT_DEV_NAME) < 0) {
@@ -323,10 +252,7 @@ static int __init boot_mod_init(void)
     
     printk("[%s] CHIP = 0x%04x 0x%04x\n", MOD, get_chip_code(), get_chip_hw_subcode());
     
-    /* create proc entry at /proc/boot_mode */
-    create_proc_read_entry("boot_mode", S_IRUGO, NULL, boot_mode_proc, NULL);
-
-    if(g_boot_mode == META_BOOT || g_boot_mode == ADVMETA_BOOT || g_boot_mode == ATE_FACTORY_BOOT || g_boot_mode == FACTORY_BOOT)
+    if(bm == META_BOOT || bm == ADVMETA_BOOT || bm == ATE_FACTORY_BOOT || bm == FACTORY_BOOT)
     {
         /* register driver and create sysfs files */
         ret = driver_register(&meta_com_type_info.driver);
@@ -362,10 +288,7 @@ static void __exit boot_mod_exit(void)
 
 module_init(boot_mod_init);
 module_exit(boot_mod_exit);
-MODULE_DESCRIPTION("MT6589 Boot Information Querying Driver");
+MODULE_DESCRIPTION("MTK Boot Information Querying Driver");
 MODULE_LICENSE("Proprietary");
-EXPORT_SYMBOL(is_meta_mode);
-EXPORT_SYMBOL(is_advanced_meta_mode);
-EXPORT_SYMBOL(get_boot_mode);
-EXPORT_SYMBOL(boot_register_md_func);
+EXPORT_SYMBOL(mt_get_chip_id);
 EXPORT_SYMBOL(mt_get_chip_sw_ver);

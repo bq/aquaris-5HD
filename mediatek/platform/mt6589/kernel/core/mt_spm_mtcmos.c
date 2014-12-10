@@ -50,7 +50,7 @@ void spm_mtcmos_cpu_unlock(unsigned long *flags)
     spin_unlock_irqrestore(&spm_cpu_lock, *flags);
 }
 
-int spm_mtcmos_ctrl_cpu0(int state)
+int spm_mtcmos_ctrl_cpu0(int state, int chkWfiBeforePdn)
 {
     if (state == STA_POWER_DOWN) {
         
@@ -61,7 +61,7 @@ int spm_mtcmos_ctrl_cpu0(int state)
     return 0;
 }
 
-int spm_mtcmos_ctrl_cpu1(int state)
+int spm_mtcmos_ctrl_cpu1(int state, int chkWfiBeforePdn)
 {
     unsigned long flags;
     
@@ -74,7 +74,8 @@ int spm_mtcmos_ctrl_cpu1(int state)
     {
         int i;
         
-        while ((spm_read(SPM_SLEEP_TIMER_STA) & APMCU1_SLEEP) == 0);
+        if (chkWfiBeforePdn)
+            while ((spm_read(SPM_SLEEP_TIMER_STA) & APMCU1_SLEEP) == 0);
         
         spm_write(SPM_FC1_PWR_CON, (spm_read(SPM_FC1_PWR_CON) | SRAM_CKISO) & ~SRAM_ISOINT_B);
         for (i = 0; i < 16; ++i)
@@ -89,7 +90,7 @@ int spm_mtcmos_ctrl_cpu1(int state)
         
         spm_write(SPM_FC1_PWR_CON, spm_read(SPM_FC1_PWR_CON) & ~PWR_ON);
         spm_write(SPM_FC1_PWR_CON, spm_read(SPM_FC1_PWR_CON) & ~PWR_ON_S);
-        while (((spm_read(SPM_PWR_STATUS) & FC1) != 0) | ((spm_read(SPM_PWR_STATUS_S) & FC1) != 0));
+        while (((spm_read(SPM_PWR_STATUS) & FC1) != 0) || ((spm_read(SPM_PWR_STATUS_S) & FC1) != 0));
     } 
     else /* STA_POWER_ON */
     {
@@ -98,7 +99,7 @@ int spm_mtcmos_ctrl_cpu1(int state)
         spm_write(SPM_FC1_PWR_CON, spm_read(SPM_FC1_PWR_CON) | PWR_ON);
         udelay(1);
         spm_write(SPM_FC1_PWR_CON, spm_read(SPM_FC1_PWR_CON) | PWR_ON_S);
-        while (((spm_read(SPM_PWR_STATUS) & FC1) != FC1) | ((spm_read(SPM_PWR_STATUS_S) & FC1) != FC1));
+        while (((spm_read(SPM_PWR_STATUS) & FC1) != FC1) || ((spm_read(SPM_PWR_STATUS_S) & FC1) != FC1));
         
         spm_write(SPM_FC1_PWR_CON, spm_read(SPM_FC1_PWR_CON) & ~PWR_CLK_DIS);
         
@@ -120,7 +121,7 @@ int spm_mtcmos_ctrl_cpu1(int state)
     return 0;
 }
 
-int spm_mtcmos_ctrl_cpu2(int state)
+int spm_mtcmos_ctrl_cpu2(int state, int chkWfiBeforePdn)
 {
     unsigned long flags;
     
@@ -133,7 +134,8 @@ int spm_mtcmos_ctrl_cpu2(int state)
     {
         int i;
         
-        while ((spm_read(SPM_SLEEP_TIMER_STA) & APMCU2_SLEEP) == 0);
+        if (chkWfiBeforePdn)
+            while ((spm_read(SPM_SLEEP_TIMER_STA) & APMCU2_SLEEP) == 0);
         
         spm_write(SPM_FC2_PWR_CON, (spm_read(SPM_FC2_PWR_CON) | SRAM_CKISO) & ~SRAM_ISOINT_B);
         for (i = 0; i < 16; ++i)
@@ -148,7 +150,7 @@ int spm_mtcmos_ctrl_cpu2(int state)
         
         spm_write(SPM_FC2_PWR_CON, spm_read(SPM_FC2_PWR_CON) & ~PWR_ON);
         spm_write(SPM_FC2_PWR_CON, spm_read(SPM_FC2_PWR_CON) & ~PWR_ON_S);
-        while (((spm_read(SPM_PWR_STATUS) & FC2) != 0) | ((spm_read(SPM_PWR_STATUS_S) & FC2) != 0));
+        while (((spm_read(SPM_PWR_STATUS) & FC2) != 0) || ((spm_read(SPM_PWR_STATUS_S) & FC2) != 0));
     } 
     else /* STA_POWER_ON */
     {
@@ -157,7 +159,7 @@ int spm_mtcmos_ctrl_cpu2(int state)
         spm_write(SPM_FC2_PWR_CON, spm_read(SPM_FC2_PWR_CON) | PWR_ON);
         udelay(1);
         spm_write(SPM_FC2_PWR_CON, spm_read(SPM_FC2_PWR_CON) | PWR_ON_S);
-        while (((spm_read(SPM_PWR_STATUS) & FC2) != FC2) | ((spm_read(SPM_PWR_STATUS_S) & FC2) != FC2));
+        while (((spm_read(SPM_PWR_STATUS) & FC2) != FC2) || ((spm_read(SPM_PWR_STATUS_S) & FC2) != FC2));
         
         spm_write(SPM_FC2_PWR_CON, spm_read(SPM_FC2_PWR_CON) & ~PWR_CLK_DIS);
         
@@ -179,7 +181,7 @@ int spm_mtcmos_ctrl_cpu2(int state)
     return 0;
 }
 
-int spm_mtcmos_ctrl_cpu3(int state)
+int spm_mtcmos_ctrl_cpu3(int state, int chkWfiBeforePdn)
 {
     unsigned long flags;
     
@@ -192,7 +194,8 @@ int spm_mtcmos_ctrl_cpu3(int state)
     {
         int i;
         
-        while ((spm_read(SPM_SLEEP_TIMER_STA) & APMCU3_SLEEP) == 0);
+        if (chkWfiBeforePdn)
+            while ((spm_read(SPM_SLEEP_TIMER_STA) & APMCU3_SLEEP) == 0);
         
         spm_write(SPM_FC3_PWR_CON, (spm_read(SPM_FC3_PWR_CON) | SRAM_CKISO) & ~SRAM_ISOINT_B);
         for (i = 0; i < 16; ++i)
@@ -207,7 +210,7 @@ int spm_mtcmos_ctrl_cpu3(int state)
         
         spm_write(SPM_FC3_PWR_CON, spm_read(SPM_FC3_PWR_CON) & ~PWR_ON);
         spm_write(SPM_FC3_PWR_CON, spm_read(SPM_FC3_PWR_CON) & ~PWR_ON_S);
-        while (((spm_read(SPM_PWR_STATUS) & FC3) != 0) | ((spm_read(SPM_PWR_STATUS_S) & FC3) != 0));
+        while (((spm_read(SPM_PWR_STATUS) & FC3) != 0) || ((spm_read(SPM_PWR_STATUS_S) & FC3) != 0));
     } 
     else /* STA_POWER_ON */
     {
@@ -216,7 +219,7 @@ int spm_mtcmos_ctrl_cpu3(int state)
         spm_write(SPM_FC3_PWR_CON, spm_read(SPM_FC3_PWR_CON) | PWR_ON);
         udelay(1);
         spm_write(SPM_FC3_PWR_CON, spm_read(SPM_FC3_PWR_CON) | PWR_ON_S);
-        while (((spm_read(SPM_PWR_STATUS) & FC3) != FC3) | ((spm_read(SPM_PWR_STATUS_S) & FC3) != FC3));
+        while (((spm_read(SPM_PWR_STATUS) & FC3) != FC3) || ((spm_read(SPM_PWR_STATUS_S) & FC3) != FC3));
         
         spm_write(SPM_FC3_PWR_CON, spm_read(SPM_FC3_PWR_CON) & ~PWR_CLK_DIS);
         
@@ -800,12 +803,16 @@ int spm_mtcmos_ctrl_mdsys1(int state)
     int err = 0;
     volatile unsigned int val;
     unsigned long flags;
+    int count = 0;
 
     spm_mtcmos_noncpu_lock(flags);
 
     if (state == STA_POWER_DOWN) {
         spm_write(TOPAXI_PROT_EN, spm_read(TOPAXI_PROT_EN) | MD1_PROT_MASK);
         while ((spm_read(TOPAXI_PROT_STA1) & MD1_PROT_MASK) != MD1_PROT_MASK) {
+            count++;
+            if(count==1000)
+                break;
         }
 
         spm_write(SPM_MD1_PWR_CON, spm_read(SPM_MD1_PWR_CON) | MD_SRAM_PDN);
@@ -866,12 +873,16 @@ int spm_mtcmos_ctrl_mdsys2(int state)
     int err = 0;
     volatile unsigned int val;
     unsigned long flags;
+    int count = 0;
 
     spm_mtcmos_noncpu_lock(flags);
 
     if (state == STA_POWER_DOWN) {
         spm_write(TOPAXI_PROT_EN, spm_read(TOPAXI_PROT_EN) | MD2_PROT_MASK);
         while ((spm_read(TOPAXI_PROT_STA1) & MD2_PROT_MASK) != MD2_PROT_MASK) {
+            count++;
+            if(count==1000)
+                break;
         }
 
         spm_write(SPM_MD2_PWR_CON, spm_read(SPM_MD2_PWR_CON) | MD_SRAM_PDN);

@@ -20,10 +20,11 @@
 #include <cust_eint_md1.h>
 #include <cust_eint_md2.h>
 #endif
-#include "mach/mt_reg_base.h"
-#include "mach/eint.h"
-#include "mach/irqs.h"
-#include "mach/sync_write.h"
+#include <mach/mt_reg_base.h>
+#include <mach/eint.h>
+#include <mach/eint_drv.h>
+#include <mach/irqs.h>
+#include <mach/sync_write.h>
 #endif
 
 #ifdef CTP
@@ -94,6 +95,7 @@ static eint_func EINT_FUNC;
 struct wake_lock EINT_suspend_lock;
 static unsigned int cur_eint_num;
 
+/*
 struct mt_eint_driver  {
 
     struct device_driver driver;
@@ -109,6 +111,8 @@ static struct mt_eint_driver mt_eint_drv =
     },
     .id_table = NULL,
 };
+
+*/
 #else
 static eint_func EINT_FUNC;
 #endif
@@ -121,9 +125,8 @@ int get_eint_attribute(char *, unsigned int , unsigned int , char *, unsigned in
  * mt_eint_get_mask: To get the eint mask
  * @eint_num: the EINT number to get
  */
-unsigned int mt_eint_get_mask(unsigned int eint_num)
+static unsigned int mt_eint_get_mask(unsigned int eint_num)
 {
-
 	unsigned int base;
 	unsigned int st;    
     unsigned int bit = 1 << (eint_num % 32);
@@ -304,7 +307,7 @@ void mt_eint_soft_set(unsigned int eint_num)
  * mt_eint_soft_clr: Unmask the specified EINT number.
  * @eint_num: EINT number to clear
  */
-void mt_eint_soft_clr(unsigned int eint_num)
+static void mt_eint_soft_clr(unsigned int eint_num)
 {
 	unsigned int base;
 	unsigned int bit = 1 << (eint_num % 32);
@@ -323,7 +326,7 @@ void mt_eint_soft_clr(unsigned int eint_num)
  * mt_eint_mask: Mask the specified EINT number.
  * @eint_num: EINT number to mask
  */
-void mt65xx_eint_mask(unsigned int eint_num)
+void mt_eint_mask(unsigned int eint_num)
 {
 	unsigned int base;
 	unsigned int bit = 1 << (eint_num % 32);
@@ -343,7 +346,7 @@ void mt65xx_eint_mask(unsigned int eint_num)
  * mt_eint_unmask: Unmask the specified EINT number.
  * @eint_num: EINT number to unmask
  */
-void mt65xx_eint_unmask(unsigned int eint_num)
+void mt_eint_unmask(unsigned int eint_num)
 {
 
 	unsigned int base;
@@ -360,17 +363,17 @@ void mt65xx_eint_unmask(unsigned int eint_num)
 }
 
 /*
- * mt65xx_eint_set_polarity: Set the polarity for the EINT number.
+ * mt_eint_set_polarity: Set the polarity for the EINT number.
  * @eint_num: EINT number to set
  * @pol: polarity to set
  */
-void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol)
+void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol)
 {
 	unsigned int count;
 	unsigned int base;
 	unsigned int bit = 1 << (eint_num % 32);
 
-	if (pol == MT65XX_EINT_POL_NEG) {
+	if (pol == MT_EINT_POL_NEG) {
 		if (eint_num < EINT_AP_MAXNUMBER) {
 			base = (eint_num / 32) * 4 + EINT_POL_CLR_BASE;
 		} else {
@@ -418,9 +421,9 @@ unsigned int mt_eint_get_polarity(unsigned int eint_num)
 
 	dbgmsg(KERN_DEBUG "[EINT] %s :%x, bit:%x, val:%x\n", __func__, base, bit, val);
         if (val & bit) {
-                pol = MT65XX_EINT_POL_POS;
+                pol = MT_EINT_POL_POS;
         } else {
-                pol = MT65XX_EINT_POL_NEG;
+                pol = MT_EINT_POL_NEG;
         }
         return pol;  
 
@@ -432,18 +435,18 @@ unsigned int mt_eint_get_polarity(unsigned int eint_num)
  * @sens: sensitivity to set
  * Always return 0.
  */
-unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens)
+unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens)
 {
 	unsigned int base;
 	unsigned int bit = 1 << (eint_num % 32);
 
-	if (sens == MT65xx_EDGE_SENSITIVE) {
+	if (sens == MT_EDGE_SENSITIVE) {
 		if (eint_num < EINT_AP_MAXNUMBER) {
 			base = (eint_num / 32) * 4 + EINT_SENS_CLR_BASE;
 		} else {
 			base = PMIC_EINT_SENS_CLR_BASE;
 		}
-	} else if (sens == MT65xx_LEVEL_SENSITIVE) {
+	} else if (sens == MT_LEVEL_SENSITIVE) {
 		if (eint_num < EINT_AP_MAXNUMBER) {
 			base = (eint_num / 32) * 4 + EINT_SENS_SET_BASE;
 		} else {
@@ -462,7 +465,7 @@ unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens)
  * mt_eint_get_sens: To get the eint sens
  * @eint_num: the EINT number to get
  */
-unsigned int mt_eint_get_sens(unsigned int eint_num)
+static unsigned int mt_eint_get_sens(unsigned int eint_num)
 {
 	unsigned int base, sens;
 	unsigned int bit = 1 << (eint_num % 32), st;
@@ -474,9 +477,9 @@ unsigned int mt_eint_get_sens(unsigned int eint_num)
 	}
 	st = readl(base);
 	if (st & bit) {
-		sens = MT65xx_LEVEL_SENSITIVE;
+		sens = MT_LEVEL_SENSITIVE;
 	} else {
-		sens = MT65xx_EDGE_SENSITIVE;
+		sens = MT_EDGE_SENSITIVE;
 	}
 	return sens;
 }
@@ -485,7 +488,7 @@ unsigned int mt_eint_get_sens(unsigned int eint_num)
  * mt_eint_ack: To ack the interrupt 
  * @eint_num: the EINT number to set
  */
-unsigned int mt_eint_ack(unsigned int eint_num)
+static unsigned int mt_eint_ack(unsigned int eint_num)
 {
 	unsigned int base;
 	unsigned int bit = 1 << (eint_num % 32);
@@ -505,7 +508,7 @@ unsigned int mt_eint_ack(unsigned int eint_num)
  * mt_eint_read_status: To read the interrupt status
  * @eint_num: the EINT number to set
  */
-unsigned int mt_eint_read_status(unsigned int eint_num)
+static unsigned int mt_eint_read_status(unsigned int eint_num)
 {
 	unsigned int base;
 	unsigned int st;
@@ -525,9 +528,8 @@ unsigned int mt_eint_read_status(unsigned int eint_num)
  * mt_eint_get_status: To get the interrupt status 
  * @eint_num: the EINT number to get
  */
-unsigned int mt_eint_get_status(unsigned int eint_num)
+static unsigned int mt_eint_get_status(unsigned int eint_num)
 {
-
 	unsigned int base;
 	unsigned int st;
 
@@ -545,7 +547,7 @@ unsigned int mt_eint_get_status(unsigned int eint_num)
  * mt_eint_en_hw_debounce: To enable hw debounce
  * @eint_num: the EINT number to set
  */
-void mt_eint_en_hw_debounce(unsigned int eint_num)
+static void mt_eint_en_hw_debounce(unsigned int eint_num)
 {
 	unsigned int base, bit;
 	base = (eint_num / 4) * 4 + EINT_DBNC_SET_BASE;
@@ -559,7 +561,7 @@ void mt_eint_en_hw_debounce(unsigned int eint_num)
  * mt_eint_dis_hw_debounce: To disable hw debounce
  * @eint_num: the EINT number to set
  */
-void mt_eint_dis_hw_debounce(unsigned int eint_num)
+static void mt_eint_dis_hw_debounce(unsigned int eint_num)
 {
 	unsigned int clr_base, bit;
 	clr_base = (eint_num / 4) * 4 + EINT_DBNC_CLR_BASE;
@@ -573,7 +575,7 @@ void mt_eint_dis_hw_debounce(unsigned int eint_num)
  * mt_eint_dis_sw_debounce: To set EINT_FUNC.is_deb_en[eint_num] disable
  * @eint_num: the EINT number to set
  */
-void mt_eint_dis_sw_debounce(unsigned int eint_num)
+static void mt_eint_dis_sw_debounce(unsigned int eint_num)
 {
 	EINT_FUNC.is_deb_en[eint_num] = 0;
 }
@@ -582,7 +584,7 @@ void mt_eint_dis_sw_debounce(unsigned int eint_num)
  * mt_eint_en_sw_debounce: To set EINT_FUNC.is_deb_en[eint_num] enable
  * @eint_num: the EINT number to set
  */
-void mt_eint_en_sw_debounce(unsigned int eint_num)
+static void mt_eint_en_sw_debounce(unsigned int eint_num)
 {
 	EINT_FUNC.is_deb_en[eint_num] = 1;
 }
@@ -591,11 +593,11 @@ void mt_eint_en_sw_debounce(unsigned int eint_num)
  * mt_can_en_debounce: Check the EINT number is able to enable debounce or not
  * @eint_num: the EINT number to set
  */
-unsigned int mt_can_en_debounce(unsigned int eint_num)
+static unsigned int mt_can_en_debounce(unsigned int eint_num)
 {
 	unsigned int sens = mt_eint_get_sens(eint_num);
 	/* debounce: debounce time is not 0 && it is not edge sensitive */
-	if (EINT_FUNC.deb_time[eint_num] >= 0 && sens != MT65xx_EDGE_SENSITIVE)
+	if (EINT_FUNC.deb_time[eint_num] >= 0 && sens != MT_EDGE_SENSITIVE)
 		return 1;
 	else {
 		dbgmsg
@@ -606,11 +608,11 @@ unsigned int mt_can_en_debounce(unsigned int eint_num)
 }
 
 /*
- * mt65xx_eint_set_hw_debounce: Set the de-bounce time for the specified EINT number.
+ * mt_eint_set_hw_debounce: Set the de-bounce time for the specified EINT number.
  * @eint_num: EINT number to acknowledge
  * @ms: the de-bounce time to set (in miliseconds)
  */
-void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms)
+void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms)
 {
 	unsigned int dbnc, base, bit, clr_bit, clr_base, rst, unmask = 0;
 	base = (eint_num / 4) * 4 + EINT_DBNC_SET_BASE;
@@ -649,10 +651,9 @@ void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms)
 
 	/* setp 1: mask the EINT */
     if(!mt_eint_get_mask(eint_num)) {
-        mt65xx_eint_mask(eint_num);
+        mt_eint_mask(eint_num);
         unmask = 1;
     }
-
 	/* step 2: Check hw debouce number to decide which type should be used */
 	if (eint_num >= MAX_HW_DEBOUNCE_CNT)
 		mt_eint_en_sw_debounce(eint_num);
@@ -677,14 +678,14 @@ void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms)
 	}
 	/* step 3: unmask the EINT */
     if(unmask == 1)
-        mt65xx_eint_unmask(eint_num);
+        mt_eint_unmask(eint_num);
 }
 
 /*
  * eint_do_tasklet: EINT tasklet function.
  * @unused: not use.
  */
-void eint_do_tasklet(unsigned long unused)
+static void eint_do_tasklet(unsigned long unused)
 {
 	wake_lock_timeout(&EINT_suspend_lock, HZ / 2);
 }
@@ -696,32 +697,32 @@ DECLARE_TASKLET(eint_tasklet, eint_do_tasklet, 0);
  * @eint_num: the EINT number and use unsigned long to prevent 
  *            compile warning of timer usage.
  */
-void mt_eint_timer_event_handler(unsigned long eint_num)
+static void mt_eint_timer_event_handler(unsigned long eint_num)
 {
 	unsigned int status;
 	unsigned long flags;
 
 	/* disable interrupt for core 0 and it will run on core 0 only */
 	local_irq_save(flags);
-	mt65xx_eint_unmask(eint_num);
+	mt_eint_unmask(eint_num);
 	status = mt_eint_read_status(eint_num);
 	dbgmsg(KERN_DEBUG"EINT Module - EINT_STA = 0x%x, in %s\n", status, __func__);
 	if (status) {
-		mt65xx_eint_mask(eint_num);
+		mt_eint_mask(eint_num);
 		if (EINT_FUNC.eint_func[eint_num])
 			EINT_FUNC.eint_func[eint_num] ();
 		mt_eint_ack(eint_num);
 	}
 	local_irq_restore(flags);
 	if (EINT_FUNC.eint_auto_umask[eint_num])
-		mt65xx_eint_unmask(eint_num);
+		mt_eint_unmask(eint_num);
 }
 
 /*
  * mt_eint_set_timer_event: To set a timer event for sw debounce.
  * @eint_num: the EINT number to set
  */
-void mt_eint_set_timer_event(unsigned int eint_num)
+static void mt_eint_set_timer_event(unsigned int eint_num)
 {
 	struct timer_list *eint_timer = &EINT_FUNC.eint_sw_deb_timer[eint_num];
 	/* assign this handler to execute on core 0 */
@@ -779,7 +780,7 @@ static irqreturn_t mt_eint_isr(int irq, void *dev_id)
 		status_check = status & (1 << (index % 32));
 		if (status_check) {
 		    	//printk(KERN_DEBUG "Got eint:%d\n",index);
-			mt65xx_eint_mask(index);
+			mt_eint_mask(index);
 			if ((EINT_FUNC.is_deb_en[index] == 1) &&
 			    (index >= MAX_HW_DEBOUNCE_CNT)) {
 				/* if its debounce is enable and it is a sw debounce */
@@ -807,7 +808,7 @@ static irqreturn_t mt_eint_isr(int irq, void *dev_id)
 				     status);
 #endif
 				if (EINT_FUNC.eint_auto_umask[index]) {
-					mt65xx_eint_unmask(index);
+					mt_eint_unmask(index);
 				}
 		        }
                         if((t2-t1) > 1000000)
@@ -821,11 +822,16 @@ static irqreturn_t mt_eint_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static int mt_eint_max_channel(void)
+{
+    return EINT_MAX_CHANNEL;
+}
+
 /*
  * mt_eint_dis_debounce: To disable debounce.
  * @eint_num: the EINT number to disable
  */
-void mt_eint_dis_debounce(unsigned int eint_num)
+static void mt_eint_dis_debounce(unsigned int eint_num)
 {
 	/* This function is used to disable debounce whether hw or sw */
 	if (eint_num < MAX_HW_DEBOUNCE_CNT)
@@ -835,7 +841,7 @@ void mt_eint_dis_debounce(unsigned int eint_num)
 }
 
 /*
- * mt65xx_eint_registration: register a EINT.
+ * mt_eint_registration: register a EINT.
  * @eint_num: the EINT number to register
  * @is_deb_en: the indication flag of HW de-bounce time 
  * @pol: polarity value
@@ -848,13 +854,13 @@ void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en,
 {
         int base, rst;
 
-        mt65xx_eint_mask(eint_num);
-        mt65xx_eint_set_polarity(eint_num, pol);
+        mt_eint_mask(eint_num);
+        mt_eint_set_polarity(eint_num, pol);
         if (eint_num < EINT_MAX_CHANNEL) {
                 if (is_deb_en) {
                     if (!EINT_FUNC.is_deb_en[eint_num]
                       && !EINT_FUNC.deb_time[eint_num]){
-                        mt65xx_eint_set_hw_debounce(eint_num,EINT_FUNC.deb_time[eint_num]);
+                        mt_eint_set_hw_debounce(eint_num,EINT_FUNC.deb_time[eint_num]);
                     }
                     /* Delay a while (more than 2T) to wait for hw debounce enable work correctly */
                     udelay(500);
@@ -863,7 +869,8 @@ void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en,
                     rst = (EINT_DBNC_RST_BIT << EINT_DBNC_SET_RST_BITS) <<
                       ((eint_num % 4) * 8);
                     mt65xx_reg_sync_writel(rst, base);
-
+                    /* Delay a while (more than 2T) to wait for hw debounce counter reset work correctly */
+                    udelay(500);
                 } else {
                         mt_eint_dis_debounce(eint_num);
                         printk
@@ -876,13 +883,48 @@ void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en,
                 EINT_FUNC.eint_auto_umask[eint_num] = is_auto_umask;
 
                 mt_eint_ack(eint_num);
-                mt65xx_eint_unmask(eint_num);
+                mt_eint_unmask(eint_num);
         }
 
 }
+
+/*
+ * mt_eint_registration: register a EINT.
+ * @eint_num: the EINT number to register
+ * @flag: the interrupt line behaviour to select
+ * @EINT_FUNC_PTR: the ISR callback function
+ * @is_auto_unmask: the indication flag of auto unmasking after ISR callback is processed
+ */
+void mt_eint_registration(unsigned int eint_num, unsigned int flag,
+              void (EINT_FUNC_PTR) (void), unsigned int is_auto_umask)
+{
+    if (eint_num < EINT_MAX_CHANNEL) {
+        mt_eint_mask(eint_num);
+
+        if (flag & (EINTF_TRIGGER_RISING | EINTF_TRIGGER_FALLING)) {
+            mt_eint_set_polarity(eint_num, (flag & EINTF_TRIGGER_FALLING) ? MT_EINT_POL_NEG : MT_EINT_POL_POS);
+            mt_eint_set_sens(eint_num, MT_EDGE_SENSITIVE);
+        } else if (flag & (EINTF_TRIGGER_HIGH | EINTF_TRIGGER_LOW)) {
+            mt_eint_set_polarity(eint_num, (flag & EINTF_TRIGGER_LOW) ? MT_EINT_POL_NEG : MT_EINT_POL_POS);
+            mt_eint_set_sens(eint_num, MT_LEVEL_SENSITIVE);
+        } else {
+            printk("[EINT]: Wrong EINT Pol/Sens Setting 0x%x\n", flag);
+            return ;
+        }
+
+        EINT_FUNC.eint_func[eint_num] = EINT_FUNC_PTR;
+        EINT_FUNC.eint_auto_umask[eint_num] = is_auto_umask;
+        mt_eint_ack(eint_num);
+        mt_eint_unmask(eint_num);
+    } else {
+        printk("[EINT]: Wrong EINT Number %d\n", eint_num);
+    }
+}
+
 /*
  * cur_eint_show: To show cur_eint_num.
  */
+/*
 static ssize_t cur_eint_show(struct device_driver *driver, char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", cur_eint_num);
@@ -899,10 +941,12 @@ void md_eint_test_fun(void ){
         printk("[STEN]MD EINT TEST:%d, %d, %d\n",i,len,(int)result);
 #endif
 }
+*/
 void mt_eint_test(void);
 /*
  * cur_eint_store: To set cur_eint_num.
  */
+/*
 static ssize_t cur_eint_store(struct device_driver *driver, const char *buf,
 			      size_t count)
 {
@@ -927,19 +971,23 @@ static ssize_t cur_eint_store(struct device_driver *driver, const char *buf,
 }
 
 DRIVER_ATTR(current_eint, 0664, cur_eint_show, cur_eint_store);
+*/
 
 /*
  * cur_eint_sens_show: To show cur_eint_num sens.
  */
+/*
 static ssize_t cur_eint_sens_show(struct device_driver *driver, char *buf)
 {
 	unsigned int sens = mt_eint_get_sens(cur_eint_num);
 	return snprintf(buf, PAGE_SIZE, "%d\n", sens);
 }
+*/
 
 /*
  * cur_eint_sens_store: To set cur_eint_num sens.
  */
+/*
 static ssize_t cur_eint_sens_store(struct device_driver *driver,
 				   const char *buf, size_t count)
 {
@@ -948,10 +996,10 @@ static ssize_t cur_eint_sens_store(struct device_driver *driver,
 
 	sens = simple_strtoul(p, &p, 10);
 	if (sens == 1) {
-		sens = MT65xx_LEVEL_SENSITIVE;
+		sens = MT_LEVEL_SENSITIVE;
 	} else if (sens == 0) {
-		sens = MT65xx_EDGE_SENSITIVE;
-		/* we will disable debounce once it is edge sensitive. */
+		sens = MT_EDGE_SENSITIVE;
+		// we will disable debounce once it is edge sensitive.
 		mt_eint_dis_debounce(cur_eint_num);
 		printk
 		    (KERN_CRIT"disable debounce due to setting debounce to edge sensitive eint_num:%d, deb_time:%d, sens:%d\n",
@@ -962,38 +1010,42 @@ static ssize_t cur_eint_sens_store(struct device_driver *driver,
 	}
 
 	if(mt_eint_get_mask(cur_eint_num)) {
-		mt65xx_eint_set_sens(cur_eint_num, sens);
+		mt_eint_set_sens(cur_eint_num, sens);
 	} else {
-		mt65xx_eint_mask(cur_eint_num);
-		mt65xx_eint_set_sens(cur_eint_num, sens);
-		mt65xx_eint_unmask(cur_eint_num);
+		mt_eint_mask(cur_eint_num);
+		mt_eint_set_sens(cur_eint_num, sens);
+		mt_eint_unmask(cur_eint_num);
 	}
 
 	return count;
 }
 
 DRIVER_ATTR(current_eint_sens, 0644, cur_eint_sens_show, cur_eint_sens_store);
+*/
 
 /*
  * cur_eint_pol_show: To show cur_eint_num pol.
  */
+/*
 static ssize_t cur_eint_pol_show(struct device_driver *driver, char *buf)
 {
 	unsigned int pol;
 
 	pol = mt_eint_get_polarity(cur_eint_num);
 	if (pol) {
-		pol = MT65XX_EINT_POL_POS;
+		pol = MT_EINT_POL_POS;
 	} else {
-		pol = MT65XX_EINT_POL_NEG;
+		pol = MT_EINT_POL_NEG;
 	}
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", pol);
 }
+*/
 
 /*
  * cur_eint_pol_store: To set cur_eint_num pol.
  */
+/*
 static ssize_t cur_eint_pol_store(struct device_driver *driver, const char *buf,
 				  size_t count)
 {
@@ -1002,31 +1054,32 @@ static ssize_t cur_eint_pol_store(struct device_driver *driver, const char *buf,
 
 	pol = simple_strtoul(p, &p, 10);
 	if (pol == 1) {
-		pol = MT65XX_EINT_POL_POS;
+		pol = MT_EINT_POL_POS;
 	} else if (pol == 0) {
-		pol = MT65XX_EINT_POL_NEG;
+		pol = MT_EINT_POL_NEG;
 	} else {
 		printk("invalid polarity value: %d\n", pol);
 		return count;
 	}
 
 	if(mt_eint_get_mask(cur_eint_num)) {
-		mt65xx_eint_set_polarity(cur_eint_num, pol);
+		mt_eint_set_polarity(cur_eint_num, pol);
 	} else {
-		mt65xx_eint_mask(cur_eint_num);
-		mt65xx_eint_set_polarity(cur_eint_num, pol);
-		mt65xx_eint_unmask(cur_eint_num);
+		mt_eint_mask(cur_eint_num);
+		mt_eint_set_polarity(cur_eint_num, pol);
+		mt_eint_unmask(cur_eint_num);
 	}
 
 	return count;
 }
 
 DRIVER_ATTR(current_eint_pol, 0644, cur_eint_pol_show, cur_eint_pol_store);
+*/
 
 /*
  * cur_eint_deb_show: To show cur_eint_num debounce time.
  */
-static ssize_t cur_eint_deb_show(struct device_driver *driver, char *buf)
+static unsigned int mt_eint_get_debounce_cnt(unsigned int cur_eint_num)
 {
 	unsigned int dbnc, deb, base;
 	base = (cur_eint_num / 4) * 4 + EINT_DBNC_BASE;
@@ -1070,30 +1123,11 @@ static ssize_t cur_eint_deb_show(struct device_driver *driver, char *buf)
 			break;
 		}
 	}
-	return snprintf(buf, PAGE_SIZE, "%d\n", deb);
+
+	return deb;
 }
 
-/*
- * cur_eint_deb_store: To set cur_eint_num debounce time.
- */
-static ssize_t cur_eint_deb_store(struct device_driver *driver, const char *buf,
-				  size_t count)
-{
-	char *p = (char *)buf;
-	unsigned int deb;
-
-	deb = simple_strtoul(p, &p, 10);
-	mt65xx_eint_set_hw_debounce(cur_eint_num, deb);
-
-	return count;
-}
-
-DRIVER_ATTR(current_eint_deb, 0644, cur_eint_deb_show, cur_eint_deb_store);
-
-/*
- * cur_eint_deb_en_show: To show cur_eint_num debounce enable or disable.
- */
-static ssize_t cur_eint_deb_en_show(struct device_driver *driver, char *buf)
+static int mt_eint_is_debounce_en(unsigned int cur_eint_num)
 {
 	unsigned int base, val, en;
 	if (cur_eint_num < MAX_HW_DEBOUNCE_CNT) {
@@ -1108,56 +1142,56 @@ static ssize_t cur_eint_deb_en_show(struct device_driver *driver, char *buf)
 	} else {
 		en = EINT_FUNC.is_deb_en[cur_eint_num];
 	}
-	return snprintf(buf, PAGE_SIZE, "%d\n", en);
+
+    return en;
 }
 
-/*
- * cur_eint_deb_en_store: To enable or disable cur_eint_num debounce.
- */
-static ssize_t cur_eint_deb_en_store(struct device_driver *driver,
-				     const char *buf, size_t count)
+static void mt_eint_enable_debounce(unsigned int cur_eint_num)
 {
-	char *p = (char *)buf;
-	unsigned int en;
-
-	en = simple_strtoul(p, &p, 10);
-
-	if (en != 1 && en != 0) {
-		printk("invalid debounce-enable value: %d\n", en);
-	} else {
-		mt65xx_eint_mask(cur_eint_num);
-		if (cur_eint_num < MAX_HW_DEBOUNCE_CNT) {
-			/* HW debounce */
-			if (en && mt_can_en_debounce(cur_eint_num))
-				mt_eint_en_hw_debounce(cur_eint_num);
-			else
-				mt_eint_dis_hw_debounce(cur_eint_num);
-		} else {
-			/* SW debounce */
-			if (en && mt_can_en_debounce(cur_eint_num))
-				mt_eint_en_sw_debounce(cur_eint_num);
-			else
-				mt_eint_dis_sw_debounce(cur_eint_num);
-		}
-		mt65xx_eint_unmask(cur_eint_num);
-	}
-
-	return count;
+    mt_eint_mask(cur_eint_num);
+    if (cur_eint_num < MAX_HW_DEBOUNCE_CNT) {
+        /* HW debounce */
+        if (mt_can_en_debounce(cur_eint_num))
+            mt_eint_en_hw_debounce(cur_eint_num);
+        else
+            mt_eint_dis_hw_debounce(cur_eint_num);
+    } else {
+        /* SW debounce */
+        if (mt_can_en_debounce(cur_eint_num))
+            mt_eint_en_sw_debounce(cur_eint_num);
+        else
+            mt_eint_dis_sw_debounce(cur_eint_num);
+    }
+    mt_eint_unmask(cur_eint_num);
 }
 
-DRIVER_ATTR(current_eint_deb_en, 0644, cur_eint_deb_en_show,
-	    cur_eint_deb_en_store);
+static void mt_eint_disable_debounce(unsigned int cur_eint_num)
+{
+    mt_eint_mask(cur_eint_num);
+    if (cur_eint_num < MAX_HW_DEBOUNCE_CNT) {
+        /* HW debounce */
+        mt_eint_dis_hw_debounce(cur_eint_num);
+    } else {
+        /* SW debounce */
+        mt_eint_dis_sw_debounce(cur_eint_num);
+    }
+    mt_eint_unmask(cur_eint_num);
+}
+
 #if defined(EINT_TEST)
+/*
 static ssize_t cur_eint_soft_set_show(struct device_driver *driver, char *buf)
 {
 	unsigned int ret = EINT_FUNC.softisr_called[cur_eint_num];
-	/* reset to 0 for the next testing. */
+	// reset to 0 for the next testing.
 	EINT_FUNC.softisr_called[cur_eint_num] = 0;
 	return snprintf(buf, PAGE_SIZE, "%d\n", ret);
 }
+*/
 /*
  * set 1 to trigger and set 0 to clr this interrupt
  */
+/*
 static ssize_t cur_eint_soft_set_store(struct device_driver *driver, const char *buf, size_t count)
 {
     char *p = (char *)buf;
@@ -1183,6 +1217,7 @@ static ssize_t cur_eint_soft_set_store(struct device_driver *driver, const char 
     return count;
 }
 DRIVER_ATTR(current_eint_soft_set, 0664, cur_eint_soft_set_show, cur_eint_soft_set_store);
+*/
 void mt_eint_soft_isr(void)
 {
 	EINT_FUNC.softisr_called[cur_eint_num] = 1;
@@ -1194,11 +1229,12 @@ void mt_eint_soft_isr(void)
 #endif
 	return;
 }
+/*
 static ssize_t cur_eint_reg_isr_show(struct device_driver *driver, char *buf)
 {
-	/* if ISR has been registered return 1
-	 * else return 0
-	 */
+	//if ISR has been registered return 1
+	//else return 0
+	
 	unsigned int sens, pol, deb, autounmask, base, dbnc;
 	base = (cur_eint_num / 4) * 4 + EINT_DBNC_BASE;
 	sens = mt_eint_get_sens(cur_eint_num);
@@ -1213,7 +1249,7 @@ static ssize_t cur_eint_reg_isr_show(struct device_driver *driver, char *buf)
 
 		switch (dbnc) {
 		case 0:
-			deb = 0;/* 0.5 actually, but we don't allow user to set. */
+			deb = 0;// 0.5 actually, but we don't allow user to set.
 			dbgmsg(KERN_DEBUG"ms should not be 0. eint_num:%d in %s\n",
 			       cur_eint_num, __func__);
 			break;
@@ -1250,24 +1286,25 @@ static ssize_t cur_eint_reg_isr_show(struct device_driver *driver, char *buf)
 static ssize_t cur_eint_reg_isr_store(struct device_driver *driver,
 				     const char *buf, size_t count)
 {
-	/* Get eint number */
+	// Get eint number
 	char *p = (char *)buf;
 	unsigned int num;
 	num = simple_strtoul(p, &p, 10);
 	if (num != 1) {
 		//dbgmsg("Unregister soft isr\n");
 		printk("Unregister soft isr\n");
-		mt65xx_eint_mask(cur_eint_num);
+		mt_eint_mask(cur_eint_num);
 	} else {
-		/* register its ISR: mt_eint_soft_isr */
-		/* level, high, deb time: 64ms, not auto unmask */
-		mt65xx_eint_set_sens(cur_eint_num, MT65xx_LEVEL_SENSITIVE); 
-		mt65xx_eint_set_hw_debounce(cur_eint_num, EINT_FUNC.deb_time[cur_eint_num] );
-		mt65xx_eint_registration(cur_eint_num, 1, MT65XX_EINT_POL_POS, mt_eint_soft_isr, 0);
+		// register its ISR: mt_eint_soft_isr
+		// level, high, deb time: 64ms, not auto unmask
+		mt_eint_set_sens(cur_eint_num, MT_LEVEL_SENSITIVE); 
+		mt_eint_set_hw_debounce(cur_eint_num, EINT_FUNC.deb_time[cur_eint_num] );
+		mt65xx_eint_registration(cur_eint_num, 1, MT_EINT_POL_POS, mt_eint_soft_isr, 0);
 	}
 	return count;
 }
 DRIVER_ATTR(current_eint_reg_isr, 0644, cur_eint_reg_isr_show, cur_eint_reg_isr_store);
+*/
 
 void mt_eint_test(void)
 {
@@ -1277,11 +1314,11 @@ void mt_eint_test(void)
     int is_en_db = 0;
     int is_auto_umask = 0;
 
-    mt65xx_eint_mask(cur_eint_num);
-    mt65xx_eint_set_polarity(cur_eint_num, pol);
-    mt65xx_eint_set_sens(cur_eint_num, sens);
+    mt_eint_mask(cur_eint_num);
+    mt_eint_set_polarity(cur_eint_num, pol);
+    mt_eint_set_sens(cur_eint_num, sens);
     mt65xx_eint_registration(cur_eint_num, is_en_db , pol, mt_eint_soft_isr, is_auto_umask);
-    mt65xx_eint_unmask(cur_eint_num);
+    mt_eint_unmask(cur_eint_num);
     mt_eint_soft_set(cur_eint_num);
 }
 
@@ -1557,7 +1594,7 @@ static void mt_eint_disable_pmic(void)
 int mt_eint_init(void)
 {
 	unsigned int i;
-	int ret;
+    struct mt_eint_driver *eint_drv;
 
 	/* assign to domain 0 for AP */
 	mt_eint_setdomain0();
@@ -1584,6 +1621,23 @@ int mt_eint_init(void)
 		printk(KERN_ERR "EINT IRQ LINE NOT AVAILABLE!!\n");
 	}
 
+    /* register EINT driver */
+    eint_drv = get_mt_eint_drv();
+    eint_drv->eint_max_channel = mt_eint_max_channel;
+    eint_drv->enable = mt_eint_unmask;
+    eint_drv->disable = mt_eint_mask;
+    eint_drv->is_disable = mt_eint_get_mask;
+    eint_drv->get_sens =  mt_eint_get_sens;
+    eint_drv->set_sens = mt_eint_set_sens;
+    eint_drv->get_polarity = mt_eint_get_polarity;
+    eint_drv->set_polarity = mt_eint_set_polarity;
+    eint_drv->get_debounce_cnt =  mt_eint_get_debounce_cnt;
+    eint_drv->set_debounce_cnt = mt_eint_set_hw_debounce;
+    eint_drv->is_debounce_en = mt_eint_is_debounce_en;
+    eint_drv->enable_debounce = mt_eint_enable_debounce;
+    eint_drv->disable_debounce = mt_eint_disable_debounce;
+
+    /*
 	ret = driver_register(&mt_eint_drv.driver);
 	if (ret) {
 		printk(KERN_ERR"fail to register mt_eint_drv\n");
@@ -1601,6 +1655,7 @@ int mt_eint_init(void)
 	if (ret) {
 		printk(KERN_ERR"fail to create mt_eint sysfs files\n");
 	}
+    */
 
 	return 0;
 }
@@ -1640,12 +1695,13 @@ void mt_eint_print_status(void)
 
 arch_initcall(mt_eint_init);
 
+EXPORT_SYMBOL(mt_eint_registration);
 EXPORT_SYMBOL(mt65xx_eint_registration);
-EXPORT_SYMBOL(mt65xx_eint_set_hw_debounce);
-EXPORT_SYMBOL(mt65xx_eint_set_polarity);
-EXPORT_SYMBOL(mt65xx_eint_set_sens);
-EXPORT_SYMBOL(mt65xx_eint_mask);
-EXPORT_SYMBOL(mt65xx_eint_unmask);
+EXPORT_SYMBOL(mt_eint_set_hw_debounce);
+EXPORT_SYMBOL(mt_eint_set_polarity);
+EXPORT_SYMBOL(mt_eint_set_sens);
+EXPORT_SYMBOL(mt_eint_mask);
+EXPORT_SYMBOL(mt_eint_unmask);
 EXPORT_SYMBOL(mt_eint_print_status);
 #if defined(EINT_TEST)
 EXPORT_SYMBOL(mt_eint_test);

@@ -27,6 +27,7 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 #include <linux/xlog.h>
+#include <linux/ratelimit.h>
 #include "logger.h"
 
 #define ADB_BULK_BUFFER_SIZE           4096
@@ -59,6 +60,50 @@ struct adb_dev {
 	struct usb_request *rx_req;
 	int rx_done;
 };
+
+//__ADB_DEBUG__ start
+struct usb_ep	*ep_in = NULL;
+struct usb_ep	*ep_out = NULL;
+int bitdebug_enabled;
+unsigned bitdebug_writeCnt = 1;
+unsigned bitdebug_readCnt = 0;
+
+struct amessage {
+    unsigned command;       /* command identifier constant      */
+    unsigned arg0;          /* first argument                   */
+    unsigned arg1;          /* second argument                  */
+    unsigned data_length;   /* length of payload (0 is allowed) */
+    unsigned data_check;    /* checksum of data payload         */
+    unsigned magic;         /* command ^ 0xffffffff             */
+};
+
+struct debuginfo {
+    unsigned headtoken;
+    unsigned command;       /* command identifier constant      */
+    unsigned msg_check;
+    unsigned data_check;
+    unsigned count;
+    unsigned dummy;
+    unsigned tailtoken;
+};
+
+
+typedef struct amessage amessage;
+typedef struct debuginfo debuginfo;
+
+#define A_SYNC 0x434e5953
+#define A_CNXN 0x4e584e43
+#define A_OPEN 0x4e45504f
+#define A_OKAY 0x59414b4f
+#define A_CLSE 0x45534c43
+#define A_WRTE 0x45545257
+#define A_AUTH 0x48545541
+#define A_DBUG 0x41424a42
+
+#define DBGHEADTOKEN 0x13579bdf
+#define DBGTAILTOKEN 0xdca86420
+
+//__ADB_DEBUG__ end
 
 static struct usb_interface_descriptor adb_interface_desc = {
 	.bLength                = USB_DT_INTERFACE_SIZE,
@@ -113,6 +158,32 @@ static struct usb_descriptor_header *hs_adb_descs[] = {
 	(struct usb_descriptor_header *) &adb_highspeed_out_desc,
 	NULL,
 };
+
+static void adb_debug_read_copy_from_user(char __user *buf, struct usb_request *req)
+{
+  if (sizeof(debuginfo) == req->length)
+  {
+    unsigned long ret;
+    ret = copy_from_user(req->buf, buf, req->length);
+    if(ret!=0){
+        printk(KERN_INFO "copy_from_user fail \n"); 
+    }
+  }
+}
+
+static void adb_debug_read_copy_to_user(char __user *buf, struct usb_request *req)
+{
+  debuginfo *dbg = (debuginfo*) req->buf;
+
+  if(dbg != NULL && dbg->command == A_DBUG && dbg->headtoken == DBGHEADTOKEN && dbg->tailtoken == DBGTAILTOKEN){
+    unsigned long ret;
+    ret = copy_to_user(buf, req->buf, req->length);
+    if(ret!=0){
+        printk(KERN_INFO "copy_to_user fail \n"); 
+    }    
+    printk(KERN_INFO "adb_read A_DBUG (0x%x) (0x%x) (0x%x) \n", dbg->command, dbg->msg_check, dbg->data_check); 
+  }
+}
 
 static void adb_ready_callback(void);
 static void adb_closed_callback(void);
@@ -231,6 +302,9 @@ static int adb_create_bulk_endpoints(struct adb_dev *dev,
 	DBG(cdev, "%s %s %d: create_bulk_endpoints dev: %p\n", __FILE__, __func__, __LINE__, dev);
 
 	ep = usb_ep_autoconfig(cdev->gadget, in_desc);
+	//__ADB_DEBUG__ start
+	ep_in = ep;
+	//__ADB_DEBUG__ end
 	if (!ep) {
 		DBG(cdev, "%s %s %d: usb_ep_autoconfig for ep_in failed\n", __FILE__, __func__, __LINE__);
 		return -ENODEV;
@@ -240,6 +314,9 @@ static int adb_create_bulk_endpoints(struct adb_dev *dev,
 	dev->ep_in = ep;
 
 	ep = usb_ep_autoconfig(cdev->gadget, out_desc);
+	//__ADB_DEBUG__ start
+	ep_out = ep;
+	//__ADB_DEBUG__ end
 	if (!ep) {
 		DBG(cdev, "%s %s %d: usb_ep_autoconfig for ep_out failed\n", __FILE__, __func__, __LINE__);
 		return -ENODEV;
@@ -277,6 +354,7 @@ static ssize_t adb_read(struct file *fp, char __user *buf,
 	struct usb_request *req;
 	int r = count, xfer;
 	int ret;
+	static DEFINE_RATELIMIT_STATE(ratelimit, 1 * HZ, 10);
 
 	pr_debug("%s %s %d: (%d)\n", __FILE__, __func__, __LINE__, count);
 	if (!_adb_dev)
@@ -291,8 +369,10 @@ static ssize_t adb_read(struct file *fp, char __user *buf,
 
 	if (adb_lock(&dev->read_excl))
 	{
-		xlog_printk(ANDROID_LOG_ERROR, XLOG_TAG, "%s %s %d: Failed due to lock busy\n", __FILE__, __func__, __LINE__);
-		USB_LOGGER(DEC_NUM, ADB_READ, "adb_lock", -EBUSY);
+		if (__ratelimit(&ratelimit)) {
+			xlog_printk(ANDROID_LOG_ERROR, XLOG_TAG, "%s %s %d: Failed due to lock busy\n", __FILE__, __func__, __LINE__);
+			USB_LOGGER(DEC_NUM, ADB_READ, "adb_lock", -EBUSY);
+		}
 		return -EBUSY;
 	}
 
@@ -330,6 +410,10 @@ requeue_req:
 	else
 		req->short_not_ok = 0;
 
+	if(bitdebug_enabled == 1){
+		adb_debug_read_copy_from_user(buf, req);
+	}
+
 	ret = usb_ep_queue(dev->ep_out, req, GFP_ATOMIC);
 	if (ret < 0) {
 		/* FIXME */
@@ -339,6 +423,14 @@ requeue_req:
 		if(ret == -ESHUTDOWN) {
 			msleep(150);
 		}
+
+		if(bitdebug_enabled == 1){
+			if (ret == -EINPROGRESS){
+				adb_debug_read_copy_to_user(buf, req);
+				goto done;
+			}
+		}
+
 		xlog_printk(ANDROID_LOG_ERROR, XLOG_TAG, "%s %s %d: failed to queue req %p (%d)\n",
 					__FILE__, __func__, __LINE__, req, ret);
 		USB_LOGGER(HEX_NUM, ADB_READ, "ESHUTDOWN", req);
@@ -365,6 +457,32 @@ requeue_req:
 
 		pr_debug("%s %s %d: rx %p %d\n", __FILE__, __func__, __LINE__, req, req->actual);
 		xfer = (req->actual < count) ? req->actual : count;
+
+		//__ADB_DEBUG__ start
+		if(bitdebug_enabled == 1){
+			if(count == sizeof(amessage)){
+				amessage *msg = (amessage*) req->buf;
+				if(msg != NULL){
+					switch(msg->command){
+					case A_SYNC:
+				 	case A_CNXN:
+					case A_OPEN:
+					case A_OKAY:
+					case A_CLSE:
+					case A_WRTE:
+					case A_AUTH:
+						//printk(KERN_INFO "adb: adb_read (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) \n", msg->command, msg->arg0, msg->arg1, 
+						//msg->data_length, msg->data_check, msg->magic);
+						break;
+					default:
+						//printk(KERN_INFO "adb_read msg A_DATA \n");
+						break;
+					}
+				}
+			}
+		}
+		//__ADB_DEBUG__ end
+
 		if (copy_to_user(buf, req->buf, xfer))
 			r = -EFAULT;
 
@@ -388,6 +506,8 @@ static ssize_t adb_write(struct file *fp, const char __user *buf,
 	struct usb_request *req = 0;
 	int r = count, xfer;
 	int ret;
+	static int flow_state;
+	bool data;
 
 	if (!_adb_dev)
 		return -ENODEV;
@@ -424,6 +544,86 @@ static ssize_t adb_write(struct file *fp, const char __user *buf,
 				r = -EFAULT;
 				break;
 			}
+
+			//__ADB_DEBUG__ start
+			data = true;
+			if(bitdebug_enabled == 1){
+				if(count == sizeof(amessage)){
+					amessage *msg = (amessage*) req->buf;
+					if(msg != NULL){
+						switch(msg->command){
+							case A_SYNC:
+							case A_CNXN:
+							case A_OPEN:
+							case A_OKAY:
+							case A_CLSE:
+							case A_WRTE:
+							case A_AUTH: 
+								//printk(KERN_INFO "adb_write msg (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) \n", msg->command, msg->arg0, msg->arg1, 
+								//	msg->data_length, msg->data_check, msg->magic);
+								if(flow_state == 0){
+									flow_state = 1;
+									//no data packet
+									if(msg->data_length == 0){
+										flow_state = 2;
+									}
+								}else{
+									printk(KERN_INFO "adb_write flow state msg warning \n");
+									printk(KERN_INFO "adb_write msg (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) \n", msg->command, msg->arg0, msg->arg1, 
+										msg->data_length, msg->data_check, msg->magic);
+								}
+								data = false;
+								break;
+						}
+					}
+				} else {
+					data = true;
+      }
+
+				if(count == sizeof(debuginfo)){
+					debuginfo *dbg = (debuginfo*) req->buf;
+					if(dbg != NULL && dbg->command == A_DBUG && dbg->headtoken == DBGHEADTOKEN && dbg->tailtoken == DBGTAILTOKEN){
+						//printk(KERN_INFO "adb_write dbg (0x%x) (0x%x) (0x%x) \n", dbg->command, dbg->msg_check, dbg->data_check);
+						if(flow_state == 2){
+							flow_state = 0;
+						}else{
+							printk(KERN_INFO "adb_write flow state debug warning \n");
+							printk(KERN_INFO "adb_write dbg (0x%x) (0x%x) (0x%x) \n", dbg->command, dbg->msg_check, dbg->data_check);
+						}
+						data = false;
+						if(dbg->count == -1){
+							bitdebug_enabled = 0;
+							bitdebug_writeCnt = 1;
+							bitdebug_readCnt = 0;
+							msleep(150);
+							break;
+						}
+					}
+				}
+
+				if(data == true && bitdebug_enabled == 1){
+					if(flow_state == 1){
+						flow_state = 2;
+					}else{
+						printk(KERN_INFO "adb_write flow state data warning \n");
+					}
+					//printk(KERN_INFO "adb_write data \n");					
+				}
+			}else{
+				if(count == sizeof(debuginfo)){
+					debuginfo *dbg = (debuginfo*) req->buf;
+					if(dbg != NULL && dbg->command == A_DBUG && dbg->headtoken == DBGHEADTOKEN && dbg->tailtoken == DBGTAILTOKEN){
+						if(dbg->count == 0){
+							bitdebug_enabled = 1;
+							flow_state = 0;
+							//req->length = sizeof(debuginfo);
+							msleep(150);
+							break;
+						}
+					}
+				}
+			}
+			//__ADB_DEBUG__ end
 
 			req->length = xfer;
 			ret = usb_ep_queue(dev->ep_in, req, GFP_ATOMIC);
@@ -481,6 +681,7 @@ static int adb_open(struct inode *ip, struct file *fp)
 {
 	int ret = 0;
 	unsigned long flags;
+	bitdebug_enabled = 0;
 	
 	spin_lock_irqsave(&open_lock, flags);
 	

@@ -82,7 +82,7 @@ typedef struct _sensor_data_struct
 
 /* SENSOR PIXEL/LINE NUMBERS IN ONE PERIOD */
 //#define OV5647MIPI_FULL_PERIOD_PIXEL_NUMS          2700 /* 9 fps */
-#define OV5647MIPI_FULL_PERIOD_PIXEL_NUMS          2752 /* 15 fps */
+#define OV5647MIPI_FULL_PERIOD_PIXEL_NUMS          (2752+100) /* 15 fps */
 #define OV5647MIPI_FULL_PERIOD_LINE_NUMS           1974
 #define OV5647MIPI_PV_PERIOD_PIXEL_NUMS            1896 /* 30 fps */
 #define OV5647MIPI_PV_PERIOD_LINE_NUMS             984

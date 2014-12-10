@@ -12,10 +12,6 @@
 /*
 ** $Log: wlan_oid.c $
 **
-** 01 17 2013 george.huang
-** [ALPS00444577] ?Lenovo A820t??Pre-test??????Critical??wifi??wifi??????????????
-** Rollback //ALPS_SW/MP/ALPS.JB2.MP/alps/mediatek/kernel/drivers/combo/drv_wlan/mt6628/wlan/common/wlan_oid.c to revision 1
-**
 ** 07 19 2012 yuche.tsai
 ** NULL
 ** Code update for JB.
@@ -3901,7 +3897,7 @@ wlanoidSetPmkid (
             kalMemCopy(prAisSpecBssInfo->arPmkidCache[j].rBssidInfo.arPMKID,
                 prPmkid->arBSSIDInfo[i].arPMKID,
                 sizeof(PARAM_PMKID_VALUE));
-            DBGLOG(RSN, TRACE, ("Add BSSID "MACSTR" idx=%d PMKID value "MACSTR"\n",
+            DBGLOG(RSN, TRACE, ("Add BSSID "MACSTR" idx=%lu PMKID value "MACSTR"\n",
                 MAC2STR(prAisSpecBssInfo->arPmkidCache[j].rBssidInfo.arBSSID),j,  MAC2STR(prAisSpecBssInfo->arPmkidCache[j].rBssidInfo.arPMKID)));
             prAisSpecBssInfo->arPmkidCache[j].fgPmkidExist = TRUE;
         }
@@ -5193,7 +5189,7 @@ wlanoidQueryMcrRead (
     }
     else {
         HAL_MCR_RD(prAdapter,
-               prMcrRdInfo->u4McrOffset & BITS(2,31), //address is in DWORD unit
+               (unsigned)(prMcrRdInfo->u4McrOffset & BITS(2,31)), //address is in DWORD unit
                &prMcrRdInfo->u4McrData);
 
         DBGLOG(INIT, TRACE, ("MCR Read: Offset = %#08lx, Data = %#08lx\n",
@@ -5524,7 +5520,7 @@ wlanoidSetMcrWrite (
     }
     else {
         HAL_MCR_WR(prAdapter,
-               (prMcrWrInfo->u4McrOffset & BITS(2,31)), //address is in DWORD unit
+               (unsigned)(prMcrWrInfo->u4McrOffset & BITS(2,31)), //address is in DWORD unit
                prMcrWrInfo->u4McrData);
 
         DBGLOG(INIT, TRACE, ("MCR Write: Offset = %#08lx, Data = %#08lx\n",
@@ -5748,6 +5744,13 @@ wlanoidSetSwCtrlWrite (
             else if(u2SubId == 0x5) {
                 prAdapter->rWifiVar.rConnSettings.uc2G4BandwidthMode = (UINT_8)u4Data;
             }
+            else if(u2SubId == 0x0100) {
+                prAdapter->rWifiVar.u8SupportRxGf = (UINT_8)u4Data;
+            }
+            else if(u2SubId == 0x0101) {
+                prAdapter->rWifiVar.u8SupportRxSgi20 = (UINT_8)u4Data;
+                prAdapter->rWifiVar.u8SupportRxSgi40 = (UINT_8)u4Data;
+            }
 
 
             break;
@@ -5807,11 +5810,10 @@ wlanoidSetSwCtrlWrite (
 #endif
         case 0xFFFF:
             {
-            CMD_ACCESS_REG rCmdAccessReg;
 #if 1 //CFG_MT6573_SMT_TEST
             if (u2SubId == 0x0123) {
 
-                DBGLOG(HAL, INFO, ("set smt fixed rate: %d \n", u4Data));
+                DBGLOG(HAL, INFO, ("set smt fixed rate: %lu \n", u4Data));
 
                 if((ENUM_REGISTRY_FIXED_RATE_T)(u4Data) < FIXED_RATE_NUM) {
                     prAdapter->rWifiVar.eRateSetting = (ENUM_REGISTRY_FIXED_RATE_T)(u4Data);
@@ -7936,7 +7938,7 @@ wlanoidSetNetworkAddress(
         prCmdNetworkAddressList->ucAddressCount = (UINT_8)u4IpAddressCount;
         prNetworkAddress = prNetworkAddressList->arAddress;
 
-        DBGLOG(REQ, INFO, ("u4IpAddressCount (%d)\n", u4IpAddressCount));
+        DBGLOG(REQ, INFO, ("u4IpAddressCount (%lu)\n", u4IpAddressCount));
 
         for (i = 0, j = 0 ; i < prNetworkAddressList->u4AddressCount ; i++) {
             if (prNetworkAddress->u2AddressType == PARAM_PROTOCOL_ID_TCP_IP &&
@@ -8447,7 +8449,7 @@ wlanSendSetQueryCmd (
 
     // increase command sequence number
     ucCmdSeqNum = nicIncreaseCmdSeqNum(prAdapter);
-    DBGLOG(REQ, TRACE, ("ucCmdSeqNum =%d\n", ucCmdSeqNum));
+    DBGLOG(REQ, TRACE, ("ucCmdSeqNum =%d, ucCID =%d\n", ucCmdSeqNum, ucCID));
 
     // Setup common CMD Info Packet
     prCmdInfo->eCmdType = COMMAND_TYPE_NETWORK_IOCTL;
@@ -8642,7 +8644,7 @@ wlanoidSetWapiAssocInfo (
     prWapiInfo = (P_WAPI_INFO_ELEM_T)pvSetBuffer;
 
     if (prWapiInfo->ucElemId != ELEM_ID_WAPI) {
-        DBGLOG(SEC, TRACE, ("Not WAPI IE ?! u4SetBufferLen = %d\n", u4SetBufferLen));
+        DBGLOG(SEC, TRACE, ("Not WAPI IE, u4SetBufferLen = %lu\n", u4SetBufferLen));
         prAdapter->rWifiVar.rConnSettings.fgWapiMode = FALSE;
         return WLAN_STATUS_INVALID_LENGTH;
     }
@@ -8706,7 +8708,7 @@ wlanoidSetWapiAssocInfo (
 
     kalMemCopy(prAdapter->prGlueInfo->aucWapiAssocInfoIEs,  pvSetBuffer, u4SetBufferLen);
     prAdapter->prGlueInfo->u2WapiAssocInfoIESz = (UINT_16)u4SetBufferLen;
-    DBGLOG(SEC, TRACE, ("Assoc Info IE sz %ld\n", u4SetBufferLen));
+    DBGLOG(SEC, TRACE, ("Assoc Info IE sz %lu\n", u4SetBufferLen));
 
     return WLAN_STATUS_SUCCESS;
 
@@ -8926,7 +8928,7 @@ wlanoidSetWSCAssocInfo (
 
     kalMemCopy(prAdapter->prGlueInfo->aucWSCAssocInfoIE,  pvSetBuffer, u4SetBufferLen);
     prAdapter->prGlueInfo->u2WSCAssocInfoIELen = (UINT_16)u4SetBufferLen;
-    DBGLOG(SEC, TRACE, ("Assoc Info IE sz %ld\n", u4SetBufferLen));
+    DBGLOG(SEC, TRACE, ("Assoc Info IE sz %lu\n", u4SetBufferLen));
 
     return WLAN_STATUS_SUCCESS;
 
@@ -10472,7 +10474,7 @@ wlanSendMemDumpCmd (
         prCmdDumpMem->u4RemainLength = u4RemainLeng;
         prCmdDumpMem->ucFragNum = ucFragNum;
 
-        DBGLOG(REQ, TRACE, ("[%d] 0x%X, len %d, remain len %d\n",
+        DBGLOG(REQ, TRACE, ("[%u] 0x%lX, len %lu, remain len %lu\n",
             ucFragNum,
             prCmdDumpMem->u4Address,
             prCmdDumpMem->u4Length,
@@ -10536,7 +10538,7 @@ wlanoidQueryMemDump (
     *pu4QueryInfoLen = sizeof(UINT_32);
 
     prMemDumpInfo = (P_PARAM_CUSTOM_MEM_DUMP_STRUC_T)pvQueryBuffer;
-    DBGLOG(REQ, TRACE, ("Dump 0x%X, len %d\n", prMemDumpInfo->u4Address, prMemDumpInfo->u4Length));
+    DBGLOG(REQ, TRACE, ("Dump 0x%lX, len %lu\n", prMemDumpInfo->u4Address, prMemDumpInfo->u4Length));
 
     prMemDumpInfo->u4RemainLength = prMemDumpInfo->u4Length;
     prMemDumpInfo->u4Length = 0;
@@ -10575,13 +10577,14 @@ wlanoidSetP2pMode (
     OUT PUINT_32    pu4SetInfoLen
     )
 {
-    WLAN_STATUS status;
+    WLAN_STATUS status = WLAN_STATUS_SUCCESS;
     P_PARAM_CUSTOM_P2P_SET_STRUC_T prSetP2P = (P_PARAM_CUSTOM_P2P_SET_STRUC_T)NULL;
     //P_MSG_P2P_NETDEV_REGISTER_T prP2pNetdevRegMsg = (P_MSG_P2P_NETDEV_REGISTER_T)NULL;
     DEBUGFUNC("wlanoidSetP2pMode");
 
     ASSERT(prAdapter);
     ASSERT(pu4SetInfoLen);
+	printk("wlanoidSetP2pMode init status=0x%lx \n", status);
 
     *pu4SetInfoLen = sizeof(PARAM_CUSTOM_P2P_SET_STRUC_T);
     if (u4SetBufferLen < sizeof(PARAM_CUSTOM_P2P_SET_STRUC_T)) {
@@ -10637,7 +10640,7 @@ wlanoidSetP2pMode (
             (P_MSG_HDR_T)prP2pNetdevRegMsg,
             MSG_SEND_METHOD_BUF);
 #endif
-
+	printk("wlanoidSetP2pMode return status=0x%lx \n", status);
     return status;
 
 }

@@ -1,3 +1,4 @@
+#include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
@@ -8,6 +9,19 @@
 #include <asm/uaccess.h>
 #include <linux/tick.h>
 #include "prof_main.h"
+#include <linux/version.h>
+
+#ifdef CONFIG_MT_ENG_BUILD  
+
+#define MAX_THREAD_COUNT 50000	// max debug thread count, if reach the level, stop store new thread informaiton.
+#define MAX_TIME 5*60*60	// max debug time, if reach the level, stop and clear the debug information
+
+#else
+
+#define MAX_THREAD_COUNT 10000	// max debug thread count, if reach the level, stop store new thread informaiton.
+#define MAX_TIME 1*60*60	// max debug time, if reach the level, stop and clear the debug information
+
+#endif
 
 struct mt_proc_struct *mt_proc_curr = NULL;
 struct mt_proc_struct *mt_proc_head = NULL;
@@ -66,7 +80,11 @@ unsigned long long mtprof_get_cpu_iowait(int cpu)
     return get_cpu_iowait_time_us(cpu, unused);
 }
 void mt_task_times(struct task_struct *p, cputime_t *ut, cputime_t *st){
-    task_times(p,ut,st);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)   
+   task_times(p,ut,st);
+#else
+   task_cputime_adjusted(p,ut,st);
+#endif
 }
 /********************
      MT cputime prof
@@ -78,6 +96,12 @@ void setup_mtproc_info(struct task_struct *p, unsigned long long ts)
 
 	if(0 == mtsched_enabled)
 	{
+		return;
+	}
+
+	if(proc_count >= MAX_THREAD_COUNT)
+	{
+		printk("mtproc thread count larger the max level %d.\n", MAX_THREAD_COUNT);
 		return;
 	}
 	   
@@ -103,6 +127,7 @@ void setup_mtproc_info(struct task_struct *p, unsigned long long ts)
 	p->se.mtk_isr_time = 0;
 	p->se.mtk_isr_count = 0;
 	mtproc->next = NULL;
+
 	mt_task_times(p,&mtproc->utime_init, &mtproc->stime_init);
 	strcpy(mtproc->comm, p->comm);
 	if(mt_proc_head != NULL)
@@ -120,15 +145,36 @@ void setup_mtproc_info(struct task_struct *p, unsigned long long ts)
 void save_mtproc_info(struct task_struct *p, unsigned long long ts)
 {
 	struct mt_proc_struct *mtproc;
-
+	unsigned long long prof_now_ts;
 	mutex_lock(&mt_cputime_lock);
 	if(0 == mtsched_enabled)
 	{
 		mutex_unlock(&mt_cputime_lock);
+        return;
+	}
+
+	if(proc_count >= MAX_THREAD_COUNT)
+	{
+		printk("mtproc thread count larger the max level %d.\n", MAX_THREAD_COUNT);
+		mutex_unlock(&mt_cputime_lock);
 		return;
 	}
 	
+	
 	mutex_unlock(&mt_cputime_lock);
+
+	prof_now_ts = sched_clock();
+	
+	prof_dur_ts = cputime_sub(prof_now_ts,	prof_start_ts);
+	do_div(prof_dur_ts, 1000000);		// put prof_dur_ts to ms
+	if(prof_dur_ts >= MAX_TIME * 1000)
+	{
+		printk("mtproc debug time larger than the max time %d.\n", MAX_TIME);
+		mtsched_enabled = 0;
+		mt_cputime_switch(2);
+		return;
+	}
+	
 
 	mtproc = kmalloc(sizeof(struct mt_proc_struct), GFP_KERNEL);
 	if(!mtproc)
@@ -352,7 +398,10 @@ void reset_record_task(void){
 		while(mtk_isr_current != NULL)
 		{
 			mtk_isr_next = mtk_isr_current->next;
-			kfree(mtk_isr_current->isr_name);
+			if(mtk_isr_current->isr_name != NULL)
+			{
+				kfree(mtk_isr_current->isr_name);
+			}
 			kfree(mtk_isr_current);
 			mtk_isr_current = mtk_isr_next;
 		}
@@ -374,7 +423,10 @@ void reset_record_task(void){
 		while(mtk_isr_current != NULL)
 		{
 			mtk_isr_next = mtk_isr_current->next;
-			kfree(mtk_isr_current->isr_name);
+			if(mtk_isr_current->isr_name != NULL)
+			{
+				kfree(mtk_isr_current->isr_name);
+			}			
 			kfree(mtk_isr_current);
 			mtk_isr_current = mtk_isr_next;
 		}

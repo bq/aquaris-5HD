@@ -17,6 +17,8 @@
 
 #include <linux/ioctl.h>
 
+#define MAG_GP2AP030A_I2C_ADDR 0x72
+
 /*cm36283 als/ps sensor register related macro*/
 #define CM36283_REG_ALS_CONF 		0X00
 #define CM36283_REG_ALS_THDH 		0X01
@@ -55,7 +57,7 @@
 
 // Reg. 00H
 #define	OP_SHUTSOWN		0x0C	// OP3:0
-#define	OP_RUN			0x80	// OP3:1
+#define	OP_RUN			0x8C	// OP3:1
 #define	OP_CONTINUOUS		0x40	// OP2:1
 #define	OP_PS_ALS		0x00	// OP01:00
 #define	OP_ALS			0x10	// OP01:01

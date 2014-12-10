@@ -30,6 +30,7 @@
 ********************************************************************************
 */
 #define HIF_SDIO_DEBUG  (0) /* 0:trun off debug msg and assert, 1:trun off debug msg and assert */
+#define HIF_SDIO_API_EXTENSION      (0)
 
 /*******************************************************************************
 *                    E X T E R N A L   R E F E R E N C E S
@@ -46,7 +47,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/vmalloc.h>
-
+#include <asm/atomic.h>
 
 #include "osal_typedef.h"
 #include "osal.h"
@@ -113,6 +114,8 @@ typedef struct _MTK_WCN_HIF_SDIO_PROBEINFO {
     struct sdio_func* func;  /* probed sdio function pointer */
     void* private_data_p;  /* clt's private data pointer */
     MTK_WCN_BOOL on_by_wmt;   /* TRUE: on by wmt, FALSE: not on by wmt */
+	/* added for sdio irq sync and mmc single_irq workaround */
+    MTK_WCN_BOOL sdio_irq_enabled; /* TRUE: can handle sdio irq; FALSE: no sdio irq handling */
     INT8 clt_idx;   /* registered function table info element number (initial value is -1) */
 } MTK_WCN_HIF_SDIO_PROBEINFO;
 
@@ -145,11 +148,6 @@ typedef enum {
     HIF_SDIO_ERR_CLT_NOT_REG = HIF_SDIO_ERR_ALRDY_OFF - 1,   
 } MTK_WCN_HIF_SDIO_ERR ;
 
-typedef struct _MTK_WCN_HIF_SDIO_CHIP_INFO_
-{
-    struct sdio_device_id deviceId;
-	UINT32 chipId;
-}MTK_WCN_HIF_SDIO_CHIP_INFO, *P_MTK_WCN_HIF_SDIO_CHIP_INFO;
 
 /*******************************************************************************
 *                            P U B L I C   D A T A
@@ -165,6 +163,16 @@ typedef struct _MTK_WCN_HIF_SDIO_CHIP_INFO_
 *                                 M A C R O S
 ********************************************************************************
 */
+
+#if WMT_PLAT_ALPS
+#ifdef CONFIG_SDIOAUTOK_SUPPORT
+#define MTK_HIF_SDIO_AUTOK_ENABLED 1
+#else
+#define MTK_HIF_SDIO_AUTOK_ENABLED 0
+#endif
+#else
+#define MTK_HIF_SDIO_AUTOK_ENABLED 0
+#endif
 
 
 
@@ -187,11 +195,11 @@ typedef struct _MTK_WCN_HIF_SDIO_CHIP_INFO_
 
 extern UINT32 gHifSdioDbgLvl;
 
-#define HIF_SDIO_LOUD_FUNC(fmt, arg...)   if (gHifSdioDbgLvl >= HIF_SDIO_LOG_LOUD) { printk(KERN_INFO DFT_TAG"[L]%s:"  fmt, __FUNCTION__ ,##arg);}
-#define HIF_SDIO_DBG_FUNC(fmt, arg...)    if (gHifSdioDbgLvl >= HIF_SDIO_LOG_DBG) { printk(KERN_INFO DFT_TAG"[D]%s:"  fmt, __FUNCTION__ ,##arg);}
-#define HIF_SDIO_INFO_FUNC(fmt, arg...)   if (gHifSdioDbgLvl >= HIF_SDIO_LOG_INFO) { printk(KERN_INFO DFT_TAG"[I]%s:"  fmt, __FUNCTION__ ,##arg);}
-#define HIF_SDIO_WARN_FUNC(fmt, arg...)   if (gHifSdioDbgLvl >= HIF_SDIO_LOG_WARN) { printk(KERN_WARNING DFT_TAG"[W]%s(%d):"  fmt, __FUNCTION__ , __LINE__, ##arg);}
-#define HIF_SDIO_ERR_FUNC(fmt, arg...)    if (gHifSdioDbgLvl >= HIF_SDIO_LOG_ERR) { printk(KERN_WARNING DFT_TAG"[E]%s(%d):"  fmt, __FUNCTION__ , __LINE__, ##arg);}
+#define HIF_SDIO_LOUD_FUNC(fmt, arg...)   if (gHifSdioDbgLvl >= HIF_SDIO_LOG_LOUD) { osal_dbg_print(DFT_TAG"[L]%s:"  fmt, __FUNCTION__ ,##arg);}
+#define HIF_SDIO_DBG_FUNC(fmt, arg...)    if (gHifSdioDbgLvl >= HIF_SDIO_LOG_DBG) { osal_dbg_print(DFT_TAG"[D]%s:"  fmt, __FUNCTION__ ,##arg);}
+#define HIF_SDIO_INFO_FUNC(fmt, arg...)   if (gHifSdioDbgLvl >= HIF_SDIO_LOG_INFO) { osal_dbg_print(DFT_TAG"[I]%s:"  fmt, __FUNCTION__ ,##arg);}
+#define HIF_SDIO_WARN_FUNC(fmt, arg...)   if (gHifSdioDbgLvl >= HIF_SDIO_LOG_WARN) { osal_dbg_print(DFT_TAG"[W]%s(%d):"  fmt, __FUNCTION__ , __LINE__, ##arg);}
+#define HIF_SDIO_ERR_FUNC(fmt, arg...)    if (gHifSdioDbgLvl >= HIF_SDIO_LOG_ERR) { osal_dbg_print(DFT_TAG"[E]%s(%d):"  fmt, __FUNCTION__ , __LINE__, ##arg);}
 
 /*!
  * \brief ASSERT function definition.
@@ -199,9 +207,9 @@ extern UINT32 gHifSdioDbgLvl;
  */
 #if HIF_SDIO_DEBUG
 #define HIF_SDIO_ASSERT(expr)    if ( !(expr) ) { \
-                            printk("assertion failed! %s[%d]: %s\n",\
+                            osal_dbg_print("assertion failed! %s[%d]: %s\n",\
                                 __FUNCTION__, __LINE__, #expr); \
-                            BUG_ON( !(expr) );\
+                            osal_bug_on( !(expr) );\
                         }
 #else
 #define HIF_SDIO_ASSERT(expr)    do {} while(0)
@@ -296,14 +304,59 @@ extern INT32 mtk_wcn_hif_sdio_update_cb_reg(
     int (*ts_update)(void)
     );
 
+extern void mtk_wcn_hif_sdio_enable_irq(
+    MTK_WCN_HIF_SDIO_CLTCTX ctx,
+    MTK_WCN_BOOL enable
+    );
 
+extern INT32 mtk_wcn_hif_sdio_do_autok(
+    MTK_WCN_HIF_SDIO_CLTCTX ctx
+    );
+
+#define DELETE_HIF_SDIO_CHRDEV 1
+#if !(DELETE_HIF_SDIO_CHRDEV)
 INT32 mtk_wcn_hif_sdio_tell_chipid(INT32 chipId);
 INT32 mtk_wcn_hif_sdio_query_chipid(INT32 waitFlag);
+#endif
+
+#if HIF_SDIO_API_EXTENSION
+extern INT32 mtk_wcn_hif_sdio_f0_readb (
+    MTK_WCN_HIF_SDIO_CLTCTX ctx,
+    UINT32 offset,
+    PUINT8 pvb
+    );
+
+extern INT32 mtk_wcn_hif_sdio_f0_writeb (
+    MTK_WCN_HIF_SDIO_CLTCTX ctx,
+    UINT32 offset,
+    UINT8 vb
+    );
+
+extern INT32 mtk_wcn_hif_sdio_deep_sleep (
+    MTK_WCN_HIF_SDIO_CLTCTX ctx
+    );
+
+extern INT32 mtk_wcn_hif_sdio_wake_up(
+    MTK_WCN_HIF_SDIO_CLTCTX ctx
+    );
+
+#endif
 
 /*******************************************************************************
 *                              F U N C T I O N S
 ********************************************************************************
 */
+
+/*******************************************************************************
+*                   E X T E R N A L    F U N C T I O N   D E C L A R A T I O N S
+********************************************************************************
+*/
+
+#if MTK_HIF_SDIO_AUTOK_ENABLED
+extern void wait_sdio_autok_ready(void *);
+#endif
+
+
 #endif /* _HIF_SDIO_H */
 
 

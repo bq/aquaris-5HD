@@ -272,12 +272,6 @@ static int interpret_urb_result(struct us_data *us, unsigned int pipe,
 	/* no error code; did we send all the data? */
 	case 0:
 		if (partial != length) {
-		//ALPS00445134, add more debug message for CR debugging
-			US_DEBUGP("Error!!!!! Status code %d; transferred %u/%u, Different transfer result\n",
-					  result, partial, length);
-		}
-		if (partial < length) {
-		//ALPS00445134, add more debug message for CR debugging
 			US_DEBUGP("-- short transfer\n");
 			return USB_STOR_XFER_SHORT;
 		}
@@ -474,11 +468,6 @@ int usb_stor_bulk_srb(struct us_data* us, unsigned int pipe,
 		      struct scsi_cmnd* srb)
 {
 	unsigned int partial;
-	
-//ALPS00445134, add more debug message for CR debugging
-	US_DEBUGP("%s, line %d: \n", __func__, __LINE__);
-//ALPS00445134, add more debug message for CR debugging
-
 	int result = usb_stor_bulk_transfer_sglist(us, pipe, scsi_sglist(srb),
 				      scsi_sg_count(srb), scsi_bufflen(srb),
 				      &partial);
@@ -502,10 +491,6 @@ int usb_stor_bulk_transfer_sg(struct us_data* us, unsigned int pipe,
 {
 	int result;
 	unsigned int partial;
-
-	//ALPS00445134, add more debug message for CR debugging
-	US_DEBUGP("%s, line %d: \n", __func__, __LINE__);
-	//ALPS00445134, add more debug message for CR debugging
 
 	/* are we scatter-gathering? */
 	if (use_sg) {
@@ -590,12 +575,8 @@ static void last_sector_hacks(struct us_data *us, struct scsi_cmnd *srb)
 		 * command immediately, instead of going into an infinite
 		 * (or even just a very long) retry loop.
 		 */
-		//ALPS00445134, add more debug message for CR debugging
-		//enlarge retry times
-		//if (++us->last_sector_retries < 3)
-		if (++us->last_sector_retries < 6)
+		if (++us->last_sector_retries < 3)
 			return;
-		//ALPS00445134, add more debug message for CR debugging
 		srb->result = SAM_STAT_CHECK_CONDITION;
 		memcpy(srb->sense_buffer, record_not_found,
 				sizeof(record_not_found));

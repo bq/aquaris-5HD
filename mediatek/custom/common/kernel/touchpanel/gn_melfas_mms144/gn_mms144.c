@@ -518,10 +518,10 @@ static int melfas_tpd_i2c_probe(struct i2c_client *client, const struct i2c_devi
 	
     msleep(50);
 
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_POLARITY_LOW, melfas_i2c_tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     tpd_load_status = 1;
     
     return 0;
@@ -605,7 +605,7 @@ static void melfas_tpd_early_suspend(struct early_suspend *h)
     melfas_ts_release_all_finger();
 
 	//irq mask
-	mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+	mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 	//power down
     mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
     mt_set_gpio_dir(GPIO_CTP_EN_PIN, GPIO_DIR_OUT);
@@ -625,7 +625,7 @@ static void melfas_tpd_late_resume(struct early_suspend *h)
     mt_set_gpio_out(GPIO_CTP_EN_PIN, GPIO_OUT_ONE);
     msleep(200);
    	//irq unmask
-	mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+	mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 }
 #endif
 

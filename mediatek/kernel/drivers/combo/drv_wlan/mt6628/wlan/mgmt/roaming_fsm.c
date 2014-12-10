@@ -139,7 +139,7 @@ roamingFsmInit (
     P_ROAMING_INFO_T prRoamingFsmInfo;
     P_CONNECTION_SETTINGS_T prConnSettings;
 
-    DBGLOG(ROAMING, LOUD, ("->roamingFsmInit(): Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, LOUD, ("->roamingFsmInit(): Current Time = %u\n", kalGetTimeTick()));
 
     prRoamingFsmInfo = (P_ROAMING_INFO_T)&(prAdapter->rWifiVar.rRoamingInfo);
     prConnSettings = &(prAdapter->rWifiVar.rConnSettings);
@@ -168,7 +168,7 @@ roamingFsmUninit (
 {
     P_ROAMING_INFO_T prRoamingFsmInfo;
 
-    DBGLOG(ROAMING, LOUD, ("->roamingFsmUninit(): Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, LOUD, ("->roamingFsmUninit(): Current Time = %u\n", kalGetTimeTick()));
 
     prRoamingFsmInfo = (P_ROAMING_INFO_T)&(prAdapter->rWifiVar.rRoamingInfo);
 
@@ -196,7 +196,7 @@ roamingFsmSendCmd (
     P_ROAMING_INFO_T prRoamingFsmInfo;
     WLAN_STATUS rStatus;
 
-    DBGLOG(ROAMING, LOUD, ("->roamingFsmSendCmd(): Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, LOUD, ("->roamingFsmSendCmd(): Current Time = %u\n", kalGetTimeTick()));
 
     prRoamingFsmInfo = (P_ROAMING_INFO_T)&(prAdapter->rWifiVar.rRoamingInfo);
 
@@ -240,7 +240,7 @@ roamingFsmScanResultsUpdate (
     /* Check Roaming Conditions */
     ROAMING_ENABLE_CHECK(prRoamingFsmInfo);
 
-    DBGLOG(ROAMING, LOUD, ("->roamingFsmScanResultsUpdate(): Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, LOUD, ("->roamingFsmScanResultsUpdate(): Current Time = %u\n", kalGetTimeTick()));
 
     GET_CURRENT_SYSTIME(&prRoamingFsmInfo->rRoamingDiscoveryUpdateTime);
 
@@ -357,7 +357,7 @@ roamingFsmRunEventStart (
         return;
     }
 
-    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING START: Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING START: Current Time = %u\n", kalGetTimeTick()));
 
     /* IDLE, ROAM -> DECISION */
     /* Errors as DECISION, DISCOVERY -> DECISION */
@@ -401,7 +401,7 @@ roamingFsmRunEventDiscovery (
     /* Check Roaming Conditions */
     ROAMING_ENABLE_CHECK(prRoamingFsmInfo);
 
-    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING DISCOVERY: Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING DISCOVERY: Current Time = %u\n", kalGetTimeTick()));
 
     /* DECISION -> DISCOVERY */
     /* Errors as IDLE, DISCOVERY, ROAM -> DISCOVERY */
@@ -451,7 +451,7 @@ roamingFsmRunEventRoam (
     /* Check Roaming Conditions */
     ROAMING_ENABLE_CHECK(prRoamingFsmInfo);
 
-    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING ROAM: Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING ROAM: Current Time = %u\n", kalGetTimeTick()));
 
     /* IDLE, ROAM -> DECISION */
     /* Errors as IDLE, DECISION, ROAM -> ROAM */
@@ -496,7 +496,7 @@ roamingFsmRunEventFail (
     /* Check Roaming Conditions */
     ROAMING_ENABLE_CHECK(prRoamingFsmInfo);
 
-    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING FAIL: reason %x Current Time = %ld\n", u4Param, kalGetTimeTick()));
+    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING FAIL: reason %lx Current Time = %u\n", u4Param, kalGetTimeTick()));
 
     /* IDLE, ROAM -> DECISION */
     /* Errors as IDLE, DECISION, DISCOVERY -> DECISION */
@@ -540,7 +540,7 @@ roamingFsmRunEventAbort (
 
     ROAMING_ENABLE_CHECK(prRoamingFsmInfo);
 
-    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING ABORT: Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, EVENT, ("EVENT-ROAMING ABORT: Current Time = %u\n", kalGetTimeTick()));
 
     eNextState = ROAMING_STATE_IDLE;
     /* IDLE, DECISION, DISCOVERY, ROAM -> IDLE */
@@ -571,7 +571,7 @@ roamingFsmProcessEvent (
     IN P_ROAMING_PARAM_T prParam
     )
 {
-    DBGLOG(ROAMING, LOUD, ("ROAMING Process Events: Current Time = %ld\n", kalGetTimeTick()));
+    DBGLOG(ROAMING, LOUD, ("ROAMING Process Events: Current Time = %u\n", kalGetTimeTick()));
 
     if (ROAMING_EVENT_DISCOVERY == prParam->u2Event) {
         roamingFsmRunEventDiscovery(prAdapter, prParam->u2Data);

@@ -5,7 +5,6 @@
 #include <linux/wait.h>
 #include <asm/atomic.h>
 #include <linux/cdev.h>
-
 #include <ccci_layer.h>
 
 
@@ -110,4 +109,4 @@ extern int ccci_chrdev_init(int);
 extern void ccci_chrdev_exit(int);
 
 
-#endif
+#endif //__CCCI_CHRDEV_H__

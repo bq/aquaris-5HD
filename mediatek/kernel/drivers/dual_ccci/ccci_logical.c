@@ -6,13 +6,7 @@
 #include <linux/kallsyms.h>
 #include <linux/delay.h>
 #include <linux/wakelock.h>
-
 #include <ccci.h>
-#include <ccci_err_no.h>
-#include <ccci_layer.h>
-#include <ccci_cfg.h>
-#include <ccci_common.h>
-
 
 #define FIRST_PENDING		(1<<0)
 #define PENDING_50MS		(1<<1)
@@ -66,14 +60,20 @@ const logic_channel_static_info_t logic_ch_static_info_tab[] =
 	{CCCI_IPC_UART_TX_ACK, 8, "ipc_uart_tx_ack", L_CH_DROP_TOLERATED},
 	{CCCI_MD_LOG_RX,     256, "md_log_rx",       0},
 	{CCCI_MD_LOG_TX,       0, "md_log_tx",       L_CH_ATTR_TX|L_CH_ATTR_PRVLG1|L_CH_ATTR_PRVLG2},
+#ifdef MTK_ICUSB_SUPPORT
+	{CCCI_ICUSB_RX,        8, "icusb_rx",        L_CH_DROP_TOLERATED},
+	{CCCI_ICUSB_RX_ACK,    0, "icusb_rx_ack",    L_CH_ATTR_TX},
+	{CCCI_ICUSB_TX,        0, "icusb_tx",        L_CH_ATTR_TX},
+	{CCCI_ICUSB_TX_ACK,    8, "icusb_tx_ack",    L_CH_DROP_TOLERATED},
+#endif
 };
 
 #define MAX_LOGIC_CH_ID		(sizeof(logic_ch_static_info_tab)/sizeof(logic_channel_static_info_t))
 
 
 static logic_dispatch_ctl_block_t *logic_dispatch_ctlb[MAX_MD_NUM];
-static unsigned char md_enabled[MAX_MD_NUM] = {0}; // Boot up time will determine this
-static unsigned char active_md[MAX_MD_NUM] = {0};
+static unsigned char md_enabled[MAX_MD_NUM]; // Boot up time will determine this
+static unsigned char active_md[MAX_MD_NUM];
 static unsigned int  max_md_sys = 0;
 
 //extern int get_ccif_hw_info(int md_id, ccif_hw_info_t *ccif_hw_info);
@@ -106,30 +106,6 @@ void update_active_md_sys_state(int md_id, int active)
 		CCCI_MSG("md_sys%d is not enable\n", md_id);
 	}
 }
-
-#if 0
-void set_curr_md_state(int md_id, int state)
-{
-	logic_dispatch_ctl_block_t *ctl_b;
-
-	//CCCI_MSG("%s update md sys id:%d to state:%d\n", __FUNCTION__, md_id+1, state);
-
-	if(unlikely(!md_enabled[md_id])) {
-		CCCI_MSG_INF(md_id, "md sys%d is not enable\n", md_id+1);
-		return;
-	}
-
-	ctl_b = logic_dispatch_ctlb[md_id];
-	ctl_b->m_privilege = state;
-}
-
-int get_curr_md_state(int md_id)
-{
-	logic_dispatch_ctl_block_t *ctl_b;
-	ctl_b = logic_dispatch_ctlb[md_id];
-	return ctl_b->m_privilege;
-}
-#endif
 
 
 int get_md_wakeup_src(int md_id, char *buf, unsigned int len)
@@ -461,7 +437,7 @@ int logic_layer_reset(int md_id)
 		}
 	}
 	// isr/tasklet done, then reset ccif and logic channel
-	ccif->ccif_reset_to_default(ccif);
+	ccif->ccif_reset(ccif);
 	for(i=0; i<CCCI_MAX_CH_NUM; i++)
 	{
 		if (ctl_b->m_logic_ch_table[i].m_kfifo_ready)
@@ -543,13 +519,13 @@ int ccci_message_send(int md_id, ccci_msg_t *msg, int retry_en)
 		if (ctl_b->m_logic_ch_table[msg->channel].m_attrs & L_CH_ATTR_PRVLG0){
 			ret = ccif->ccif_write_phy_ch_data(ccif, (unsigned int*)msg, retry_en);
 		} else {
-			ret = -CCCI_ERR_MD_NOT_READY;
+			ret = -ENODEV;
 		}
 	} else if (unlikely(md_stage == MD_BOOT_STAGE_1)){ // PRIVILEGE 1 <--
 		if (ctl_b->m_logic_ch_table[msg->channel].m_attrs & L_CH_ATTR_PRVLG1){
 			ret = ccif->ccif_write_phy_ch_data(ccif, (unsigned int*)msg, retry_en);
 		} else {
-			ret = -CCCI_ERR_MD_NOT_READY;
+			ret = -ENODEV;
 		}
 	} else if (unlikely(md_stage == MD_BOOT_STAGE_EXCEPTION)) { // PRIVILEGE 2 <--
 		if (ctl_b->m_logic_ch_table[msg->channel].m_attrs & L_CH_ATTR_PRVLG2){
@@ -557,7 +533,7 @@ int ccci_message_send(int md_id, ccci_msg_t *msg, int retry_en)
 		} else if (ctl_b->m_logic_ch_table[msg->channel].m_attrs & L_CH_ATTR_DUMMY_WRITE){
 			ret = sizeof(ccci_msg_t); // Dummy write here, MD using polling
 		} else {
-			ret = -CCCI_ERR_MD_NOT_READY;
+			ret = -ETXTBSY;
 		}
 	} else {
 		ret = ccif->ccif_write_phy_ch_data(ccif, (unsigned int*)msg, retry_en);
@@ -567,21 +543,23 @@ out:
 	spin_lock_irqsave(&ctl_b->m_lock, flags);
 	if (ret == -CCCI_ERR_CCIF_NO_PHYSICAL_CHANNEL) {
 		drop = 1;
-		need_notify = 1;
-		if((ctl_b->m_status_flag & FIRST_PENDING)==0 ) {
-			ctl_b->m_status_flag |= FIRST_PENDING;
-			ctl_b->m_last_send_ref_jiffies = jiffies; // Update jiffies;
-		} else {
-			if( ((jiffies - ctl_b->m_last_send_ref_jiffies) > 5)
-				&& ((ctl_b->m_status_flag & PENDING_50MS)==0) ) {//50ms
-				// Dump EE memory
-				args = 1;
-				ctl_b->m_status_flag |= PENDING_50MS;
-			} else if( (jiffies - ctl_b->m_last_send_ref_jiffies) > 150) {//1500ms//100ms
-				//Trigger EE
-				args = 2;
-				//ctl_b->m_status_flag |= PENDING_100MS;
-				ctl_b->m_status_flag |= PENDING_1500MS;
+		if((get_debug_mode_flag()&(DBG_FLAG_JTAG|DBG_FLAG_DEBUG))==0) {
+			need_notify = 1;
+			if((ctl_b->m_status_flag & FIRST_PENDING)==0 ) {
+				ctl_b->m_status_flag |= FIRST_PENDING;
+				ctl_b->m_last_send_ref_jiffies = jiffies; // Update jiffies;
+			} else {
+				if( ((jiffies - ctl_b->m_last_send_ref_jiffies) > 5)
+					&& ((ctl_b->m_status_flag & PENDING_50MS)==0) ) {//50ms
+					// Dump EE memory
+					args = 1;
+					ctl_b->m_status_flag |= PENDING_50MS;
+				} else if( (jiffies - ctl_b->m_last_send_ref_jiffies) > 150) {//1500ms//100ms
+					//Trigger EE
+					args = 2;
+					//ctl_b->m_status_flag |= PENDING_100MS;
+					ctl_b->m_status_flag |= PENDING_1500MS;
+				}
 			}
 		}
 	} else {
@@ -619,7 +597,7 @@ void ccci_hal_reset(int md_id)
 	ccif_t *ccif_obj;
 
 	ccif_obj = logic_dispatch_ctlb[md_id]->m_ccif;
-	ccif_obj->ccif_reset_to_default(ccif_obj);
+	ccif_obj->ccif_reset(ccif_obj);
 }
 
 void ccci_hal_irq_register(int md_id)
@@ -645,11 +623,11 @@ int ccci_write_runtime_data(int md_id, unsigned char buf[], int len)
 	}
 
 	ccif_obj = logic_dispatch_ctlb[md_id]->m_ccif;
-	return ccif_obj->ccif_set_runtime_data(ccif_obj, (int *)buf, len>>2);
+	return ccif_obj->ccif_write_runtime_data(ccif_obj, (unsigned int *)buf, len>>2);
 }
 
 
-void ccci_dump_logic_layer_info(int md_id, int buf[], int len)
+void ccci_dump_logic_layer_info(int md_id, unsigned int buf[], int len)
 {
 	ccif_t						*ccif;
 	logic_dispatch_ctl_block_t	*ctl_b;
@@ -659,13 +637,13 @@ void ccci_dump_logic_layer_info(int md_id, int buf[], int len)
 	if(ctl_b != NULL){
 		// 1. Dump CCIF Info
 		ccif = ctl_b->m_ccif;
-		ccif->ccif_reg_dump(ccif, buf, len);
+		ccif->ccif_dump_reg(ccif, buf, len);
 		// 2. Dump logic layer info
 		dump_logical_layer_tx_rx_histroy(md_id);
 	}
 }
 
-void ccci_dump_hw_reg_val(int md_id, int buf[], int len)
+void ccci_dump_hw_reg_val(int md_id, unsigned int buf[], int len)
 {
 	ccif_t						*ccif;
 	logic_dispatch_ctl_block_t	*ctl_b;
@@ -675,7 +653,7 @@ void ccci_dump_hw_reg_val(int md_id, int buf[], int len)
 	if(ctl_b != NULL){
 		// 1. Dump CCIF Info
 		ccif = ctl_b->m_ccif;
-		ccif->ccif_reg_dump(ccif, buf, len);
+		ccif->ccif_dump_reg(ccif, buf, len);
 	}
 }
 
@@ -691,7 +669,6 @@ int ccci_logic_ctlb_init(int md_id)
 	logic_channel_info_t		*ch_info;
 	int							ch_id, ch_attr, i;
 	logic_dispatch_ctl_block_t	*ctl_b;
-	char						ccci_name[CCCI_WAKEUP_LOCK_NAME_LEN];
 	ccif_hw_info_t				ccif_hw_inf;
 
 	CCCI_FUNC_ENTRY(md_id);
@@ -728,7 +705,7 @@ int ccci_logic_ctlb_init(int md_id)
 	ccif->ccif_init(ccif);
 	ctl_b->m_ccif = ccif;
 
-	// Initialize logic channel and its kfifo///???anny
+	// Initialize logic channel and its kfifo
 	// Step1, set all runtime channel id to CCCI_INVALID_CH_ID means default state
 	// So, even if static channel table is out of order, we can make sure logic_dispatch_ctlb's channel
 	// table is in order
@@ -778,7 +755,7 @@ int ccci_logic_ctlb_init(int md_id)
 			ch_attr = CCCI_LOG_TX;
 		else
 			ch_attr = CCCI_LOG_RX;
-		statistics_init_ch_dir(md_id, ch_id, ch_attr);
+		statistics_init_ch_dir(md_id, ch_id, ch_attr, ch_info->m_ch_name);
 	}
 
 	// Init logic_dispatch_ctlb
@@ -788,15 +765,15 @@ int ccci_logic_ctlb_init(int md_id)
 	ctl_b->m_running = 0;
 	//ctl_b->m_privilege = MD_BOOT_STAGE_0;
 	ctl_b->m_md_id = md_id;
-	snprintf(ccci_name, CCCI_WAKEUP_LOCK_NAME_LEN, "ccci_wk%d", md_id); 
-	wake_lock_init(&ctl_b->m_wakeup_wake_lock, WAKE_LOCK_SUSPEND, ccci_name);
+	snprintf(ctl_b->m_wakelock_name, sizeof(ctl_b->m_wakelock_name), "ccci%d_logic", (md_id+1)); 
+	wake_lock_init(&ctl_b->m_wakeup_wake_lock, WAKE_LOCK_SUSPEND, ctl_b->m_wakelock_name);
 	ctl_b->m_send_notify_cb = NULL;
 	spin_lock_init(&ctl_b->m_lock);
 
 	// Init CCIF now
 	ccif->register_call_back_func(ccif, __logic_dispatch_push, __let_logic_dispatch_tasklet_run);
 	//ccif->ccif_register_intr(ccif);
-	
+
 	// Init done
 	//CCCI_DBG_MSG(md_id, "cci", "ccci_logic_ctlb_init success!\n");
 	return ret;
@@ -855,20 +832,9 @@ void ccci_logic_ctlb_deinit(int md_id)
 int ccci_logic_layer_init(int md_id)
 {
 	int ret = 0;
-//	int i;
-//	int ch_id, ch_attr;
 	
 	ret = ccci_logic_ctlb_init(md_id);
-#if 0
-	for(i = 0; i < (sizeof(logic_ch_static_info_tab)/sizeof(logic_channel_static_info_t)); i++) {
-		ch_id = (int)logic_ch_static_info_tab[i].m_ch_id;
-		if(logic_ch_static_info_tab[ch_id].m_attrs&L_CH_ATTR_TX)
-			ch_attr = CCCI_LOG_TX;
-		else
-			ch_attr = CCCI_LOG_RX;
-		statistics_init_ch_dir(md_id, ch_id, ch_attr);
-	}
-#endif
+
 	return ret;
 }
 

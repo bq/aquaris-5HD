@@ -27,7 +27,7 @@ static void tpd_early_suspend(struct early_suspend *handler);
 static void tpd_late_resume(struct early_suspend *handler);
 #endif 
  
-
+#if 0
 extern void MT6516_EINTIRQUnmask(unsigned int line);
 extern void MT6516_EINTIRQMask(unsigned int line);
 extern void MT6516_EINT_Set_HW_Debounce(kal_uint8 eintno, kal_uint32 ms);
@@ -35,7 +35,7 @@ extern kal_uint32 MT6516_EINT_Set_Sensitivity(kal_uint8 eintno, kal_bool sens);
 extern void MT6516_EINT_Registration(kal_uint8 eintno, kal_bool Dbounce_En,
 									  kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
 									  kal_bool auto_umask);
-
+#endif
  
 static void tpd_eint_interrupt_handler(void);
 static int tpd_get_bl_info(int show);
@@ -178,7 +178,7 @@ struct touch_info {
 	 TPD_DOWN_DEBUG_TRACK(x,y);
  }
  
- int tpd_up(int x, int y) {
+ int tpd_up(int x, int y,int *count) {
 	// if(*count>0) {
 	//	 input_report_abs(tpd->dev, ABS_PRESSURE, 0);
 		 input_report_key(tpd->dev, BTN_TOUCH, 0);
@@ -189,8 +189,8 @@ struct touch_info {
 		 input_mt_sync(tpd->dev);
 		 TPD_UP_DEBUG_TRACK(x,y);
 	//	 (*count)--;
-	//	 return 1;
-	// } return 0;
+		 return 1;
+	 //} return 0;
  }
 
  int tpd_touchinfo(struct touch_info *cinfo, struct touch_info *pinfo)
@@ -325,7 +325,7 @@ struct touch_info {
  
 	 do
 	 {
-	  MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);
+		 mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 		 set_current_state(TASK_INTERRUPTIBLE); 
 		 if(!kthread_should_stop())
 		 {
@@ -364,8 +364,8 @@ struct touch_info {
 				
             } else if(cinfo.count==0 && pinfo.count!=0) {
             printk("release --->\n"); 
-		tpd_up(0, 0);
-               // input_mt_sync(tpd->dev);
+	    tpd_up(0, 0, 0);
+                input_mt_sync(tpd->dev);
                 input_sync(tpd->dev);
             }
         }
@@ -435,10 +435,10 @@ struct touch_info {
 		  }
 #endif
   
-	  MT6516_EINT_Set_Sensitivity(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-	  MT6516_EINT_Set_HW_Debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-	  MT6516_EINT_Registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1); 
-	  MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);
+	  //MT6516_EINT_Set_Sensitivity(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+	  //MT6516_EINT_Set_HW_Debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+	  mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+	  mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
  
 	msleep(100);
  
@@ -597,7 +597,7 @@ struct touch_info {
   int retval = TPD_OK;
   hwPowerOn(TPD_POWER_SOURCE,VOL_3300,"TP");
    TPD_DEBUG("TPD wake up\n");
-   MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);  
+   mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 	
 	 return retval;
  }
@@ -607,7 +607,7 @@ struct touch_info {
 	 int retval = TPD_OK;
  
 	 TPD_DEBUG("TPD enter sleep\n");
-	 MT6516_EINTIRQMask(CUST_EINT_TOUCH_PANEL_NUM);
+	 mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 	 hwPowerDown(TPD_POWER_SOURCE,"TP");
 	 return retval;
  }

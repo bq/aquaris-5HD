@@ -40,7 +40,13 @@
 #define VCODEC_SET_CPU_OPP_LIMIT                _IOW(MFV_IOC_MAGIC, 0x32, VAL_VCODEC_CPU_OPP_LIMIT_T *)
 #define VCODEC_UNLOCKHW                         _IOW(MFV_IOC_MAGIC, 0x33, VAL_HW_LOCK_T *)
 #define VCODEC_MB                               _IOW(MFV_IOC_MAGIC, 0x34, VAL_UINT32_T *)
-
+#ifdef MTK_VIDEO_HEVC_SUPPORT
+#define VCODEC_INC_ENC_HEVC_USER                _IOW(MFV_IOC_MAGIC, 0x35, VAL_UINT32_T *)
+#define VCODEC_DEC_ENC_HEVC_USER                _IOW(MFV_IOC_MAGIC, 0x36, VAL_UINT32_T *)
+#define VCODEC_INC_DEC_HEVC_USER                _IOW(MFV_IOC_MAGIC, 0x37, VAL_UINT32_T *)
+#define VCODEC_DEC_DEC_HEVC_USER                _IOW(MFV_IOC_MAGIC, 0x38, VAL_UINT32_T *)
+#define VCODEC_QUERY_HEVC_USER                  _IOW(MFV_IOC_MAGIC, 0x39, VAL_UINT32_T *)
+#endif
 
 //#define MFV_GET_CACHECTRLADDR_CMD  _IOR(MFV_IOC_MAGIC, 0x06, int)
 

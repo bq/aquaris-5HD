@@ -24,7 +24,8 @@ typedef enum
     LIB3A_AE_MODE_SUNSET                        = 14,           // AE sunset mode
     LIB3A_AE_MODE_THEATRE                      = 15,           // AE theatre mode
     LIB3A_AE_MODE_ISO_ANTI_SHAKE        = 16,           // AE ISO anti shake mode
-    LIB3A_AE_MODE_MAX
+    LIB3A_AE_MODE_BACKLIGHT                 = 17,           // ADD BACKLIGHT MODE
+    LIB3A_AE_MODE_MAX 
 } LIB3A_AE_MODE_T;
 
 // AE ISO speed
@@ -32,6 +33,7 @@ typedef enum
 {
     LIB3A_AE_ISO_SPEED_UNSUPPORTED =     -1,
     LIB3A_AE_ISO_SPEED_AUTO                =      0,
+    LIB3A_AE_ISO_SPEED_50                     =    50,
     LIB3A_AE_ISO_SPEED_100                   =    100,
     LIB3A_AE_ISO_SPEED_150                   =    150,    
     LIB3A_AE_ISO_SPEED_200                   =    200,
@@ -56,6 +58,8 @@ typedef enum
     AETABLE_VIDEO_NIGHT_DYNAMIC,    // video mode but the frame rate don't fix
     AETABLE_CAPTURE_AUTO,
     AETABLE_CAPTURE_AUTO_ZSD,
+    AETABLE_CAPTURE_ISO50,
+    AETABLE_CAPTURE_ISO50_ZSD,
     AETABLE_CAPTURE_ISO100,
     AETABLE_CAPTURE_ISO100_ZSD,
     AETABLE_CAPTURE_ISO200,
@@ -85,6 +89,7 @@ typedef enum
     AETABLE_MODE_INDEX15,
     AETABLE_MODE_INDEX16,
     AETABLE_MODE_INDEX17,
+    AETABLE_MODE_MAX,
 }eAETableID;
 
 typedef struct	strEvSetting

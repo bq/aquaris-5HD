@@ -33,4 +33,14 @@ typedef enum
     LIB3A_FLASH_MODE_MAX = LIB3A_FLASH_MODE_FORCE_TORCH, //cotta-- modified to TORCH for FLASH in video
 }LIB3A_FLASH_MODE_T;
 
+
+enum
+{
+    e_FLASH_STYLE_OFF_AUTO = 0,
+  e_FLASH_STYLE_OFF_ON,
+    e_FLASH_STYLE_OFF_OFF,
+  e_FLASH_STYLE_ON_ON,
+  e_FLASH_STYLE_ON_TORCH,
+};
+
 #endif //#ifndef __FLASH_FEATURE_H__

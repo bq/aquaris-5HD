@@ -627,7 +627,7 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		 * when the old and new regions overlap clear from new_end.
 		 */
 		free_pgd_range(&tlb, new_end, old_end, new_end,
-			vma->vm_next ? vma->vm_next->vm_start : 0);
+			vma->vm_next ? vma->vm_next->vm_start : USER_PGTABLES_CEILING);
 	} else {
 		/*
 		 * otherwise, clean from old_start; this is done to not touch
@@ -636,7 +636,7 @@ static int shift_arg_pages(struct vm_area_struct *vma, unsigned long shift)
 		 * for the others its just a little faster.
 		 */
 		free_pgd_range(&tlb, old_start, old_end, new_end,
-			vma->vm_next ? vma->vm_next->vm_start : 0);
+			vma->vm_next ? vma->vm_next->vm_start : USER_PGTABLES_CEILING);
 	}
 	tlb_finish_mmu(&tlb, new_end, old_end);
 
@@ -1030,7 +1030,7 @@ static void flush_old_files(struct files_struct * files)
 		unsigned long set, i;
 
 		j++;
-		i = j * __NFDBITS;
+		i = j * BITS_PER_LONG;
 		fdt = files_fdtable(files);
 		if (i >= fdt->max_fds)
 			break;
@@ -1120,7 +1120,8 @@ int flush_old_exec(struct linux_binprm * bprm)
 	bprm->mm = NULL;		/* We're using it now */
 
 	set_fs(USER_DS);
-	current->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC | PF_KTHREAD);
+	current->flags &=
+		~(PF_RANDOMIZE | PF_FORKNOEXEC | PF_KTHREAD | PF_NOFREEZE);
 	flush_thread();
 	current->personality &= ~bprm->per_clear;
 
@@ -1168,13 +1169,6 @@ void setup_new_exec(struct linux_binprm * bprm)
 			set_dumpable(current->mm, suid_dumpable);
 	}
 
-	/*
-	 * Flush performance counters when crossing a
-	 * security domain:
-	 */
-	if (!get_dumpable(current->mm))
-		perf_event_exit_task(current);
-
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
 
@@ -1211,8 +1205,23 @@ void free_bprm(struct linux_binprm *bprm)
 		mutex_unlock(&current->signal->cred_guard_mutex);
 		abort_creds(bprm->cred);
 	}
+	/* If a binfmt changed the interp, free it. */
+	if (bprm->interp != bprm->filename)
+		kfree(bprm->interp);
 	kfree(bprm);
 }
+
+int bprm_change_interp(char *interp, struct linux_binprm *bprm)
+{
+	/* If a binfmt changed the interp, free it first. */
+	if (bprm->interp != bprm->filename)
+		kfree(bprm->interp);
+	bprm->interp = kstrdup(interp, GFP_KERNEL);
+	if (!bprm->interp)
+		return -ENOMEM;
+	return 0;
+}
+EXPORT_SYMBOL(bprm_change_interp);
 
 /*
  * install the new credentials for this executable
@@ -1223,6 +1232,15 @@ void install_exec_creds(struct linux_binprm *bprm)
 
 	commit_creds(bprm->cred);
 	bprm->cred = NULL;
+
+	/*
+	 * Disable monitoring for regular users
+	 * when executing setuid binaries. Must
+	 * wait until new credentials are committed
+	 * by commit_creds() above
+	 */
+	if (get_dumpable(current->mm) != SUID_DUMP_USER)
+		perf_event_exit_task(current);
 	/*
 	 * cred_guard_mutex must be held at least to this point to prevent
 	 * ptrace_attach() from altering our determination of the task's
@@ -1379,6 +1397,10 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	struct linux_binfmt *fmt;
 	pid_t old_pid, old_vpid;
 
+	/* This allows 4 levels of binfmt rewrites before failing hard. */
+	if (depth > 5)
+		return -ELOOP;
+
 	retval = security_bprm_check(bprm);
 	if (retval)
 		return retval;
@@ -1403,6 +1425,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			if (!try_module_get(fmt->module))
 				continue;
 			read_unlock(&binfmt_lock);
+			bprm->recursion_depth = depth + 1;
 			retval = fn(bprm, regs);
             /* exec mt_debug*/
             if(-999 == retval){
@@ -1479,7 +1502,7 @@ static int do_execve_common(const char *filename,
 	const struct cred *cred = current_cred();
 #ifdef CONFIG_MT_ENG_BUILD
     int *argv_p0;
-    int argv0 = 0;
+//    int argv0;
 #endif
 
 	/*
@@ -1555,8 +1578,8 @@ static int do_execve_common(const char *filename,
 
 #ifdef CONFIG_MT_ENG_BUILD
     argv_p0 = (int *)get_user_arg_ptr(argv, 0);
-    if(argv_p0 != 0)
-        argv0 = *argv_p0;
+//    if(argv_p0 != 0)
+ //       argv0 = *argv_p0;
 #endif
 
 	retval = copy_strings(bprm->argc, argv, bprm);
@@ -1566,8 +1589,9 @@ static int do_execve_common(const char *filename,
 	retval = search_binary_handler(bprm,regs);
 #ifdef CONFIG_MT_ENG_BUILD
     if(retval == -999){
-        printk("[exec done] argv[0] = 0x%x\n", argv0);
-        printk("[exec done] argv0_ptr = 0x%x\n", (unsigned int)argv_p0);
+	printk("[exec done]\n");
+//        printk("[exec done] argv[0] = 0x%x\n", argv0);
+//        printk("[exec done] argv0_ptr = 0x%x\n", (unsigned int)argv_p0);
     }
 #endif
 	if (retval < 0)
@@ -2140,14 +2164,23 @@ void do_coredump(long signr, int exit_code, struct pt_regs *regs)
 	audit_core_dumps(signr);
 
 	binfmt = mm->binfmt;
-	if (!binfmt || !binfmt->core_dump)
+	if (!binfmt || !binfmt->core_dump) {
+		printk(KERN_WARNING "Skip process %d(%s) core dump(!binfmt?%s)\n",
+			task_tgid_vnr(current), current->comm, (!binfmt) ? "yes":"no");
 		goto fail;
-	if (!__get_dumpable(cprm.mm_flags))
+	}
+	if (!__get_dumpable(cprm.mm_flags)) {
+		printk(KERN_WARNING "Skip process %d(%s) core dump(mm_flags:%x)\n",
+			task_tgid_vnr(current), current->comm, (unsigned int)cprm.mm_flags);
 		goto fail;
+	}
 
 	cred = prepare_creds();
-	if (!cred)
+	if (!cred) {
+		printk(KERN_WARNING "Skip process %d(%s) core dump(prepare_creds failed)\n",
+			task_tgid_vnr(current), current->comm);
 		goto fail;
+	}
 	/*
 	 *	We cannot trust fsuid as being the "true" uid of the
 	 *	process nor do we know its entire history. We only know it
@@ -2307,8 +2340,11 @@ int dump_seek(struct file *file, loff_t off)
 		if (file->f_op->llseek(file, off, SEEK_CUR) < 0)
 			return 0;
 	} else {
+#ifndef CONFIG_MTK_PAGERECORDER
 		char *buf = (char *)get_zeroed_page(GFP_KERNEL);
-
+#else
+		char *buf = (char *)get_zeroed_page_nopagedebug(GFP_KERNEL);
+#endif
 		if (!buf)
 			return 0;
 		while (off > 0) {
@@ -2322,7 +2358,11 @@ int dump_seek(struct file *file, loff_t off)
 			}
 			off -= n;
 		}
+#ifndef CONFIG_MTK_PAGERECORDER
 		free_page((unsigned long)buf);
+#else
+		free_page_nopagedebug((unsigned long)buf);
+#endif
 	}
 	return ret;
 }

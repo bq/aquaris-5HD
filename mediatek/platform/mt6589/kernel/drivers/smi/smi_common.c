@@ -11,16 +11,36 @@
 
 #include <mach/m4u.h>
 #include <mach/mt_smi.h>
+#include <mach/mt_gpufreq.h>    /*Adjust GPU OD or not*/
+
 #include "smi_reg.h"
 #include "smi_common.h"
 
 
 #define SMI_LOG_TAG "SMI"
 
+#define SF_HWC_PIXEL_MAX_NORMAL  (1920 * 1080 * 3 + 1920 * 216)
+#define SF_HWC_PIXEL_MAX_VR  (1920 * 1080 * 1)
+#define SF_HWC_PIXEL_MAX_VP  (1920 * 1080 * 3)
+
+#define SF_HWC_PIXEL_BYTE_MAX_NORMAL  (SF_HWC_PIXEL_MAX_NORMAL * 4 )
+#define SF_HWC_PIXEL_BYTE_MAX_VR  (SF_HWC_PIXEL_MAX_VR * 4 )
+#define SF_HWC_PIXEL_BYTE_MAX_VP  (SF_HWC_PIXEL_MAX_VP * 4 )
 
 unsigned int gLarbBaseAddr[SMI_LARB_NR] = 
     {LARB0_BASE, LARB1_BASE, LARB2_BASE, LARB3_BASE, LARB4_BASE}; 
 
+typedef struct
+{
+    spinlock_t SMI_lock;
+    unsigned long pu4ConcurrencyTable[SMI_BWC_SCEN_CNT];  //one bit represent one module
+} SMI_struct;
+
+static unsigned int smi_profile = SMI_BWC_SCEN_NORMAL;
+
+static unsigned int hwc_max_pixel_count = SF_HWC_PIXEL_MAX_NORMAL;
+
+static SMI_struct g_SMIInfo;
 
 char *smi_port_name[][15] = 
 {
@@ -92,7 +112,8 @@ char *smi_port_name[][15] =
     },
 };
 
-
+static int smi_release(struct inode *inode, struct file *file);
+static int smi_open(struct inode *inode, struct file *file);
 
 
 
@@ -233,9 +254,93 @@ void on_larb_power_off(struct larb_monitor *h, int larb_idx)
 }
 
 
-int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
+static int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf , unsigned long * pu4LocalCnt)
 {
     int i;
+    unsigned long u4Concurrency = 0;
+    MTK_SMI_BWC_SCEN eFinalScen;
+    static MTK_SMI_BWC_SCEN ePreviousFinalScen = SMI_BWC_SCEN_CNT;
+
+    if((SMI_BWC_SCEN_CNT <= p_conf->scenario) || (0 > p_conf->scenario))
+    {
+        SMIERR("Incorrect SMI BWC config : 0x%x, how could this be...\n" , p_conf->scenario);
+        return -1;
+    }
+
+    spin_lock(&g_SMIInfo.SMI_lock);
+
+    if(p_conf->b_on_off)
+    {
+        //turn on certain scenario
+        g_SMIInfo.pu4ConcurrencyTable[p_conf->scenario] += 1;
+
+        if(NULL != pu4LocalCnt)
+        {
+            pu4LocalCnt[p_conf->scenario] += 1;
+        }
+    }
+    else
+    {
+        //turn off certain scenario
+        if(0 == g_SMIInfo.pu4ConcurrencyTable[p_conf->scenario])
+        {
+            SMIMSG("Too many turning off for global SMI profile:%d,%d\n" , p_conf->scenario , g_SMIInfo.pu4ConcurrencyTable[p_conf->scenario]);
+        }
+        else
+        {
+            g_SMIInfo.pu4ConcurrencyTable[p_conf->scenario] -= 1;
+        }
+
+        if(NULL != pu4LocalCnt)
+        {
+            if(0 == pu4LocalCnt[p_conf->scenario])
+            {
+                SMIMSG("Process : %s did too many turning off for local SMI profile:%d,%d\n" , current->comm ,p_conf->scenario , pu4LocalCnt[p_conf->scenario]);
+            }
+            else
+            {
+                pu4LocalCnt[p_conf->scenario] -= 1;
+            }
+        }
+    }
+
+    for(i=0 ; i < SMI_BWC_SCEN_CNT ; i++)
+    {
+        if(g_SMIInfo.pu4ConcurrencyTable[i])
+        {
+            u4Concurrency |= (1 << i);
+        }
+    }
+//    Priority:,
+//    SMI_BWC_SCEN_VRCAMERA1066 > SMI_BWC_SCEN_VR1066 > SMI_BWC_SCEN_VP1066 > > SMI_BWC_SCEN_NORMAL
+
+    if((1 << SMI_BWC_SCEN_VRCAMERA1066) & u4Concurrency)
+    {
+        eFinalScen = SMI_BWC_SCEN_VRCAMERA1066;
+    }
+    else if((1 << SMI_BWC_SCEN_VR1066) & u4Concurrency)
+    {
+        eFinalScen = SMI_BWC_SCEN_VR1066;
+    }
+    else if((1 << SMI_BWC_SCEN_VP1066) & u4Concurrency)
+    {
+        eFinalScen = SMI_BWC_SCEN_VP1066;
+    }
+    else
+    {
+        eFinalScen = SMI_BWC_SCEN_NORMAL;
+    }
+
+    if(ePreviousFinalScen == eFinalScen)
+    {
+        SMIMSG("Scen equal%d,don't change\n" , eFinalScen);
+        spin_unlock(&g_SMIInfo.SMI_lock);
+        return 0;
+    }
+    else
+    {
+        ePreviousFinalScen = eFinalScen;
+    }
 
     /*turn on larb clock*/    
     for(i=0; i<SMI_LARB_NR; i++){
@@ -243,18 +348,21 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
     }
 
     /*Bandwidth Limiter*/
-    switch( p_conf->scenario )
+    smi_profile = eFinalScen; 
+    switch( eFinalScen )
     {
     case SMI_BWC_SCEN_VRCAMERA1066:
         SMIMSG( "[SMI_PROFILE] : %s\n", "SMI_BWC_SCEN_VRCAMERA1066");
+        hwc_max_pixel_count = SF_HWC_PIXEL_MAX_VR;
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB0, 0xb92 );   //larb0 venc
-        M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x0   );   //larb1 vdec:default
+        //M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x0   );   //larb1 vdec:default
+        M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x9b1 );   //larb1 vdec
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB2, 0xa4b );   //larb2 disp
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB3, 0x96d );   //larb3 cdp
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB4, 0x9a7 );   //larb4 isp
 
         #if 1 /*Jackie custom*/
-        M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
+        //M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
         //M4U_WriteReg32( 0x0, REG_SMI_READ_FIFO_TH, 0x1560 );
         M4U_WriteReg32( LARB0_BASE, 0x14, 0x400420 );
         M4U_WriteReg32( LARB1_BASE, 0x14, 0x400420 );
@@ -267,14 +375,16 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
     
     case SMI_BWC_SCEN_VR1066:
         SMIMSG( "[SMI_PROFILE] : %s\n", "SMI_BWC_SCEN_VR1066");
+        hwc_max_pixel_count = SF_HWC_PIXEL_MAX_VR;
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB0, 0xb92 );   //larb0 venc
-        M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x0   );   //larb1 vdec:default
+        //M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x0   );   //larb1 vdec:default
+        M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x9b1 );   //larb1 vdec
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB2, 0xa4b );   //larb2 disp
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB3, 0x96d );   //larb3 cdp
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB4, 0x9a7 );   //larb4 isp
 
         #if 1/*Jackie custom*/
-        M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
+        //M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
         //M4U_WriteReg32( 0x0, REG_SMI_READ_FIFO_TH, 0x1560 );
         M4U_WriteReg32( LARB0_BASE, 0x14, 0x400420 );
         M4U_WriteReg32( LARB1_BASE, 0x14, 0x400420 );
@@ -288,6 +398,7 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
         
     case SMI_BWC_SCEN_VP1066:
         SMIMSG( "[SMI_PROFILE] : %s\n", "SMI_BWC_SCEN_VP1066");
+        hwc_max_pixel_count = SF_HWC_PIXEL_MAX_VP;
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB0, 0x0   );   //larb0 venc:default
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x9b1 );   //larb1 vdec
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB2, 0xaa8 );   //larb2 disp
@@ -295,7 +406,7 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB4, 0x0   );   //larb4 isp:default
 
         #if 1/*Jackie custom*/
-        M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
+        //M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
         //M4U_WriteReg32( 0x0, REG_SMI_READ_FIFO_TH, 0xD60 );
         M4U_WriteReg32( LARB0_BASE, 0x18, 0x420 );       
         M4U_WriteReg32( LARB1_BASE, 0x18, 0x420 );       
@@ -308,8 +419,9 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
         
         
     case SMI_BWC_SCEN_NORMAL:
-        SMIMSG( "[SMI_PROFILE] : %s\n", "SMI_BWC_SCEN_NORMAL");
     default:
+        SMIMSG( "[SMI_PROFILE] : %s\n", "SMI_BWC_SCEN_NORMAL");
+        hwc_max_pixel_count = SF_HWC_PIXEL_MAX_NORMAL;
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB0, 0x0   );   //larb0 venc:default
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB1, 0x0   );   //larb1 vdec:default
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB2, 0x0   );   //larb2 disp:default
@@ -317,7 +429,7 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
         M4U_WriteReg32( 0x0, REG_SMI_L1ARB4, 0x0   );   //larb4 isp:default
 
         #if 1/*Jackie custom*/
-        M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
+        //M4U_WriteReg32( 0x0, REG_SMI_BUS_SEL, 0x140 );
         //M4U_WriteReg32( 0x0, REG_SMI_READ_FIFO_TH, 0xD60 );
         M4U_WriteReg32( LARB0_BASE, 0x18, 0x420 );       
         M4U_WriteReg32( LARB1_BASE, 0x18, 0x420 );       
@@ -344,7 +456,7 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
         
     }
 
-    #if 1 /*dump message*/
+    #if 0 /*dump message*/
     {
         #define _SMI_BC_DUMP_REG( _base_, _off_ ) \
             SMIMSG( "\t[SMI_REG] %s + %s = 0x%08X\n", #_base_, #_off_, M4U_ReadReg32( _base_, _off_ ) );
@@ -379,6 +491,18 @@ int smi_bwc_config( MTK_SMI_BWC_CONFIG* p_conf )
         larb_clock_off(i);
     }
 
+    /*.............................................................................
+        GPU OD Adjust 
+      .............................................................................*/
+    if( p_conf->b_gpu_od ){
+        mt_gpufreq_keep_frequency_non_OD (false);
+        SMIMSG( "[SMI_BWC] : GPU OD ON!\n");
+    } else {
+        mt_gpufreq_keep_frequency_non_OD (true);
+        SMIMSG( "[SMI_BWC] : GPU OD OFF!\n");
+    }
+    
+    spin_unlock(&g_SMIInfo.SMI_lock);
     return 0;
     
 }
@@ -397,7 +521,9 @@ struct larb_monitor larb_monitor_handler =
 int smi_common_init(void)
 {
     int i;
-
+    
+    hwc_max_pixel_count = SF_HWC_PIXEL_MAX_NORMAL;
+    
     for(i=0; i<SMI_LARB_NR; i++)
     {
         pLarbRegBackUp[i] = (unsigned int*)kmalloc(LARB_BACKUP_REG_SIZE, GFP_KERNEL|__GFP_ZERO);
@@ -422,6 +548,8 @@ int smi_common_init(void)
     {
         larb_clock_off(i);
     }
+    // Enable GPU OD by default
+    mt_gpufreq_keep_frequency_non_OD(false);
     
     return 0;
 }
@@ -435,6 +563,7 @@ static long smi_ioctl( struct file * pFile,
 {
     int ret = 0;
     
+    //    unsigned long * pu4Cnt = (unsigned long *)pFile->private_data;
     switch (cmd)
     {
         case MTK_CONFIG_MM_MAU:
@@ -476,7 +605,30 @@ static long smi_ioctl( struct file * pFile,
         case MTK_IOC_SPC_CMD :
             spc_test(param);
             break;
-
+        case MTK_IOC_SMI_BWC_STATE:
+        
+            {
+                MTK_SMI_BWC_STATE cfg;
+                ret = copy_from_user(&cfg, (void*)param , sizeof(MTK_IOC_SMI_BWC_STATE));
+                
+                if(ret)
+                {
+                    SMIMSG(" MTK_IOC_SMI_BWC_STATE, copy_to_user failed: %d\n", ret);
+                    return -EFAULT;
+                }  
+                
+                if(cfg.hwc_max_pixel != NULL){
+                    ret = copy_to_user((void*)cfg.hwc_max_pixel, (void*)&hwc_max_pixel_count, sizeof(unsigned int));
+                    
+                    if(ret)
+                    {
+                        SMIMSG(" SMI_BWC_CONFIG, copy_to_user failed: %d\n", ret);
+                        return -EFAULT;
+                    }
+                }  
+                //SMIDBG(4, "HWC MAX=%d \n", hwc_max_pixel_count);
+            }
+            break;
         case MTK_IOC_SMI_BWC_CONFIG:
             {
                 MTK_SMI_BWC_CONFIG cfg;
@@ -486,9 +638,7 @@ static long smi_ioctl( struct file * pFile,
                     SMIMSG(" SMI_BWC_CONFIG, copy_from_user failed: %d\n", ret);
                     return -EFAULT;
                 }  
-
-                smi_bwc_config( &cfg );
-            
+                smi_bwc_config( &cfg , NULL);
             }
             break;
         
@@ -503,6 +653,8 @@ static long smi_ioctl( struct file * pFile,
 static const struct file_operations smiFops =
 {
 	.owner = THIS_MODULE,
+	.open = smi_open,
+	.release = smi_release,
 	.unlocked_ioctl = smi_ioctl,
 };
 
@@ -594,7 +746,117 @@ static int smi_probe(struct platform_device *pdev)
     return 0;
 }
 
+void smi_dumpDebugMsg(void)
+{
+		unsigned int u4Base = 0;
+		unsigned int u4Offset = 0;
+		    
+		// EMI DUMP         ----------------------------------------------------
+		u4Base = 0xf0203060;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf02030E8;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf02030F0;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf02030F8;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203100;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203110;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203118;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203120;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203128;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203130;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203140;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203144;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203148;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf020314C;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203150;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203154;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		u4Base = 0xf0203158;
+		SMIMSG("+0x%x=0x%x \n" , u4Base , M4U_ReadReg32(u4Base , 0));
+		
+		// SMI COMMON DUMP ----------------------------------------------------
+		SMIMSG("===SMI common reg dump===\n");
+		SMIMSG("smi_profile=%d\n", smi_profile);
+		u4Base =0xf0202000;
+		u4Offset = 0x220;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x400;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x404;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x408;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x40c;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x410;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x414;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		
+		    
+		// SMI_LARB      ----------------------------------------------------
+		// LARB 1
+		u4Base = 0xf6010000;
+		u4Offset = 0;
+		SMIMSG("===SMI Larb 1 reg dump===\n"); 
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x10;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x210;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x220;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
 
+		// LARB 2   
+		u4Base = 0xf4010000;
+		u4Offset = 0;
+		SMIMSG("===SMI Larb 2 reg dump===\n"); 
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x10;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x210;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x220;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		
+		// LARB 3
+		u4Base = 0xf5001000;
+		u4Offset = 0;
+		SMIMSG("===SMI Larb 3 reg dump===\n"); 
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x10;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x210;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x220;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		
+		// LARB 4
+		u4Base = 0xf5002000;
+		u4Offset = 0;
+		SMIMSG("===SMI Larb 4 reg dump===\n"); 
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x10;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x210;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+		u4Offset = 0x220;
+		SMIMSG("+0x%x=0x%x \n" , u4Offset , M4U_ReadReg32(u4Base , u4Offset));
+
+}
 
 static int smi_remove(struct platform_device *pdev)
 {
@@ -616,6 +878,56 @@ static int smi_resume(struct platform_device *pdev)
     return 0;
 }
 
+static int smi_open(struct inode *inode, struct file *file)
+{
+    file->private_data = kmalloc(SMI_BWC_SCEN_CNT*sizeof(unsigned long) , GFP_ATOMIC);
+
+    if(NULL == file->private_data)
+    {
+        SMIMSG("Not enough entry for DDP open operation\n");
+        return -ENOMEM;
+    }
+
+    memset(file->private_data , 0 , SMI_BWC_SCEN_CNT*sizeof(unsigned long));
+
+    return 0;
+}
+static int smi_release(struct inode *inode, struct file *file)
+{
+
+#if 0
+    unsigned long u4Index = 0 ;
+    unsigned long u4AssignCnt = 0;
+    unsigned long * pu4Cnt = (unsigned long *)file->private_data;
+    MTK_SMI_BWC_CONFIG config;
+
+    for(; u4Index < SMI_BWC_SCEN_CNT ; u4Index += 1)
+    {
+        if(pu4Cnt[u4Index])
+        {
+            SMIMSG("Process:%s does not turn off BWC properly , force turn off %d\n" , current->comm , u4Index);
+            u4AssignCnt = pu4Cnt[u4Index];
+            config.b_on_off = 0;
+            config.scenario = (MTK_SMI_BWC_SCEN)u4Index;
+            do
+            {
+                smi_bwc_config( &config , pu4Cnt);
+            }
+            while(0 < u4AssignCnt);
+        }
+    }
+#endif
+
+    if(NULL != file->private_data)
+    {
+        kfree(file->private_data);
+        file->private_data = NULL;
+    }
+
+    return 0;
+}
+
+
 static struct platform_driver smiDrv = {
     .probe	= smi_probe,
     .remove	= smi_remove,
@@ -630,6 +942,9 @@ static struct platform_driver smiDrv = {
 
 static int __init smi_init(void)
 {
+    spin_lock_init(&g_SMIInfo.SMI_lock);
+    memset(g_SMIInfo.pu4ConcurrencyTable , 0 , SMI_BWC_SCEN_CNT*sizeof(unsigned long));
+
     if(platform_driver_register(&smiDrv)){
         SMIERR("failed to register MAU driver");
         return -ENODEV;
@@ -645,6 +960,8 @@ static void __exit smi_exit(void)
 
 module_init(smi_init);
 module_exit(smi_exit);
+
+module_param_named(smi_profile, smi_profile, uint, S_IRUSR);  
 
 MODULE_DESCRIPTION("MTK SMI driver");
 MODULE_AUTHOR("K_zhang<k.zhang@mediatek.com>");

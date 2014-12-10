@@ -819,6 +819,7 @@ scanP2pSearchDesc (
                 continue;
             }
 
+
             /* Final decision. */
             prCandidateBssDesc = prBssDesc;
             break;

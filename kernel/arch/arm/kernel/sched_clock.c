@@ -28,11 +28,7 @@ struct clock_data {
 static void sched_clock_poll(unsigned long wrap_ticks);
 static DEFINE_TIMER(sched_clock_timer, sched_clock_poll, 0, 0);
 
-#ifdef CONFIG_HIBERNATION
-static struct clock_data cd __nosavedata = {
-#else
 static struct clock_data cd = {
-#endif
 	.mult	= NSEC_PER_SEC / HZ,
 };
 
@@ -93,11 +89,11 @@ static void notrace update_sched_clock(void)
 	 * detectable in cyc_to_fixed_sched_clock().
 	 */
 	raw_local_irq_save(flags);
-	cd.epoch_cyc = cyc;
+	cd.epoch_cyc_copy = cyc;
 	smp_wmb();
 	cd.epoch_ns = ns;
 	smp_wmb();
-	cd.epoch_cyc_copy = cyc;
+	cd.epoch_cyc = cyc;
 	raw_local_irq_restore(flags);
 }
 

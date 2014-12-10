@@ -188,7 +188,9 @@ typedef struct
 typedef struct
 {
 	unsigned DSI_START	: 1;
-	unsigned rsv_1		: 31;
+	unsigned rsv_1		: 15;
+	unsigned VM_CMD_START:1;
+	unsigned rsv_17		: 15;
 } DSI_START_REG, *PDSI_START_REG;
 
 
@@ -630,6 +632,19 @@ typedef struct
 {
 	DSI_CMDQ data[32];
 } DSI_CMDQ_REGS, *PDSI_CMDQ_REGS;
+
+typedef struct
+{
+	unsigned char byte0;
+	unsigned char byte1;
+	unsigned char byte2;
+	unsigned char byte3;
+} DSI_VM_CMDQ, *PDSI_VM_CMDQ;
+
+typedef struct
+{
+	DSI_VM_CMDQ data[4];
+} DSI_VM_CMDQ_REGS, *PDSI_VM_CMDQ_REGS;
 
 #ifndef BUILD_UBOOT
 STATIC_ASSERT(0x002C == offsetof(DSI_REGS, DSI_VACT_NL));

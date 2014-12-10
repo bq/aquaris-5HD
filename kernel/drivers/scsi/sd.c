@@ -140,6 +140,7 @@ sd_store_cache_type(struct device *dev, struct device_attribute *attr,
 	char *buffer_data;
 	struct scsi_mode_data data;
 	struct scsi_sense_hdr sshdr;
+	static const char temp[] = "temporary ";
 	int len;
 
 	if (sdp->type != TYPE_DISK)
@@ -147,6 +148,13 @@ sd_store_cache_type(struct device *dev, struct device_attribute *attr,
 		 * can do it, but there's probably so many exceptions
 		 * it's not worth the risk */
 		return -EINVAL;
+
+	if (strncmp(buf, temp, sizeof(temp) - 1) == 0) {
+		buf += sizeof(temp) - 1;
+		sdkp->cache_override = 1;
+	} else {
+		sdkp->cache_override = 0;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(sd_cache_types); i++) {
 		len = strlen(sd_cache_types[i]);
@@ -160,6 +168,13 @@ sd_store_cache_type(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 	rcd = ct & 0x01 ? 1 : 0;
 	wce = ct & 0x02 ? 1 : 0;
+
+	if (sdkp->cache_override) {
+		sdkp->WCE = wce;
+		sdkp->RCD = rcd;
+		return count;
+	}
+
 	if (scsi_mode_sense(sdp, 0x08, 8, buffer, sizeof(buffer), SD_TIMEOUT,
 			    SD_MAX_RETRIES, &data, NULL))
 		return -EINVAL;
@@ -657,9 +672,16 @@ static int scsi_setup_flush_cmnd(struct scsi_device *sdp, struct request *rq)
 
 static void sd_unprep_fn(struct request_queue *q, struct request *rq)
 {
+	struct scsi_cmnd *SCpnt = rq->special;
+
 	if (rq->cmd_flags & REQ_DISCARD) {
 		free_page((unsigned long)rq->buffer);
 		rq->buffer = NULL;
+	}
+	if (SCpnt->cmnd != rq->cmd) {
+		mempool_free(SCpnt->cmnd, sd_cdb_pool);
+		SCpnt->cmnd = NULL;
+		SCpnt->cmd_len = 0;
 	}
 }
 
@@ -1247,6 +1269,16 @@ out:
 	 */
 	kfree(sshdr);
 	retval = sdp->changed ? DISK_EVENT_MEDIA_CHANGE : 0;
+#ifdef MTK_MULTI_PARTITION_MOUNT_ONLY_SUPPORT
+ 	//add for sdcard hotplug start
+	if(1 == retval){
+		if(sdkp->old_media_present != sdkp->media_present){
+			retval  |=  sdkp->media_present ? 0 : DISK_EVENT_MEDIA_DISAPPEAR;
+			sdkp->old_media_present = sdkp->media_present;
+		}
+	}
+	//add for sdcard hotplug end	
+#endif
 	sdp->changed = 0;
 	return retval;
 }
@@ -1523,21 +1555,6 @@ static int sd_done(struct scsi_cmnd *SCpnt)
  out:
 	if (rq_data_dir(SCpnt->request) == READ && scsi_prot_sg_count(SCpnt))
 		sd_dif_complete(SCpnt, good_bytes);
-
-	if (scsi_host_dif_capable(sdkp->device->host, sdkp->protection_type)
-	    == SD_DIF_TYPE2_PROTECTION && SCpnt->cmnd != SCpnt->request->cmd) {
-
-		/* We have to print a failed command here as the
-		 * extended CDB gets freed before scsi_io_completion()
-		 * is called.
-		 */
-		if (result)
-			scsi_print_command(SCpnt);
-
-		mempool_free(SCpnt->cmnd, sd_cdb_pool);
-		SCpnt->cmnd = NULL;
-		SCpnt->cmd_len = 0;
-	}
 
 	return good_bytes;
 }
@@ -2138,6 +2155,10 @@ sd_read_cache_type(struct scsi_disk *sdkp, unsigned char *buffer)
 	int old_rcd = sdkp->RCD;
 	int old_dpofua = sdkp->DPOFUA;
 
+
+	if (sdkp->cache_override)
+		return;
+
 	first_len = 4;
 	if (sdp->skip_ms_page_8) {
 		if (sdp->type == TYPE_RBC)
@@ -2226,14 +2247,9 @@ sd_read_cache_type(struct scsi_disk *sdkp, unsigned char *buffer)
 			}
 		}
 
-		if (modepage == 0x3F) {
-			sd_printk(KERN_ERR, sdkp, "No Caching mode page "
-				  "present\n");
-			goto defaults;
-		} else if ((buffer[offset] & 0x3f) != modepage) {
-			sd_printk(KERN_ERR, sdkp, "Got wrong page\n");
-			goto defaults;
-		}
+		sd_printk(KERN_ERR, sdkp, "No Caching mode page found\n");
+		goto defaults;
+
 	Page_found:
 		if (modepage == 8) {
 			sdkp->WCE = ((buffer[offset + 2] & 0x04) != 0);
@@ -2624,6 +2640,7 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 	sdkp->capacity = 0;
 	sdkp->media_present = 1;
 	sdkp->write_prot = 0;
+	sdkp->cache_override = 0;
 	sdkp->WCE = 0;
 	sdkp->RCD = 0;
 	sdkp->ATO = 0;
@@ -2631,6 +2648,9 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 	sdkp->max_medium_access_timeouts = SD_MAX_MEDIUM_TIMEOUTS;
 
 	sd_revalidate_disk(gd);
+#ifdef MTK_MULTI_PARTITION_MOUNT_ONLY_SUPPORT	
+	sdkp->old_media_present = sdkp->media_present; //add for sdcard hotplug
+#endif
 
 	blk_queue_prep_rq(sdp->request_queue, sd_prep_fn);
 	blk_queue_unprep_rq(sdp->request_queue, sd_unprep_fn);
@@ -2639,7 +2659,11 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
 	gd->flags = GENHD_FL_EXT_DEVT;
 	if (sdp->removable) {
 		gd->flags |= GENHD_FL_REMOVABLE;
+#ifdef MTK_MULTI_PARTITION_MOUNT_ONLY_SUPPORT		
+		gd->events |= DISK_EVENT_MEDIA_CHANGE|DISK_EVENT_MEDIA_DISAPPEAR; //add for sdcard hotplug
+#else
 		gd->events |= DISK_EVENT_MEDIA_CHANGE;
+#endif		
 	}
 
 	add_disk(gd);
@@ -2710,11 +2734,6 @@ static int sd_probe(struct device *dev)
 	}
 
 	error = sd_format_disk_name("sd", index, gd->disk_name, DISK_NAME_LEN);
-
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: gd->disk_name = %s, index = %d\n", __func__, __LINE__, gd->disk_name, index);
-	//ALPS00445134, add more debug message for CR debugging
-
 	if (error) {
 		sdev_printk(KERN_WARNING, sdp, "SCSI disk (sd) name length exceeded.\n");
 		goto out_free_index;
@@ -2776,9 +2795,6 @@ static int sd_probe(struct device *dev)
 static int sd_remove(struct device *dev)
 {
 	struct scsi_disk *sdkp;
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: \n", __func__, __LINE__);
-	//ALPS00445134, add more debug message for CR debugging
 
 	sdkp = dev_get_drvdata(dev);
 	scsi_autopm_get_device(sdkp->device);
@@ -2812,10 +2828,6 @@ static void scsi_disk_release(struct device *dev)
 	struct scsi_disk *sdkp = to_scsi_disk(dev);
 	struct gendisk *disk = sdkp->disk;
 	
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: disk->name = %s \n", __func__, __LINE__, disk->disk_name ? disk->disk_name : "no disk");
-	//ALPS00445134, add more debug message for CR debugging
-		
 	spin_lock(&sd_index_lock);
 	ida_remove(&sd_index_ida, sdkp->index);
 	spin_unlock(&sd_index_lock);
@@ -2936,9 +2948,6 @@ static int __init init_sd(void)
 	int majors = 0, i, err;
 
 	SCSI_LOG_HLQUEUE(3, printk("init_sd: sd driver entry point\n"));
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: \n", __func__, __LINE__);
-	//ALPS00445134, add more debug message for CR debugging
 
 	for (i = 0; i < SD_MAJORS; i++)
 		if (register_blkdev(sd_major(i), "sd") == 0)
@@ -2950,10 +2959,6 @@ static int __init init_sd(void)
 	err = class_register(&sd_disk_class);
 	if (err)
 		goto err_out;
-
-	err = scsi_register_driver(&sd_template.gendrv);
-	if (err)
-		goto err_out_class;
 
 	sd_cdb_cache = kmem_cache_create("sd_ext_cdb", SD_EXT_CDB_SIZE,
 					 0, 0, NULL);
@@ -2968,7 +2973,14 @@ static int __init init_sd(void)
 		goto err_out_cache;
 	}
 
+	err = scsi_register_driver(&sd_template.gendrv);
+	if (err)
+		goto err_out_driver;
+
 	return 0;
+
+err_out_driver:
+	mempool_destroy(sd_cdb_pool);
 
 err_out_cache:
 	kmem_cache_destroy(sd_cdb_cache);
@@ -2991,14 +3003,11 @@ static void __exit exit_sd(void)
 	int i;
 
 	SCSI_LOG_HLQUEUE(3, printk("exit_sd: exiting sd driver\n"));
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: \n", __func__, __LINE__);
-	//ALPS00445134, add more debug message for CR debugging
 
+	scsi_unregister_driver(&sd_template.gendrv);
 	mempool_destroy(sd_cdb_pool);
 	kmem_cache_destroy(sd_cdb_cache);
 
-	scsi_unregister_driver(&sd_template.gendrv);
 	class_unregister(&sd_disk_class);
 
 	for (i = 0; i < SD_MAJORS; i++)

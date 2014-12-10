@@ -12,6 +12,13 @@ enum OVL_LAYER_SOURCE {
     OVL_LAYER_SOURCE_PQ     = 3,
 };
 
+enum OVL_LAYER_SECURE_MODE {
+    OVL_LAYER_NORMAL_BUFFER    = 0,
+    OVL_LAYER_SECURE_BUFFER    = 1,
+    OVL_LAYER_PROTECTED_BUFFER = 2
+};
+
+
 #define OVL_COLOR_BASE 30
 enum OVL_INPUT_FORMAT {
     OVL_INPUT_FORMAT_RGB888     = 0,
@@ -54,12 +61,17 @@ typedef struct _OVL_CONFIG_STRUCT
     unsigned int aen; 
     unsigned char alpha;  
 
+    unsigned char r_first;//3D
+    unsigned char landscape;//3D
+    unsigned char en_3d;//3D
+
     unsigned int isTdshp;
     unsigned int isDirty;
 
     int buff_idx;
     int identity;
     int connected_type;
+    unsigned int security;
 }OVL_CONFIG_STRUCT;
 
 

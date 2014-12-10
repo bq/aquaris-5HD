@@ -111,7 +111,7 @@ void mt_irq_set_sens(unsigned int irq, unsigned int sens)
 
     spin_lock_irqsave(&irq_lock, flags);
 
-    if (sens == MT65xx_EDGE_SENSITIVE) {
+    if (sens == MT_EDGE_SENSITIVE) {
         config = readl(GIC_DIST_BASE + GIC_DIST_CONFIG + (irq / 16) * 4);
         config |= (0x2 << (irq % 16) * 2);
         writel(config, GIC_DIST_BASE + GIC_DIST_CONFIG + (irq / 16) * 4);
@@ -172,11 +172,11 @@ static int mt_irq_set_type(struct irq_data *data, unsigned int flow_type)
     const unsigned int irq = data->irq;
 
     if (flow_type & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING)) {
-        mt_irq_set_sens(irq, MT65xx_EDGE_SENSITIVE);
+        mt_irq_set_sens(irq, MT_EDGE_SENSITIVE);
         mt_irq_set_polarity(irq, (flow_type & IRQF_TRIGGER_FALLING) ? 0 : 1);
         __irq_set_handler_locked(irq, handle_edge_irq);
     } else if (flow_type & (IRQF_TRIGGER_HIGH | IRQF_TRIGGER_LOW)) {
-        mt_irq_set_sens(irq, MT65xx_LEVEL_SENSITIVE);
+        mt_irq_set_sens(irq, MT_LEVEL_SENSITIVE);
         mt_irq_set_polarity(irq, (flow_type & IRQF_TRIGGER_LOW) ? 0 : 1);
         __irq_set_handler_locked(irq, handle_level_irq);
     }

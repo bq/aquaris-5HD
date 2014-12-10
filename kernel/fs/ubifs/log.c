@@ -262,7 +262,7 @@ int ubifs_add_bud_to_log(struct ubifs_info *c, int jhead, int lnum, int offs)
 		 * an unclean reboot, because the target LEB might have been
 		 * unmapped, but not yet physically erased.
 		 */
-		err = ubifs_leb_map(c, bud->lnum, UBI_SHORTTERM);
+		err = ubifs_leb_map(c, bud->lnum);
 		if (err)
 			goto out_unlock;
 	}
@@ -270,7 +270,7 @@ int ubifs_add_bud_to_log(struct ubifs_info *c, int jhead, int lnum, int offs)
 	dbg_log("write ref LEB %d:%d",
 		c->lhead_lnum, c->lhead_offs);
 	err = ubifs_write_node(c, ref, UBIFS_REF_NODE_SZ, c->lhead_lnum,
-			       c->lhead_offs, UBI_SHORTTERM);
+			       c->lhead_offs);
 	if (err)
 		goto out_unlock;
 
@@ -407,11 +407,28 @@ int ubifs_log_start_commit(struct ubifs_info *c, int *ltail_lnum)
 
 	ubifs_pad(c, buf + len, ALIGN(len, c->min_io_size) - len);
 
-	/* Switch to the next log LEB */
-	if (c->lhead_offs) {
+#ifdef CONFIG_UBIFS_FS_FULL_USE_LOG
+	/* Not Switch to next log LEB, programming next available page in the same log LEB continuously*/
+
+	/* if available page is in the end of the LEB, switch to next LEB*/
+	if(c->lhead_offs >= (c->leb_size - (c->min_io_size * 4)) )
+	{
+		int old_lnum = c->lhead_lnum;
+		int old_offs = c->lhead_offs;
 		c->lhead_lnum = ubifs_next_log_lnum(c, c->lhead_lnum);
 		c->lhead_offs = 0;
+		ubifs_msg("switch log LEB %d:%d to %d:%d\n", old_lnum, old_offs, c->lhead_lnum, c->lhead_offs);
 	}
+#else
+	/* Switch to the next log LEB */
+	if (c->lhead_offs) {
+		int old_lnum = c->lhead_lnum;
+		int old_offs = c->lhead_offs;
+		c->lhead_lnum = ubifs_next_log_lnum(c, c->lhead_lnum);
+		c->lhead_offs = 0;
+		ubifs_msg("switch log LEB %d:%d to %d:%d\n", old_lnum, old_offs, c->lhead_lnum, c->lhead_offs);
+	}
+#endif
 
 	if (c->lhead_offs == 0) {
 		/* Must ensure next LEB has been unmapped */
@@ -422,7 +439,7 @@ int ubifs_log_start_commit(struct ubifs_info *c, int *ltail_lnum)
 
 	len = ALIGN(len, c->min_io_size);
 	dbg_log("writing commit start at LEB %d:0, len %d", c->lhead_lnum, len);
-	err = ubifs_leb_write(c, c->lhead_lnum, cs, 0, len, UBI_SHORTTERM);
+	err = ubifs_leb_write(c, c->lhead_lnum, cs, c->lhead_offs, len); //MTK, modify offset 0 -> c->lhead_offs
 	if (err)
 		goto out;
 
@@ -623,7 +640,7 @@ static int add_node(struct ubifs_info *c, void *buf, int *lnum, int *offs,
 		int sz = ALIGN(*offs, c->min_io_size), err;
 
 		ubifs_pad(c, buf + *offs, sz - *offs);
-		err = ubifs_leb_change(c, *lnum, buf, sz, UBI_SHORTTERM);
+		err = ubifs_leb_change(c, *lnum, buf, sz);
 		if (err)
 			return err;
 		*lnum = ubifs_next_log_lnum(c, *lnum);
@@ -651,6 +668,10 @@ int ubifs_consolidate_log(struct ubifs_info *c)
 	struct rb_root done_tree = RB_ROOT;
 	int lnum, err, first = 1, write_lnum, offs = 0;
 	void *buf;
+#if defined(CONFIG_UBIFS_FS_FULL_USE_LOG)
+	const struct ubifs_cs_node *node;
+	unsigned long long cs_sqnum = 0;
+#endif
 
 	dbg_rcvry("log tail LEB %d, log head LEB %d", c->ltail_lnum,
 		  c->lhead_lnum);
@@ -665,7 +686,28 @@ int ubifs_consolidate_log(struct ubifs_info *c)
 			err = PTR_ERR(sleb);
 			goto out_free;
 		}
+#if defined(CONFIG_UBIFS_FS_FULL_USE_LOG)
+		/* Search for the last cs node */
+		if(lnum == c->ltail_lnum)
+		{
+			list_for_each_entry_reverse(snod, &sleb->nodes, list) {
+				if(snod->type == UBIFS_CS_NODE)
+					break;
+			}
+			node = snod->node;
+			cs_sqnum = le64_to_cpu(node->ch.sqnum);
+		}
+#endif
+
 		list_for_each_entry(snod, &sleb->nodes, list) {
+#if defined(CONFIG_UBIFS_FS_FULL_USE_LOG)
+			if(lnum == c->ltail_lnum)
+			{
+				/* Skip those nodes which locate in front of the last cs node*/
+				if(cs_sqnum > snod->sqnum)
+					continue;
+			}
+#endif
 			switch (snod->type) {
 			case UBIFS_REF_NODE: {
 				struct ubifs_ref_node *ref = snod->node;
@@ -702,7 +744,7 @@ int ubifs_consolidate_log(struct ubifs_info *c)
 		int sz = ALIGN(offs, c->min_io_size);
 
 		ubifs_pad(c, buf + offs, sz - offs);
-		err = ubifs_leb_change(c, write_lnum, buf, sz, UBI_SHORTTERM);
+		err = ubifs_leb_change(c, write_lnum, buf, sz);
 		if (err)
 			goto out_free;
 		offs = ALIGN(offs, c->min_io_size);

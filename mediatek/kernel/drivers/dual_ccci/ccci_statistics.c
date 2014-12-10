@@ -7,13 +7,12 @@
 #include <linux/uaccess.h>
 #include <linux/mm.h>
 #include <linux/kfifo.h>
-
 #include <linux/firmware.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/proc_fs.h>
-#include <ccci_common.h>
+#include <ccci.h>
 
 
 #define CCCI_LOG_MAX_LEN 16
@@ -33,6 +32,7 @@ typedef struct _logic_ch_record
 	unsigned long	drop_num;
 	int		log_idx;
 	int		dir;
+	char   *name;
 }logic_ch_record_t;
 
 typedef struct _ch_history{
@@ -46,7 +46,7 @@ static ch_history_t		*history_ctlb[MAX_MD_NUM];
 void add_logic_layer_record(int md_id, ccci_msg_t *data, int drop)
 {
 	logic_ch_record_t	*ctlb;
-	int			ch = data->channel;
+	unsigned int	ch = data->channel;
 	ccci_log_t		*record;
 
 	if (ch >= CCCI_MAX_CH_NUM)
@@ -181,9 +181,9 @@ void logic_layer_ch_record_dump(int md_id, int ch)
 		record = &(ctlb->all_ch[ch]);
 		CCCI_DBG_COM_MSG("\n");
 		if(record->dir == CCCI_LOG_TX) {
-			CCCI_DBG_COM_MSG("ch%02d tx_get :%ld\t tx_drop:%ld\t\n", ch, record->msg_num, record->drop_num);
+			CCCI_DBG_COM_MSG("ch%02d  tx:%ld\t tx_drop:%ld  name: %s\t\n", ch, record->msg_num, record->drop_num, record->name);
 		} else {
-			CCCI_DBG_COM_MSG("ch%02d rx_send:%ld\t rx_drop:%ld\t\n", ch, record->msg_num, record->drop_num);
+			CCCI_DBG_COM_MSG("ch%02d  rx:%ld\t rx_drop:%ld  name: %s\t\n", ch, record->msg_num, record->drop_num, record->name);
 		}
 
 		// dump last ten message
@@ -209,7 +209,7 @@ void dump_logical_layer_tx_rx_histroy(int md_id)
 	}
 }
 
-int statistics_init_ch_dir(int md_id, int ch, int dir)
+int statistics_init_ch_dir(int md_id, int ch, int dir, char *name)
 {
 	ch_history_t		*ctlb = history_ctlb[md_id];
 	logic_ch_record_t	*record;
@@ -218,10 +218,9 @@ int statistics_init_ch_dir(int md_id, int ch, int dir)
 	if ((ctlb != NULL)&&(ch < CCCI_MAX_CH_NUM)) {
 		record = &(ctlb->all_ch[ch]);
 		record->dir = dir;
-		//printk("[ccci/cci] si> ch:%d,dir:%d\n", ch, dir);
+		record->name = name;
 	} else {
 		ret = -1;
-		//printk("[ccci/cci] si> err\n");
 	}
 
 	return ret;

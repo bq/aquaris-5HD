@@ -239,6 +239,15 @@ static void process_dbg_opt(const char *opt)
         {
            ddp_mem_test2();
         }
+        else if(enable==4)
+        {
+           ddp_aee_mmp_dump("ddp_aee_mmp_dump:%d \n", enable);
+        }
+        else if(enable==5)
+        {
+           DISP_MSG("file:%s, line:%d, time:%s\n", __FILE__, __LINE__, __TIME__);
+           sprintf(buf, "file:%s, line:%d, time:%s\n", __FILE__, __LINE__, __TIME__);
+        }
     }
     else if (0 == strncmp(opt, "mmp", 3))
     {

@@ -35,10 +35,6 @@ ccflags-y  += -DCCCI_DEBUG_ON  -DCCCI_MD_DEBUG_ON  #-save-temps
 endif
 ccflags-y  += -D__CCCI_LOG__
 
-ifdef CONFIG_ARCH_MT6573
-ccflags-y += #-DCCCI_STATIC_SHARED_MEM
-endif
-
 else 
 obj- :=dummy.o
 

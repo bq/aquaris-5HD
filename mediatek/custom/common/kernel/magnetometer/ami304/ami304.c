@@ -41,24 +41,8 @@
 #include <mach/mt_typedefs.h>
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
-#define POWER_NONE_MACRO MT65XX_POWER_NONE
 
-/*-------------------------MT6516&MT6573 define-------------------------------*/
-#ifdef MT6516
-#define POWER_NONE_MACRO MT6516_POWER_NONE
-#endif
-
-#ifdef MT6573
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
-
-#ifdef MT6575
-#define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
-
-#ifdef MT6577
-#define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
 
 /*----------------------------------------------------------------------------*/
 #define I2C_DRIVERID_AMI304 304

@@ -19,6 +19,10 @@
 #include <linux/rtpm_prio.h>
 
 #include "tpd_custom_cy8ctma300.h"
+#include <mach/mt_pm_ldo.h>
+#include <mach/mt_typedefs.h>
+#include <mach/mt_boot.h>
+#include <mach/mt_gpio.h>
 #include "tpd.h"
 #include <cust_eint.h>
 
@@ -31,6 +35,7 @@
 extern struct tpd_device *tpd;
 extern int tpd_show_version;
 extern int tpd_debuglog;
+extern int tpd_em_log;
 extern int tpd_register_flag;
 extern int tpd_load_status;
 
@@ -55,15 +60,8 @@ static int tpd_def_calmat_local[8] = TPD_CALIBRATION_MATRIX;
 static void tpd_eint_interrupt_handler(void);
 static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
-static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
+static int tpd_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
-extern void mt65xx_eint_unmask(unsigned int line);
-extern void mt65xx_eint_mask(unsigned int line);
-extern void mt65xx_eint_set_hw_debounce(unsigned int eintno, unsigned int ms);
-extern unsigned int mt65xx_eint_set_sens(unsigned int eintno,unsigned int sens);
-extern void mt65xx_eint_registration(unsigned int eintno, unsigned int Dbounce_En,
-                                     unsigned int ACT_Polarity, void (EINT_FUNC_PTR)(void),
-                                     unsigned int auto_umask);
 extern void i2c_del_driver(struct i2c_driver *);
 
 static struct i2c_client *i2c_client = NULL;
@@ -82,7 +80,7 @@ struct i2c_driver tpd_i2c_driver = {
        .address_list = (const unsigned short*) forces,                   
 }; 
 
-static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info) {
+static int tpd_i2c_detect(struct i2c_client *client, struct i2c_board_info *info){
     strcpy(info->type, "mtk-tpd");
     return 0;
 }
@@ -91,8 +89,6 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     int err = 0;
     char buffer[2];
     int status=0;
-    i2c_client = client;    
-    TPD_DMESG("[mtk-tpd], cy8ctma300 tpd_i2c_probe ++++\n");
     #ifdef TPD_NO_GPIO
     u32 temp;
     
@@ -115,6 +111,9 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     printk("TPD_GPIO_OE_ADDR:0x%x\n", *(volatile u32 *) TPD_GPIO_OE_ADDR);
     #endif
     
+    i2c_client = client;    
+    TPD_DMESG("[mtk-tpd], cy8ctma300 tpd_i2c_probe ++++\n");
+	
     #ifndef TPD_NO_GPIO 
     mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
     mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
@@ -177,10 +176,10 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
         TPD_DMESG(TPD_DEVICE " failed to create kernel thread: %d\n", err);
     }    
 #ifndef POLL_MODE //mt6575t fpga debug 0: enable polling mode
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //mt_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_DEBOUNCE_DISABLE);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     TPD_DMESG("EINT num=%d\n",CUST_EINT_TOUCH_PANEL_NUM);
 #endif 
 	TPD_DMESG("[mtk-tpd], cy8ctma300 tpd_i2c_probe ----\n");
@@ -236,7 +235,7 @@ static int touch_event_handler(void *unused) {
     static char toggle;
     static char buffer[32];//[16];
 //    int pending = 0;
-	u32 temp;
+	//u32 temp;
     sched_setscheduler(current, SCHED_RR, &param); 
     g_temptimerdiff=get_jiffies_64();//jiffies;
     do {
@@ -330,6 +329,8 @@ static int touch_event_handler(void *unused) {
             msleep(10);
             tpd_flag = 0;
             pre_tt_mode = buffer[1];
+	if(tpd_em_log==1)
+		TPD_DMESG("[mtk-tpd], continue from finger number.\n");        
             continue;   
         }
         
@@ -337,16 +338,18 @@ static int touch_event_handler(void *unused) {
             msleep(5);
             tpd_flag = 0;
             pre_tt_mode = buffer[1];
+	if(tpd_em_log==1)
+		TPD_DMESG("[mtk-tpd], continue from TT MODE.\n");    
             continue;  
         }
         
         if (buffer[1] & 0x20) {
-            TPD_DEBUG("buffer not ready\n");
+	if(tpd_em_log==1)
+		TPD_DMESG("[mtk-tpd], buffer not ready.\n");    
             tpd_flag = 0;
             pre_tt_mode = buffer[1];
             continue; // buffer is not ready for use
-        }
-        
+        }   
         id1 = (buffer[8] & 0xf0) >> 4;
         id2 = (buffer[8] & 0x0f);
 		id3 = (buffer[21] & 0xf0) >> 4;
@@ -575,7 +578,7 @@ void tpd_suspend(struct early_suspend *h)
 		if(tpd_flag == 1) msleep(1000);
 		else break;	
 	}
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 #ifndef TPD_NO_GPIO
     #ifdef TPD_HAVE_POWER_ON_OFF
     mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
@@ -608,7 +611,7 @@ void tpd_resume(struct early_suspend *h)
     msleep(100);
     #endif
 
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
     tpd_halt = 0;
 #endif    
 }
@@ -627,7 +630,7 @@ static struct tpd_driver_t tpd_device_driver = {
 /* called when loaded into kernel */
 static int __init tpd_driver_init(void) {
     printk("fwq MediaTek cy8ctma300 touch panel driver init\n");
-    i2c_register_board_info(3, &i2c_tpd, 1);//modify I2C0 ==> I2C3
+    i2c_register_board_info(TPD_I2C_NUMBER, &i2c_tpd, 1);//modify I2C0 ==> I2C3
 		if(tpd_driver_add(&tpd_device_driver) < 0)
 			TPD_DMESG("add generic driver failed\n");
     return 0;

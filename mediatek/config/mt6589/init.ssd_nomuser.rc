@@ -1,33 +1,41 @@
-# MTK project .rc configure 
+# MTK project .rc configure
 
-	
+on post-fs-data
 #
-# NO SHARED_SDCARD feature option
+# SHARED_SDCARD related directory & configuration (begin)
+#
+
+# we will remap this as /mnt/sdcard with the sdcard fuse tool
+		mkdir /data/media 0770 media_rw media_rw
+		chown media_rw media_rw /data/media
+
+#
+# SHARED_SDCARD related directory & configuration (end)
 #
 
 on init
-    mkdir /storage/sdcard0 0000 system system
-    mkdir /storage/sdcard1 0000 system system
+    mkdir /mnt/media_rw/sdcard0 0700 media_rw media_rw
+    mkdir /mnt/media_rw/sdcard1 0700 media_rw media_rw
+    mkdir /storage/sdcard0 0700 root root
+    mkdir /storage/sdcard1 0700 root root
 
     export EXTERNAL_STORAGE /storage/sdcard0
-    export SECONDARY_STORAGE /storage/sdcard1
 
-    # for backwards compatibility
+    # Support legacy paths
     symlink /storage/sdcard0 /sdcard
     symlink /storage/sdcard0 /mnt/sdcard
     symlink /storage/sdcard1 /mnt/sdcard2
     
-on boot
-#
-# SHARED_SDCARD related services (Begin)
-#
+on fs
+    setprop ro.crypto.fuse_sdcard true
+    
+service sdcard /system/bin/sdcard -u 1023 -g 1023 -d /data/media /storage/sdcard0
+    class late_start
 
-# create virtual SD card at /mnt/sdcard, based on the /data/media directory
-# daemon will drop to user/group system/media_rw after initializing
-# underlying files in /data/media will be created with user and group media_rw (1023)
-service sdcard /system/bin/sdcard /data/media /storage/sdcard0  1023 1023
-class late_start
+service fuse_sdcard0 /system/bin/sdcard -u 1023 -g 1023 -d /mnt/media_rw/sdcard0 /storage/sdcard0
+    class late_start
+    disabled
 
-#
-# SHARED_SDCARD related services (End)
-#
+service fuse_sdcard1 /system/bin/sdcard -u 1023 -g 1023 -w 1023 -d /mnt/media_rw/sdcard1 /storage/sdcard1
+    class late_start
+    disabled

@@ -25,103 +25,55 @@ void __check_kvm_seq(struct mm_struct *mm);
 #ifdef CONFIG_CPU_HAS_ASID
 
 /*
- * On ARMv6, we have the following structure in the Context ID:
- *
- * 31                         7          0
- * +-------------------------+-----------+
- * |      process ID         |   ASID    |
- * +-------------------------+-----------+
- * |              context ID             |
- * +-------------------------------------+
- *
- * The ASID is used to tag entries in the CPU caches and TLBs.
- * The context ID is used by debuggers and trace logic, and
- * should be unique within all running processes.
+ * apply kernel patch: b5466f8728527a05a493cc4abe9e6f034a1bbaab
  */
-#define ASID_BITS		8
-#define ASID_MASK		((~0) << ASID_BITS)
-#define ASID_FIRST_VERSION	(1 << ASID_BITS)
+void check_and_switch_context(struct mm_struct *mm, struct task_struct *tsk);
+#define init_new_context(tsk,mm)	({ mm->context.id = 0; })
 
-extern unsigned int cpu_last_asid;
+#else	/* !CONFIG_CPU_HAS_ASID */
 
-void __init_new_context(struct task_struct *tsk, struct mm_struct *mm);
-void __new_context(struct mm_struct *mm);
-void cpu_set_reserved_ttbr0(void);
-
-static inline void switch_new_context(struct mm_struct *mm)
-{
-	unsigned long flags;
-
-	__new_context(mm);
-
-	local_irq_save(flags);
-	cpu_switch_mm(mm->pgd, mm);
-	local_irq_restore(flags);
-}
+#ifdef CONFIG_MMU
 
 static inline void check_and_switch_context(struct mm_struct *mm,
-                        struct task_struct *tsk)
+					    struct task_struct *tsk)
 {
 	if (unlikely(mm->context.kvm_seq != init_mm.context.kvm_seq))
 		__check_kvm_seq(mm);
 
-	/*
-	 * Required during context switch to avoid speculative page table
-	 * walking with the wrong TTBR.
-	 */
-	cpu_set_reserved_ttbr0();
-
-	if (!((mm->context.id ^ cpu_last_asid) >> ASID_BITS))
+	if (irqs_disabled())
 		/*
-		 * The ASID is from the current generation, just switch to the
-		 * new pgd. This condition is only true for calls from
-		 * context_switch() and interrupts are already disabled.
-		 */
-		cpu_switch_mm(mm->pgd, mm);
-	else if (irqs_disabled())
-		/*
-		 * Defer the new ASID allocation until after the context
-		 * switch critical region since __new_context() cannot be
-		 * called with interrupts disabled (it sends IPIs).
+		 * cpu_switch_mm() needs to flush the VIVT caches. To avoid
+		 * high interrupt latencies, defer the call and continue
+		 * running with the old mm. Since we only support UP systems
+		 * on non-ASID CPUs, the old mm will remain valid until the
+		 * finish_arch_post_lock_switch() call.
 		 */
 		set_ti_thread_flag(task_thread_info(tsk), TIF_SWITCH_MM);
 	else
-		/*
-		 * That is a direct call to switch_mm() or activate_mm() with
-		 * interrupts enabled and a new context.
-		 */
-		switch_new_context(mm);
+		cpu_switch_mm(mm->pgd, mm);
 }
-
-#define init_new_context(tsk,mm)	(__init_new_context(tsk,mm),0)
 
 #define finish_arch_post_lock_switch \
-    finish_arch_post_lock_switch
+	finish_arch_post_lock_switch
 static inline void finish_arch_post_lock_switch(void)
 {
-	if (test_and_clear_thread_flag(TIF_SWITCH_MM))
-		switch_new_context(current->mm);
+	if (test_and_clear_thread_flag(TIF_SWITCH_MM)) {
+		struct mm_struct *mm = current->mm;
+		cpu_switch_mm(mm->pgd, mm);
+	}
 }
 
-#else
+#endif	/* CONFIG_MMU */
 
-static inline void check_and_switch_context(struct mm_struct *mm,
-                        struct task_struct *tsk)
-{
-#ifdef CONFIG_MMU
-	if (unlikely(mm->context.kvm_seq != init_mm.context.kvm_seq))
-		__check_kvm_seq(mm);
-	cpu_switch_mm(mm->pgd, mm);
-#endif
-}
+#define init_new_context(tsk,mm)	0
 
-#define init_new_context(tsk,mm)    0
+#endif	/* CONFIG_CPU_HAS_ASID */
 
-#define finish_arch_post_lock_switch()  do { } while (0)
-
-#endif
-
+/*
+ * apply kernel patch: b5466f8728527a05a493cc4abe9e6f034a1bbaab
+ */
 #define destroy_context(mm)		do { } while(0)
+#define activate_mm(prev,next)		switch_mm(prev, next, NULL)
 
 /*
  * This is called when "tsk" is about to enter lazy TLB mode.
@@ -165,6 +117,8 @@ switch_mm(struct mm_struct *prev, struct mm_struct *next,
 }
 
 #define deactivate_mm(tsk,mm)	do { } while (0)
-#define activate_mm(prev,next)	switch_mm(prev, next, NULL)
+/*
+ * apply kernel patch: b5466f8728527a05a493cc4abe9e6f034a1bbaab
+ */
 
 #endif

@@ -552,6 +552,7 @@ nicTxAcquireResource (
 
     if (prTxCtrl->rTc.aucFreeBufferCount[ucTC]) {
 
+        /* get a available TX entry */
         prTxCtrl->rTc.aucFreeBufferCount[ucTC]--;
 
         DBGLOG(TX, EVENT, ("Acquire: TC = %d aucFreeBufferCount = %d\n",
@@ -675,7 +676,7 @@ nicTxReleaseResource (
             prTxCtrl->rTc.aucFreeBufferCount[i] += aucTxRlsCnt[i];
 
             if ((i==1) || (i==5)){
-                DBGLOG(TX, EVENT, ("Release: i = %d aucFreeBufferCount = %d\n",
+                DBGLOG(TX, EVENT, ("Release: i = %lu aucFreeBufferCount = %u\n",
                     i, prTxCtrl->rTc.aucFreeBufferCount[i]));
             }
         }
@@ -835,6 +836,8 @@ nicTxMsduInfoList (
                 MAC2STR(prMsduInfo->aucEthDestAddr));
 #endif
 
+        /* double-check available TX resouce (need to sync with CONNSYS FW) */
+        /* caller must guarantee that the TX resource is enough in the func; OR assert here */
         switch(prMsduInfo->ucTC) {
         case TC0_INDEX:
         case TC1_INDEX:
@@ -865,6 +868,7 @@ nicTxMsduInfoList (
         prMsduInfo = prNextMsduInfo;
     }
 
+    /* send packets to HIF port0 or port1 here */
     if(qDataPort0.u4NumElem > 0) {
         nicTxMsduQueue(prAdapter, 0, &qDataPort0);
     }
@@ -932,36 +936,58 @@ nicTxLifetimePrintCheckRTP (
 }
 
 BOOLEAN
-nicTxLifetimePrintCheckRTPSnSkip (
+nicTxLifetimePrintCheckSnOrder (
     IN P_MSDU_INFO_T        prPrevProfileMsduInfo,
     IN P_PKT_PROFILE_T      prPrevRoundLastPkt,
     IN P_PKT_PROFILE_T      prPktProfile,
-    IN OUT PBOOLEAN         pfgGotFirst
+    IN OUT PBOOLEAN         pfgGotFirst,
+    IN UINT_8               ucLayer
     )
 {
     BOOLEAN fgPrintCurPkt = FALSE;
-    UINT_16 u2PredictRtpSn = 0;
+    P_PKT_PROFILE_T prTarPktProfile = NULL;
+    UINT_16 u2PredictSn = 0;
+    UINT_16 u2CurrentSn = 0;
+    UINT_8  aucNote[8];
     
-    //4 1. check RTP SN between current round first pkt and prevous round last pkt
-    if(!*pfgGotFirst) {
-        *pfgGotFirst = TRUE;
+    //4 1. Get the target packet profile to compare
 
-        if(prPrevRoundLastPkt->fgIsValid) {
-            u2PredictRtpSn = prPrevRoundLastPkt->u2RtpSn + 1;
-            if(prPktProfile->u2RtpSn != u2PredictRtpSn) {
-                PRINT_PKT_PROFILE(prPrevRoundLastPkt, "PR");
-                fgPrintCurPkt = TRUE;
+    //4 1.1 check SN between current round first pkt and prevous round last pkt
+    if((!*pfgGotFirst) && (prPrevRoundLastPkt->fgIsValid)) {
+        *pfgGotFirst = TRUE;
+        prTarPktProfile = prPrevRoundLastPkt;
+        kalMemCopy(aucNote, "PR\0", 3);
             }
+    //4 1.2 check SN between current pkt and previous pkt
+    else if (prPrevProfileMsduInfo) {
+        prTarPktProfile = &prPrevProfileMsduInfo->rPktProfile;
+        kalMemCopy(aucNote, "P\0", 2);
         }
+
+    if(!prTarPktProfile) {
+        return FALSE;
     }
 
-    //4 2. check RTP SN between current pkt and previous pkt
-    if(prPrevProfileMsduInfo) {
-        u2PredictRtpSn = prPrevProfileMsduInfo->rPktProfile.u2RtpSn + 1;
-        if(prPktProfile->u2RtpSn != u2PredictRtpSn) {
-            PRINT_PKT_PROFILE(&prPrevProfileMsduInfo->rPktProfile, "P");
-            fgPrintCurPkt = TRUE;
+    //4 2. Check IP or RTP SN
+    switch(ucLayer) {
+        /* Check IP SN */ 
+        case 0:
+            u2PredictSn = prTarPktProfile->u2IpSn + 1;
+            u2CurrentSn = prPktProfile->u2IpSn;
+            break;
+        /* Check RTP SN */
+        case 1:
+        default:
+            u2PredictSn = prTarPktProfile->u2RtpSn + 1;
+            u2CurrentSn = prPktProfile->u2RtpSn;            
+            break;
+
         }
+    //4 
+    //4 3. Compare SN
+    if(u2CurrentSn != u2PredictSn) {
+        PRINT_PKT_PROFILE(prTarPktProfile, aucNote);
+            fgPrintCurPkt = TRUE;
     }
 
     return fgPrintCurPkt;
@@ -1000,9 +1026,9 @@ nicTxReturnMsduInfoProfiling (
     if(prAdapter->fgIsP2PRegistered) {        
         prWfdCfgSettings = &prAdapter->rWifiVar.prP2pFsmInfo->rWfdConfigureSettings;
         u2MagicCode = prWfdCfgSettings->u2WfdMaximumTp;
-        if(prWfdCfgSettings->ucWfdEnable && (prWfdCfgSettings->u4WfdFlag & BIT(0))) {
-            u2MagicCode = 0xE040;
-        }
+        //if(prWfdCfgSettings->ucWfdEnable && (prWfdCfgSettings->u4WfdFlag & BIT(0))) {
+            //u2MagicCode = 0xE040;
+        //}
     }
     #endif  
 
@@ -1031,16 +1057,16 @@ nicTxReturnMsduInfoProfiling (
         prPktProfile = &prMsduInfo->rPktProfile;
             
         if(prPktProfile->fgIsValid) {
-
             prPktProfile->rHifTxDoneTimestamp = kalGetTimeTick();
             
             #if CFG_PRINT_RTP_PROFILE
             #if CFG_PRINT_RTP_SN_SKIP
-            fgPrintCurPkt = nicTxLifetimePrintCheckRTPSnSkip(
+            fgPrintCurPkt = nicTxLifetimePrintCheckSnOrder(
                                 prPrevProfileMsduInfo, 
                                 prPrevRoundLastPkt, 
                                 prPktProfile, 
-                                &fgGotFirst);
+                                &fgGotFirst,
+                                0);
             #else
             fgPrintCurPkt = nicTxLifetimePrintCheckRTP(
                                 prPrevProfileMsduInfo,
@@ -1080,7 +1106,8 @@ nicTxReturnMsduInfoProfiling (
                                                          
                     if(u4PktPrintPeriod && (prStaRec->u4TotalTxPktsNumber >= u4PktPrintPeriod)) {
                         
-                        DBGLOG(TX, TRACE, ("N[%4lu] A[%5lu] M[%4lu] T[%4lu] E[%4lu]\n", 
+                        DBGLOG(TX, TRACE, ("[%u]N[%4lu]A[%5lu]M[%4lu]T[%4lu]E[%4lu]\n",
+                            prStaRec->ucIndex,
                             prStaRec->u4TotalTxPktsNumber, 
                             (prStaRec->u4TotalTxPktsTime/prStaRec->u4TotalTxPktsNumber),
 							prStaRec->u4MaxTxPktsTime,
@@ -1098,7 +1125,7 @@ nicTxReturnMsduInfoProfiling (
             }
             #endif            
         }
-            
+
         prMsduInfo = prNextMsduInfo;
     };
 
@@ -1117,7 +1144,7 @@ nicTxReturnMsduInfoProfiling (
         prPrevRoundLastPkt->fgIsValid = TRUE;
     }
 #endif
-
+    
     nicTxReturnMsduInfo(prAdapter, prMsduInfoListHead);
 
     return;
@@ -1188,7 +1215,7 @@ nicTxLifetimeCheckRTP (
     UINT_8 ucRtpSnOffset = 30;
     //UINT_32 u4RtpSrcPort = 15550;
     P_TX_CTRL_T prTxCtrl;
-#if CFG_SUPPORT_WFD
+	#if CFG_SUPPORT_WFD
     P_WFD_CFG_SETTINGS_T prWfdCfgSettings = (P_WFD_CFG_SETTINGS_T)NULL;
     BOOLEAN fgEnProfiling = FALSE;
 
@@ -1211,7 +1238,7 @@ nicTxLifetimeCheckRTP (
         //prPktProfile->fgIsValid = FALSE;
         return;
     }
-#endif
+	#endif
     
     prTxCtrl = &prAdapter->rTxCtrl;
     //prPktProfile->fgIsValid = FALSE;
@@ -1286,7 +1313,6 @@ nicTxLifetimeCheckByAC (
 }
 
 #endif
-
 VOID
 nicTxLifetimeCheck (
     IN P_ADAPTER_T     prAdapter,
@@ -1311,10 +1337,7 @@ nicTxLifetimeCheck (
     #endif
 
 }
-
-
-#endif
-
+#endif /*CFG_ENABLE_PKT_LIFETIME_PROFILE*/
 /*----------------------------------------------------------------------------*/
 /*!
 * @brief In this function, we'll write frame(PACKET_INFO_T) into HIF.
@@ -1381,6 +1404,7 @@ nicTxMsduQueue (
             u2OverallBufferLength = ((prMsduInfo->u2FrameLength + TX_HDR_SIZE) &
                     (UINT_16)HIF_TX_HDR_TX_BYTE_COUNT_MASK);
 
+            /* init TX header */
             rHwTxHeader.u2TxByteCount_UserPriority = u2OverallBufferLength;
             rHwTxHeader.u2TxByteCount_UserPriority |=
                 ((UINT_16)prMsduInfo->ucUserPriority << HIF_TX_HDR_USER_PRIORITY_OFFSET);
@@ -1578,8 +1602,8 @@ nicTxMsduQueue (
             }
             else {
                 //Skip profiling
-                nicTxReturnMsduInfo(prAdapter, (P_MSDU_INFO_T)QUEUE_GET_HEAD(&rFreeQueue));
-            }
+        		nicTxReturnMsduInfo(prAdapter, (P_MSDU_INFO_T)QUEUE_GET_HEAD(&rFreeQueue));
+    		}
         }while(FALSE);
         #else
             nicTxReturnMsduInfoProfiling(prAdapter, (P_MSDU_INFO_T)QUEUE_GET_HEAD(&rFreeQueue));
@@ -2006,6 +2030,8 @@ nicTxReturnMsduInfo (
     return;
 }
 
+
+
 /*----------------------------------------------------------------------------*/
 /*!
 * @brief this function fills packet information to P_MSDU_INFO_T
@@ -2061,7 +2087,6 @@ nicTxFillMsduInfo (
         u4PacketLen,
         ucNetworkType);    
     #endif
-
     /* Save the value of Priority Parameter */
     GLUE_SET_PKT_TID(prPacket, ucPriorityParam);
 
@@ -2344,7 +2369,7 @@ nicTxEnqueueMsdu (
     }
 
     if(qDataPort0.u4NumElem) {
-        /* send to QM */
+        /* send to QM: queue the packet to different TX queue by policy */
         KAL_SPIN_LOCK_DECLARATION();
         KAL_ACQUIRE_SPIN_LOCK(prAdapter, SPIN_LOCK_QM_TX_QUEUE);
         prRetMsduInfo = qmEnqueueTxPackets(prAdapter, (P_MSDU_INFO_T)QUEUE_GET_HEAD(&qDataPort0));

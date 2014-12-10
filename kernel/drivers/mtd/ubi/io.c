@@ -90,6 +90,9 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include "ubi.h"
+#ifdef CONFIG_PWR_LOSS_MTK_SPOH
+#include <mach/power_loss_test.h>
+#endif
 
 #ifdef CONFIG_MTD_UBI_DEBUG
 static int paranoid_check_not_bad(const struct ubi_device *ubi, int pnum);
@@ -362,6 +365,7 @@ retry:
 	ei.priv     = (unsigned long)&wq;
 
 	err = mtd_erase(ubi->mtd, &ei);
+	atomic_inc(&ubi->ec_count); //MTK
 	if (err) {
 		if (retries++ < UBI_IO_RETRIES) {
 			dbg_io("error %d while erasing PEB %d, retry",
@@ -878,6 +882,9 @@ int ubi_io_write_ec_hdr(struct ubi_device *ubi, int pnum,
 	if (err)
 		return err;
 
+#ifdef CONFIG_PWR_LOSS_MTK_SPOH
+    PL_RESET_ON_CASE("NAND", "WRITE_EC_Header");
+#endif
 	err = ubi_io_write(ubi, ec_hdr, pnum, 0, ubi->ec_hdr_alsize);
 	return err;
 }
@@ -928,8 +935,15 @@ static int validate_vid_hdr(const struct ubi_device *ubi,
 	if (vol_id >= UBI_INTERNAL_VOL_START && compat != UBI_COMPAT_DELETE &&
 	    compat != UBI_COMPAT_RO && compat != UBI_COMPAT_PRESERVE &&
 	    compat != UBI_COMPAT_REJECT) {
+#ifndef CONFIG_BLB
 		dbg_err("bad compat");
 		goto bad;
+#else
+		if (vol_id != UBI_BACKUP_VOLUME_ID) {
+			dbg_err("bad compat");
+			goto bad;
+		}
+#endif
 	}
 
 	if (vol_type != UBI_VID_DYNAMIC && vol_type != UBI_VID_STATIC) {
@@ -1449,3 +1463,88 @@ error:
 }
 
 #endif /* CONFIG_MTD_UBI_DEBUG */
+
+#ifdef CONFIG_BLB
+/* Read one page with oob one time */
+int ubi_io_read_oob(const struct ubi_device *ubi, void *databuf, void *oobbuf,
+                int pnum, int offset)
+{
+        int err;
+        loff_t addr;
+        struct mtd_oob_ops ops;
+
+        dbg_io("read from PEB %d:%d", pnum, offset);
+
+        ubi_assert(pnum >= 0 && pnum < ubi->peb_count);
+        ubi_assert(offset >= 0 && offset + ubi->mtd->writesize <= ubi->peb_size);
+
+        addr = (loff_t)pnum * ubi->peb_size + offset;
+
+        ops.mode = MTD_OPS_AUTO_OOB;
+        ops.ooblen = ubi->mtd->oobavail;
+        ops.oobbuf = oobbuf;
+        ops.ooboffs = 0;
+        ops.len = ubi->mtd->writesize;
+        ops.datbuf = databuf;
+        ops.retlen = ops.oobretlen = 0;
+
+        err = mtd_read_oob(ubi->mtd, addr, &ops);
+        if (err) {
+                if (err == -EUCLEAN) {
+                        /*
+                         * -EUCLEAN is reported if there was a bit-flip which
+                         * was corrected, so this is harmless.
+                         *
+                         * We do not report about it here unless debugging is
+                         * enabled. A corresponding message will be printed
+                         * later, when it is has been scrubbed.
+                         */
+                        dbg_msg("fixable bit-flip detected at addr %lld", addr);
+                        if(oobbuf)
+                                ubi_assert(ops.oobretlen == ops.ooblen);
+                        return UBI_IO_BITFLIPS;
+                }
+                if (ops.retlen != ops.len && err == -EBADMSG) {
+                        ubi_err("err(%d), retlen(%d), len(%d)", err, ops.retlen, ops.len);
+                        err = -EIO;
+                }
+		dbg_msg("mtd_read_oob err %d\n", err);
+        }
+
+        return err;
+}
+
+/* Write one page with oob one time */
+int ubi_io_write_oob(const struct ubi_device *ubi, void *databuf, void *oobbuf,
+                int pnum, int offset)
+{
+        int err;
+        loff_t addr;
+        struct mtd_oob_ops ops;
+
+        dbg_io("read from PEB %d:%d", pnum, offset);
+
+        ubi_assert(pnum >= 0 && pnum < ubi->peb_count);
+        ubi_assert(offset >= 0 && offset + ubi->mtd->writesize <= ubi->peb_size);
+
+        addr = (loff_t)pnum * ubi->peb_size + offset;
+
+        ops.mode = MTD_OPS_AUTO_OOB;
+        ops.ooblen = ubi->mtd->oobavail;
+        ops.oobbuf = oobbuf;
+        ops.ooboffs = 0;
+        ops.len = ubi->mtd->writesize;
+        ops.datbuf = databuf;
+        ops.retlen = ops.oobretlen = 0;
+
+        err = mtd_write_oob(ubi->mtd, addr, &ops);
+        if (err) {
+                ubi_err("error %d while writing to addr %lld, written ",
+                        err, addr);
+                ubi_dbg_dump_stack();
+        } else
+                ubi_assert(ops.retlen == ops.len);
+
+        return err;
+}
+#endif

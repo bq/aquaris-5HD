@@ -501,7 +501,8 @@ rlmUpdateParamsForAP (
             }
             else if (!(prStaRec->u2HtCapInfo & HT_CAP_INFO_SUP_CHNL_WIDTH)) {
                 /* 20MHz-only */
-                if (eHtProtectMode == HT_PROTECT_MODE_NONE) {
+                if (eHtProtectMode == HT_PROTECT_MODE_NONE && 
+						prBssInfo->fgAssoc40mBwAllowed) {
                     eHtProtectMode = HT_PROTECT_MODE_20M;
                 }
             }

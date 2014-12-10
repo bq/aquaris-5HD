@@ -44,7 +44,7 @@ enum
 #define GRASS_TONE   2
 #define SKY_TONE     3
 
-#define PURP_TONE_START    0 
+#define PURP_TONE_START    0
 #define PURP_TONE_END      2
 #define SKIN_TONE_START    3
 #define SKIN_TONE_END     16
@@ -101,8 +101,15 @@ DISPLAY_PQ_T * get_Color_index(void);
 //Called by tasklet to config registers
 void disp_onConfig_luma(unsigned long *luma);
 
-void disp_color_set_window(unsigned int sat_upper, unsigned int sat_lower, 
+void disp_color_set_window(unsigned int sat_upper, unsigned int sat_lower,
 			   unsigned int hue_upper, unsigned int hue_lower);
+
+void ddp_color_init(void);
+int disp_color_get_pq_param(void* arg);
+int disp_color_get_pq_gal_param(void* arg);
+int disp_color_get_pq_cam_param(void* arg);
+int disp_color_set_pq_param(void* arg);
+int disp_color_get_tdshp_index(void* arg);
 
 #endif
 

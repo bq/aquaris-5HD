@@ -97,7 +97,7 @@
 #define MT_EINT_DIRECT_IRQ7_ID              (GIC_PRIVATE_SIGNALS + 126)
 #define MT_EINT_EVENT_ID                    (GIC_PRIVATE_SIGNALS + 127)
 #define MT6589_PMIC_WRAP_IRQ_ID             (GIC_PRIVATE_SIGNALS + 128)//0x80
-#define MT6589_KP_IRQ_ID                    (GIC_PRIVATE_SIGNALS + 129)
+#define MT_KP_IRQ_ID                    (GIC_PRIVATE_SIGNALS + 129)
 #define MT_VENC_IRQ_ID                      (GIC_PRIVATE_SIGNALS + 136)
 #define MT_SMI_LARB0_IRQ_ID                 (GIC_PRIVATE_SIGNALS + 137)
 #define MT_VDEC_IRQ_ID                      (GIC_PRIVATE_SIGNALS + 140)

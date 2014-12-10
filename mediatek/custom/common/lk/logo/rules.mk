@@ -4,11 +4,12 @@ BOOT_LOGO_DIR := $(LOCAL_DIR)
 
 BMP_TO_RAW := $(BOOT_LOGO_DIR)/tool/bmp_to_raw
 ZPIPE := $(BOOT_LOGO_DIR)/tool/zpipe
+            
+$(info lk/logo/=$(BOOT_LOGO))
 
 
 BOOT_LOGO_RESOURCE := $(BUILDDIR)/$(BOOT_LOGO_DIR)/$(BOOT_LOGO).raw
 LOGO_IMAGE := $(BUILDDIR)/logo.bin
-BOOT_LOGO_IMAGE := $(LOCAL_DIR)/../../../../common/lk/logo/boot_logo
 RESOURCE_OBJ_LIST :=   \
             $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_uboot.raw \
             $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_battery.raw \
@@ -48,16 +49,49 @@ RESOURCE_OBJ_LIST :=   \
             $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_bat_bg.raw \
             $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_bat_img.raw \
             $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_bat_100.raw \
-            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_kernel.raw
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_kernel.raw 
 
+ifeq ($(strip $(MTK_WIRELESS_CHARGER_SUPPPORT)), yes)
+RESOURCE_OBJ_LIST +=   \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_00.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_01.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_02.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_03.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_04.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_05.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_06.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_07.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_08.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_09.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_num_percent.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_10_0.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_10_1.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_10_2.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_10_3.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_30_0.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_30_1.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_30_2.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_30_3.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_60_0.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_60_1.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_60_2.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_60_3.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_90_0.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_90_1.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_90_2.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_90_3.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_0.raw \
+            $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_wireless_bat_100.raw 
+
+endif  
+                                      
 GENERATED += \
             $(BOOT_LOGO_RESOURCE) \
             $(LOGO_IMAGE) \
-            $(BOOT_LOGO_IMAGE) \
             $(addprefix $(BUILDDIR)/,$(RESOURCE_OBJ_LIST))
 
 
-all:: $(LOGO_IMAGE) $(BOOT_LOGO_IMAGE)
+all:: $(LOGO_IMAGE) 
 
 $(LOGO_IMAGE):$(MKIMG) $(BOOT_LOGO_RESOURCE)
 	$(NOECHO) if [ ! -x $(MKIMG) ]; then chmod a+x $(MKIMG); fi
@@ -77,8 +111,3 @@ $(BUILDDIR)/%.raw: %.bmp $(BMP_TO_RAW)
 	@echo "Compiling_BMP_TO_RAW $<"
 	$(BMP_TO_RAW) $@ $<
 
-$(BOOT_LOGO_IMAGE): $(BMP_TO_RAW)
-	@$(MKDIR)
-	$(NOECHO) if [ ! -x $(BMP_TO_RAW) ]; then chmod a+x $(BMP_TO_RAW); fi
-	@echo "Compiling_BMP_TO_RAW_BOOT_LOGO"
-	$(BMP_TO_RAW) $(BOOT_LOGO_IMAGE) $(BOOT_LOGO_DIR)/$(BOOT_LOGO)/$(BOOT_LOGO)_kernel.bmp

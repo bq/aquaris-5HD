@@ -3,7 +3,9 @@
 #define __MUSBFSH_MT65XX_H__
 #include <mach/mt_reg_base.h>
 #include <mach/mt_pm_ldo.h>
+#if defined(MTK_DT_SUPPORT) && !defined(EVDO_DT_SUPPORT)
 #include <mach/mt_gpio.h>
+#endif
 #include <mach/mt_clkmgr.h>
 
 #if defined(MTK_DT_SUPPORT) && !defined(EVDO_DT_SUPPORT)

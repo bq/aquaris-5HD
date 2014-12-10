@@ -96,7 +96,7 @@ typedef struct
 	                                        	
 	/* SENSOR START/EDE POSITION */         	
 	#define OV8825_FULL_X_START						    		(2)
-	#define OV8825_FULL_Y_START						    		(8)
+	#define OV8825_FULL_Y_START						    		(2)//(8)
 	#define OV8825_FULL_X_END						        	(3264) 
 	#define OV8825_FULL_Y_END						        	(2448) 
 	#define OV8825_PV_X_START						    		(2)

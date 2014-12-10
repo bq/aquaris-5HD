@@ -9,6 +9,8 @@
 #include <mach/mt_gpio.h>
 #include <cust_gpio_usage.h>
 #include <cust_eint.h>
+
+
 /******************************software I2C demo code**********************************/
 //------------------------------------------------------------------------------
 #if 0
@@ -440,12 +442,19 @@ struct i2c_device_id gMhlI2cIdTable[] =
 };
 
 
+#if SII_I2C_ADDR==(0x76)
+static struct i2c_board_info __initdata i2c_mhl = { 
+	.type = "Sil_MHL",
+	.addr = 0x3B,
+	.irq = 8,
+};
+#else
 static struct i2c_board_info __initdata i2c_mhl = { 
 	.type = "Sil_MHL",
 	.addr = 0x39,
 	.irq = 8,
 };
-
+#endif
 
 struct i2c_driver mhl_i2c_driver = {                       
     .probe = MhlI2cProbe,                                   
@@ -473,7 +482,7 @@ halReturn_t HalOpenI2cDevice(char const *DeviceName, char const *DriverName)
     	return HAL_RET_PARAMETER_ERROR;
     }
 
-    i2c_register_board_info(4, &i2c_mhl, 1);
+    i2c_register_board_info(HDMI_I2C_CHANNEL, &i2c_mhl, 1);
 
     memcpy(gMhlI2cIdTable[0].name, DeviceName, retVal);
     gMhlI2cIdTable[0].name[retVal] = 0;
@@ -536,7 +545,7 @@ halReturn_t HalCloseI2cDevice(void)
 }
 
 #define USE_DEFAULT_I2C_CODE  0
-
+static int mhl_i2c_status = 0; // bit0: read, bit1: write, bit2: block_read, bit3:block_write
 
 uint8_t I2C_ReadByte(uint8_t deviceID, uint8_t offset)
 {
@@ -547,29 +556,29 @@ uint8_t I2C_ReadByte(uint8_t deviceID, uint8_t offset)
     union i2c_smbus_data	data;
     int32_t					status;
     u32 client_main_addr;
-    char buf;
+    char buf = offset ;
     if (I2cAccessCheck() != HAL_RET_SUCCESS)
     {
         return 0xFF;
     }
+    mhl_i2c_status |= 1;
+    if((mhl_i2c_status & 0xfe) !=0)
+        printk("MHL R mhl_i2c_status(0x%02x)\n",mhl_i2c_status);
+                    
     accessI2cAddr = deviceID>>1;
 
     //backup addr
     client_main_addr = gMhlDevice.pI2cClient->addr;
-    gMhlDevice.pI2cClient->addr = accessI2cAddr;
+    gMhlDevice.pI2cClient->addr = (accessI2cAddr & I2C_MASK_FLAG)|I2C_WR_FLAG ;
 
 #if 1
+#ifdef MHL_SET_EXT_GPIO
     gMhlDevice.pI2cClient->ext_flag |= I2C_DIRECTION_FLAG;
-    status = i2c_master_send(gMhlDevice.pI2cClient, &offset, 1);
-    if (status < 0)
-    {
-        printk("I2C_ReadByte(0x%02x, 0x%02x), i2c_transfer error: %d\n",
-                deviceID, offset, status);
-    }
-    msleep(10);
+#endif
+    status = i2c_master_send(gMhlDevice.pI2cClient, &buf, 0x101);
 
-    gMhlDevice.pI2cClient->ext_flag |= I2C_DIRECTION_FLAG;
-    status = i2c_master_recv(gMhlDevice.pI2cClient, (char*)&buf, 1);
+    ///gMhlDevice.pI2cClient->ext_flag |= I2C_DIRECTION_FLAG;
+    ///status = i2c_master_recv(gMhlDevice.pI2cClient, (char*)&buf, 1);
     data.byte = buf;
 
     if (status < 0)
@@ -599,8 +608,7 @@ uint8_t I2C_ReadByte(uint8_t deviceID, uint8_t offset)
     }
 #endif
 
-    //printk("hdmi exit I2C_ReadByte 0x%02x \n", data.byte);
-    // restore default client address
+    mhl_i2c_status &= 0xfe;
     gMhlDevice.pI2cClient->addr = client_main_addr;
     return data.byte;
 }
@@ -622,6 +630,9 @@ void I2C_WriteByte(uint8_t deviceID, uint8_t offset, uint8_t value)
         return;
     }
     accessI2cAddr = deviceID>>1;//?
+    mhl_i2c_status |= 2;
+    if((mhl_i2c_status & 0xfd) !=0)
+        printk("MHL W mhl_i2c_status(0x%02x)\n",mhl_i2c_status);
 
     //backup addr
     client_main_addr = gMhlDevice.pI2cClient->addr;
@@ -633,7 +644,9 @@ void I2C_WriteByte(uint8_t deviceID, uint8_t offset, uint8_t value)
             0, I2C_SMBUS_WRITE, offset, I2C_SMBUS_BYTE_DATA,
             &data);
 #else
+#ifdef MHL_SET_EXT_GPIO
     gMhlDevice.pI2cClient->ext_flag |= I2C_DIRECTION_FLAG;
+#endif
     buf[0] = offset;
     buf[1] = value;
     status = i2c_master_send( gMhlDevice.pI2cClient, (const char*)buf, 2 /*sizeof(buf)*/);
@@ -644,7 +657,7 @@ void I2C_WriteByte(uint8_t deviceID, uint8_t offset, uint8_t value)
         printk("I2C_WriteByte(0x%02x, 0x%02x, 0x%02x), i2c_transfer error: %d\n",
                 deviceID, offset, value, status);
     }
-
+    mhl_i2c_status &= 0xfd;
     /* restore default client address */
     gMhlDevice.pI2cClient->addr = client_main_addr;
 }
@@ -668,6 +681,9 @@ uint8_t I2C_ReadBlock(uint8_t deviceID, uint8_t offset,uint8_t *buf, uint8_t len
     //backup addr
     client_main_addr = gMhlDevice.pI2cClient->addr;
     gMhlDevice.pI2cClient->addr = accessI2cAddr;
+    mhl_i2c_status |= 4;
+    if((mhl_i2c_status & 0xfb) !=0)
+        printk("MHL BR mhl_i2c_status(0x%02x)\n",mhl_i2c_status);
 
 
     memset(buf,0xff,len);
@@ -685,7 +701,9 @@ uint8_t I2C_ReadBlock(uint8_t deviceID, uint8_t offset,uint8_t *buf, uint8_t len
 #else
         u8 tmp;
         tmp = offset + i;
+#ifdef MHL_SET_EXT_GPIO
         gMhlDevice.pI2cClient->ext_flag |= I2C_DIRECTION_FLAG;
+#endif
         status = i2c_master_send(gMhlDevice.pI2cClient, (const char*)&tmp, 1);
         if (status < 0)
         {
@@ -699,7 +717,7 @@ uint8_t I2C_ReadBlock(uint8_t deviceID, uint8_t offset,uint8_t *buf, uint8_t len
 
         buf++;
     }
-
+    mhl_i2c_status &= 0xfb;
     /* restore default client address */
     gMhlDevice.pI2cClient->addr = client_main_addr;
     return len;
@@ -722,6 +740,9 @@ void I2C_WriteBlock(uint8_t deviceID, uint8_t offset, uint8_t *buf, uint8_t len)
         return ;
     }
     accessI2cAddr = deviceID>>1;
+    mhl_i2c_status |= 8;
+    if((mhl_i2c_status & 0xf7) !=0)
+        printk("MHL BW mhl_i2c_status(0x%02x)\n",mhl_i2c_status);
 
     //backup addr
     client_main_addr = gMhlDevice.pI2cClient->addr;
@@ -738,7 +759,9 @@ void I2C_WriteBlock(uint8_t deviceID, uint8_t offset, uint8_t *buf, uint8_t len)
 #else
         tmp[0] = offset + i;
         tmp[1] = *buf;
+#ifdef MHL_SET_EXT_GPIO
         gMhlDevice.pI2cClient->ext_flag |= I2C_DIRECTION_FLAG;
+#endif
         status = i2c_master_send( gMhlDevice.pI2cClient, (const char*)tmp, 2);
 
 #endif
@@ -750,7 +773,7 @@ void I2C_WriteBlock(uint8_t deviceID, uint8_t offset, uint8_t *buf, uint8_t len)
         }
         buf++;
     }
-
+    mhl_i2c_status &= 0xf7;
     /* restore default client address */
     gMhlDevice.pI2cClient->addr = client_main_addr;
     return ;

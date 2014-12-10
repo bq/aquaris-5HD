@@ -230,7 +230,9 @@ FTABLE_SCENE_INDEP()
                 MtkCameraParameters::CAPTURE_MODE_SMILE_SHOT, 
                 MtkCameraParameters::CAPTURE_MODE_BEST_SHOT, 
                 MtkCameraParameters::CAPTURE_MODE_EV_BRACKET_SHOT, 
-                MtkCameraParameters::CAPTURE_MODE_AUTO_PANORAMA_SHOT, 
+                MtkCameraParameters::CAPTURE_MODE_AUTO_PANORAMA_SHOT,
+                MtkCameraParameters::CAPTURE_MODE_MAV_SHOT,
+                MtkCameraParameters::CAPTURE_MODE_ASD_SHOT, 
             )
         ), 
     )

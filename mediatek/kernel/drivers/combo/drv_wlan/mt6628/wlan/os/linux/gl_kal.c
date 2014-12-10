@@ -2035,7 +2035,7 @@ kalSendCompleteAndAwakeQueue (
 
     dev_kfree_skb((struct sk_buff *) pvPacket);
 
-    DBGLOG(TX, EVENT, ("----- pending frame %d -----\n", prGlueInfo->i4TxPendingFrameNum));
+    DBGLOG(TX, EVENT, ("----- pending frame %ld -----\n", prGlueInfo->i4TxPendingFrameNum));
 
     return;
 }
@@ -2147,7 +2147,7 @@ kalQoSFrameClassifierAndPacketInfo (
     u4PacketLen = prSkb->len;
 
     if (u4PacketLen < ETH_HLEN) {
-        DBGLOG(INIT, WARN, ("Invalid Ether packet length: %d\n", u4PacketLen));
+        DBGLOG(INIT, WARN, ("Invalid Ether packet length: %lu\n", u4PacketLen));
         return FALSE;
     }
 
@@ -2374,7 +2374,7 @@ kalIoctl (IN P_GLUE_INFO_T    prGlueInfo,
     /* <5> Reset the status of pending OID */
     prGlueInfo->rPendStatus = WLAN_STATUS_FAILURE;
     //prGlueInfo->u4TimeoutFlag = 0;
-    prGlueInfo->u4OidCompleteFlag = 0;
+    //prGlueInfo->u4OidCompleteFlag = 0;
 
     /* <6> Check if we use the command queue */
     prIoReq->u4Flag = fgCmd;
@@ -2748,6 +2748,7 @@ int tx_thread(void *data)
             if (test_and_clear_bit(GLUE_FLAG_OID_BIT, &prGlueInfo->u4Flag)) {
                 /* get current prIoReq */
                 prIoReq = &(prGlueInfo->OidEntry);
+				prGlueInfo->u4OidCompleteFlag = 0;
 #if CFG_ENABLE_WIFI_DIRECT
                 if(prGlueInfo->prAdapter->fgIsP2PRegistered == FALSE
                     && prIoReq->fgIsP2pOid == TRUE) {
@@ -3952,7 +3953,11 @@ kalIndicateBssInfo (
             DBGLOG(REQ, WARN, ("cfg80211_inform_bss_frame() returned with NULL\n"));
         }
         else {
-            cfg80211_put_bss(bss);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+            cfg80211_put_bss(wiphy, bss);
+#else
+			cfg80211_put_bss(bss);
+#endif
         }
     }
 

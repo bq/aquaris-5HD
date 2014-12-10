@@ -38,7 +38,7 @@ endef
 
 # compatible version in both expand / not expand version
 define wildcard2
-$(strip $(if $(wildcard $(1)),$(wildcard $(1)),$(wildcard $(subst ],\],$(subst [,\[,$(1))))))
+$(strip $(foreach path,$(1),$(if $(wildcard $(path)),$(sort $(wildcard $(path))),$(sort $(wildcard $(subst ],\],$(subst [,\[,$(path))))))))
 endef
 
 # for make which won't expand [ ] sign

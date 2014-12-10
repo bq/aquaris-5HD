@@ -38,6 +38,7 @@
 #include <cust_eint.h>
 #include <cust_alsps.h>
 #include "cm36283.h"
+#include <linux/sched.h>
 /******************************************************************************
  * configuration
 *******************************************************************************/
@@ -57,13 +58,22 @@
 /******************************************************************************
  * extern functions
 *******************************************************************************/
-		extern void mt65xx_eint_unmask(unsigned int line);
-		extern void mt65xx_eint_mask(unsigned int line);
-		extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
-		extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
-		extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
-		extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
-
+#ifdef CUST_EINT_ALS_TYPE
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
+#else
+extern void mt65xx_eint_mask(unsigned int line);
+extern void mt65xx_eint_unmask(unsigned int line);
+extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+#endif
 /*----------------------------------------------------------------------------*/
 static int cm36283_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id); 
 static int cm36283_i2c_remove(struct i2c_client *client);
@@ -74,6 +84,7 @@ static int cm36283_i2c_resume(struct i2c_client *client);
 /*----------------------------------------------------------------------------*/
 static const struct i2c_device_id cm36283_i2c_id[] = {{CM36283_DEV_NAME,0},{}};
 static struct i2c_board_info __initdata i2c_cm36283={ I2C_BOARD_INFO(CM36283_DEV_NAME, 0x60)};
+static unsigned long long int_top_time = 0;
 /*----------------------------------------------------------------------------*/
 struct cm36283_priv {
 	struct alsps_hw  *hw;
@@ -103,6 +114,7 @@ struct cm36283_priv {
 	u16			als_value_num;
 	u32			als_level[C_CUST_ALS_LEVEL-1];
 	u32			als_value[C_CUST_ALS_LEVEL];
+	int			ps_cali;
 	
 	atomic_t	als_cmd_val;	/*the cmd value can't be read, stored in ram*/
 	atomic_t	ps_cmd_val; 	/*the cmd value can't be read, stored in ram*/
@@ -171,6 +183,45 @@ typedef enum {
     CMC_TRC_DEBUG   = 0x8000,
 } CMC_TRC;
 /*-----------------------------------------------------------------------------*/
+static int cm36283_enable_eint(struct i2c_client *client)
+{
+	//struct cm36283_priv *obj = i2c_get_clientdata(client);        
+
+	//g_cm36283_ptr = obj;
+	
+	mt_set_gpio_mode(GPIO_ALS_EINT_PIN, GPIO_ALS_EINT_PIN_M_EINT);
+	mt_set_gpio_dir(GPIO_ALS_EINT_PIN, GPIO_DIR_IN);
+	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, TRUE);
+	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP); 
+	
+#ifdef CUST_EINT_ALS_TYPE
+		mt_eint_unmask(CUST_EINT_ALS_NUM);
+#else
+		mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
+#endif
+
+    return 0;
+}
+
+static int cm36283_disable_eint(struct i2c_client *client)
+{
+	//struct cm36283_priv *obj = i2c_get_clientdata(client);        
+
+	//g_cm36283_ptr = obj;
+	
+	mt_set_gpio_mode(GPIO_ALS_EINT_PIN, GPIO_ALS_EINT_PIN_M_EINT);
+	mt_set_gpio_dir(GPIO_ALS_EINT_PIN, GPIO_DIR_IN);
+	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, FALSE);
+	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_DOWN); 
+
+#ifdef CUST_EINT_ALS_TYPE
+		mt_eint_mask(CUST_EINT_ALS_NUM);
+#else
+		mt65xx_eint_mask(CUST_EINT_ALS_NUM);
+#endif
+
+    return 0;
+}
 int CM36283_i2c_master_operate(struct i2c_client *client, const char *buf, int count, int i2c_flag)
 {
 	int res = 0;
@@ -193,7 +244,7 @@ int CM36283_i2c_master_operate(struct i2c_client *client, const char *buf, int c
 	APS_LOG("CM36283_i2c_master_operate i2c_flag command not support!\n");
 	break;
 	}
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -242,7 +293,14 @@ int cm36283_enable_ps(struct i2c_client *client, int enable)
 	u8 databuf[3];
 
 	if(enable == 1)
+	{
+		res = cm36283_enable_eint(client);
+		if(res!=0)
 		{
+			APS_ERR("disable eint fail: %d\n", res);
+			return res;
+		}	
+		
 			APS_LOG("cm36283_enable_ps enable_ps\n");
 			databuf[0]= CM36283_REG_PS_CONF3_MS;
 			res = CM36283_i2c_master_operate(client, databuf, 0x201, I2C_FLAG_READ);
@@ -307,6 +365,13 @@ int cm36283_enable_ps(struct i2c_client *client, int enable)
 				goto ENABLE_PS_EXIT_ERR;
 			}
 			atomic_set(&obj->ps_deb_on, 0);
+		
+		res = cm36283_disable_eint(client);
+		if(res!=0)
+		{
+			APS_ERR("disable eint fail: %d\n", res);
+			return res;
+		}
 		}
 	
 	return 0;
@@ -381,8 +446,8 @@ long cm36283_read_ps(struct i2c_client *client, u8 *data)
 {
 	long res;
 	u8 databuf[2];
-
-	APS_FUN(f);
+	struct cm36283_priv *obj = i2c_get_clientdata(client);
+	//APS_FUN(f);
 
 	databuf[0] = CM36283_REG_PS_DATA;
 	res = CM36283_i2c_master_operate(client, databuf, 0x201, I2C_FLAG_READ);
@@ -392,9 +457,12 @@ long cm36283_read_ps(struct i2c_client *client, u8 *data)
 		goto READ_PS_EXIT_ERR;
 	}
 	
-	APS_LOG("CM36283_REG_PS_DATA value value_low = %x, value_high = %x\n",databuf[0],databuf[1]);
+	//APS_LOG("CM36283_REG_PS_DATA value value_low = %x, value_high = %x\n",databuf[0],databuf[1]);
 
-	*data = databuf[0];
+	if(databuf[0] < obj->ps_cali)
+		*data = 0;
+	else
+		*data = databuf[0] - obj->ps_cali;
 	return 0;
 	READ_PS_EXIT_ERR:
 	return res;
@@ -405,7 +473,7 @@ long cm36283_read_als(struct i2c_client *client, u16 *data)
 	long res;
 	u8 databuf[2];
 
-	APS_FUN(f);
+	//APS_FUN(f);
 	
 	databuf[0] = CM36283_REG_ALS_DATA;
 	res = CM36283_i2c_master_operate(client, databuf, 0x201, I2C_FLAG_READ);
@@ -415,7 +483,7 @@ long cm36283_read_als(struct i2c_client *client, u16 *data)
 		goto READ_ALS_EXIT_ERR;
 	}
 	
-	APS_LOG("CM36283_REG_ALS_DATA value value_low = %x, value_high = %x\n",databuf[0],databuf[1]);
+	//APS_LOG("CM36283_REG_ALS_DATA value value_low = %x, value_high = %x\n",databuf[0],databuf[1]);
 
 	*data = ((databuf[1]<<8)|databuf[0]);
 	return 0;
@@ -524,6 +592,23 @@ static int cm36283_get_als_value(struct cm36283_priv *obj, u16 als)
 	
 		if(!invalid)
 		{
+		#if defined(MTK_AAL_SUPPORT)
+      	int level_high = obj->hw->als_level[idx];
+    		int level_low = (idx > 0) ? obj->hw->als_level[idx-1] : 0;
+        int level_diff = level_high - level_low;
+				int value_high = obj->hw->als_value[idx];
+        int value_low = (idx > 0) ? obj->hw->als_value[idx-1] : 0;
+        int value_diff = value_high - value_low;
+        int value = 0;
+        
+        if ((level_low >= level_high) || (value_low >= value_high))
+            value = value_low;
+        else
+            value = (level_diff * value_low + (als - level_low) * value_diff + ((level_diff + 1) >> 1)) / level_diff;
+
+		APS_DBG("ALS: %d [%d, %d] => %d [%d, %d] \n", als, level_low, level_high, value, value_low, value_high);
+		return value;
+		#endif
 			if (atomic_read(&obj->trace) & CMC_TRC_CVT_ALS)
 			{
 				APS_DBG("ALS: %05d => %05d\n", als, obj->hw->als_value[idx]);
@@ -968,7 +1053,7 @@ static void cm36283_eint_work(struct work_struct *work)
 	hwm_sensor_data sensor_data;
 	int res = 0;
 	//res = cm36283_check_intr(obj->client);
-
+	APS_LOG("cm36283 int top half time = %lld\n", int_top_time);
 #if 1
 	res = cm36283_check_intr(obj->client);
 	if(res != 0){
@@ -985,10 +1070,18 @@ static void cm36283_eint_work(struct work_struct *work)
 		  goto EXIT_INTR_ERR;
 		}
 #endif
+#ifdef CUST_EINT_ALS_TYPE
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
+#else
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
+#endif
 	return;
 	EXIT_INTR_ERR:
+#ifdef CUST_EINT_ALS_TYPE
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
+#else
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
+#endif
 	APS_ERR("cm36283_eint_work err: %d\n", res);
 }
 /*----------------------------------------------------------------------------*/
@@ -999,6 +1092,7 @@ static void cm36283_eint_func(void)
 	{
 		return;
 	}	
+	int_top_time = sched_clock();
 	schedule_work(&obj->eint_work);
 }
 
@@ -1013,12 +1107,21 @@ int cm36283_setup_eint(struct i2c_client *client)
 	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, TRUE);
 	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
+#ifdef CUST_EINT_ALS_TYPE
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, cm36283_eint_func, 0);
+#else
 	mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
 	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
 	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
 	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, cm36283_eint_func, 0);
+#endif
 
+#ifdef CUST_EINT_ALS_TYPE
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
+#else
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
+#endif
     return 0;
 }
 /*-------------------------------MISC device related------------------------------------------*/
@@ -1044,6 +1147,24 @@ static int cm36283_release(struct inode *inode, struct file *file)
 	return 0;
 }
 /************************************************************/
+static int set_psensor_threshold(struct i2c_client *client)
+{
+	struct cm36283_priv *obj = i2c_get_clientdata(client);
+	u8 databuf[3];    
+	int res = 0;
+	APS_ERR("set_psensor_threshold function high: 0x%x, low:0x%x\n",atomic_read(&obj->ps_thd_val_high),atomic_read(&obj->ps_thd_val_low));
+	databuf[0] = CM36283_REG_PS_THD;
+	databuf[1] = atomic_read(&obj->ps_thd_val_low);
+	databuf[2] = atomic_read(&obj->ps_thd_val_high);//threshold value need to confirm
+	res = CM36283_i2c_master_operate(client, databuf, 0x3, I2C_FLAG_WRITE);
+	if(res <= 0)
+	{
+		APS_ERR("i2c_master_send function err\n");
+		return -1;
+	}
+	return 0;
+
+}
 static long cm36283_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 		struct i2c_client *client = (struct i2c_client*)file->private_data;
@@ -1053,6 +1174,8 @@ static long cm36283_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned
 		int dat;
 		uint32_t enable;
 		int ps_result;
+		int ps_cali;
+		int threshold[2];
 		
 		switch (cmd)
 		{
@@ -1201,6 +1324,69 @@ static long cm36283_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned
 					err = -EFAULT;
 					goto err_out;
 				}			   
+				break;
+
+			case ALSPS_IOCTL_CLR_CALI:
+				if(copy_from_user(&dat, ptr, sizeof(dat)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				if(dat == 0)
+					obj->ps_cali = 0;
+				break;
+
+			case ALSPS_IOCTL_GET_CALI:
+				ps_cali = obj->ps_cali ;
+				if(copy_to_user(ptr, &ps_cali, sizeof(ps_cali)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
+
+			case ALSPS_IOCTL_SET_CALI:
+				if(copy_from_user(&ps_cali, ptr, sizeof(ps_cali)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+
+				obj->ps_cali = ps_cali;
+				break;
+
+			case ALSPS_SET_PS_THRESHOLD:
+				if(copy_from_user(threshold, ptr, sizeof(threshold)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				APS_ERR("%s set threshold high: 0x%x, low: 0x%x\n", __func__, threshold[0],threshold[1]); 
+				atomic_set(&obj->ps_thd_val_high,  (threshold[0]+obj->ps_cali));
+				atomic_set(&obj->ps_thd_val_low,  (threshold[1]+obj->ps_cali));//need to confirm
+
+				set_psensor_threshold(obj->client);
+				
+				break;
+				
+			case ALSPS_GET_PS_THRESHOLD_HIGH:
+				threshold[0] = atomic_read(&obj->ps_thd_val_high) - obj->ps_cali;
+				APS_ERR("%s get threshold high: 0x%x\n", __func__, threshold[0]); 
+				if(copy_to_user(ptr, &threshold[0], sizeof(threshold[0])))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
+				
+			case ALSPS_GET_PS_THRESHOLD_LOW:
+				threshold[0] = atomic_read(&obj->ps_thd_val_low) - obj->ps_cali;
+				APS_ERR("%s get threshold low: 0x%x\n", __func__, threshold[0]); 
+				if(copy_to_user(ptr, &threshold[0], sizeof(threshold[0])))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
 				break;
 			/*------------------------------------------------------------------------------------------*/
 			
@@ -1362,6 +1548,13 @@ static int cm36283_init_client(struct i2c_client *client)
 		return res;
 	}
 	
+	res = cm36283_disable_eint(client);
+	if(res!=0)
+	{
+		APS_ERR("disable eint fail: %d\n", res);
+		return res;
+	}	
+	
 	return CM36283_SUCCESS;
 	
 	EXIT_ERR:
@@ -1378,11 +1571,11 @@ int cm36283_ps_operate(void* self, uint32_t command, void* buff_in, int size_in,
 		int value;
 		hwm_sensor_data* sensor_data;
 		struct cm36283_priv *obj = (struct cm36283_priv *)self;		
-		APS_FUN(f);
+		//APS_FUN(f);
 		switch (command)
 		{
 			case SENSOR_DELAY:
-				APS_ERR("cm36283 ps delay command!\n");
+				//APS_ERR("cm36283 ps delay command!\n");
 				if((buff_in == NULL) || (size_in < sizeof(int)))
 				{
 					APS_ERR("Set delay parameter error!\n");
@@ -1391,7 +1584,7 @@ int cm36283_ps_operate(void* self, uint32_t command, void* buff_in, int size_in,
 				break;
 	
 			case SENSOR_ENABLE:
-				APS_ERR("cm36283 ps enable command!\n");
+				//APS_ERR("cm36283 ps enable command!\n");
 				if((buff_in == NULL) || (size_in < sizeof(int)))
 				{
 					APS_ERR("Enable sensor parameter error!\n");
@@ -1422,7 +1615,7 @@ int cm36283_ps_operate(void* self, uint32_t command, void* buff_in, int size_in,
 				break;
 	
 			case SENSOR_GET_DATA:
-				APS_ERR("cm36283 ps get data command!\n");
+				//APS_ERR("cm36283 ps get data command!\n");
 				if((buff_out == NULL) || (size_out< sizeof(hwm_sensor_data)))
 				{
 					APS_ERR("get sensor data parameter error!\n");
@@ -1461,11 +1654,11 @@ int cm36283_als_operate(void* self, uint32_t command, void* buff_in, int size_in
 		int value;
 		hwm_sensor_data* sensor_data;
 		struct cm36283_priv *obj = (struct cm36283_priv *)self;
-		APS_FUN(f);
+		//APS_FUN(f);
 		switch (command)
 		{
 			case SENSOR_DELAY:
-				APS_ERR("cm36283 als delay command!\n");
+				//APS_ERR("cm36283 als delay command!\n");
 				if((buff_in == NULL) || (size_in < sizeof(int)))
 				{
 					APS_ERR("Set delay parameter error!\n");
@@ -1474,7 +1667,7 @@ int cm36283_als_operate(void* self, uint32_t command, void* buff_in, int size_in
 				break;
 	
 			case SENSOR_ENABLE:
-				APS_ERR("cm36283 als enable command!\n");
+				//APS_ERR("cm36283 als enable command!\n");
 				if((buff_in == NULL) || (size_in < sizeof(int)))
 				{
 					APS_ERR("Enable sensor parameter error!\n");
@@ -1506,7 +1699,7 @@ int cm36283_als_operate(void* self, uint32_t command, void* buff_in, int size_in
 				break;
 	
 			case SENSOR_GET_DATA:
-				APS_ERR("cm36283 als get data command!\n");
+				//APS_ERR("cm36283 als get data command!\n");
 				if((buff_out == NULL) || (size_out< sizeof(hwm_sensor_data)))
 				{
 					APS_ERR("get sensor data parameter error!\n");
@@ -1522,11 +1715,7 @@ int cm36283_als_operate(void* self, uint32_t command, void* buff_in, int size_in
 					}
 					else
 					{
-						#if defined(MTK_AAL_SUPPORT)
-						sensor_data->values[0] = obj->als;
-						#else
 						sensor_data->values[0] = cm36283_get_als_value(obj, obj->als);
-						#endif
 						sensor_data->value_divide = 1;
 						sensor_data->status = SENSOR_STATUS_ACCURACY_MEDIUM;
 					}				
@@ -1585,6 +1774,7 @@ static int cm36283_i2c_probe(struct i2c_client *client, const struct i2c_device_
 	
 	obj->enable = 0;
 	obj->pending_intr = 0;
+	obj->ps_cali = 0;
 	obj->als_level_num = sizeof(obj->hw->als_level)/sizeof(obj->hw->als_level[0]);
 	obj->als_value_num = sizeof(obj->hw->als_value)/sizeof(obj->hw->als_value[0]);
 	/*-----------------------------value need to be confirmed-----------------------------------------*/
@@ -1745,7 +1935,7 @@ static int __init cm36283_init(void)
 {
 	//APS_FUN();
 	struct alsps_hw *hw = get_cust_alsps_hw();
-	APS_LOG("%s: i2c_number=%d\n", __func__,hw->i2c_num); 
+	APS_LOG("%s: i2c_number=%d, i2c_addr: 0x%x\n", __func__, hw->i2c_num, hw->i2c_addr[0]);
 	i2c_register_board_info(hw->i2c_num, &i2c_cm36283, 1);
 	if(platform_driver_register(&cm36283_alsps_driver))
 	{

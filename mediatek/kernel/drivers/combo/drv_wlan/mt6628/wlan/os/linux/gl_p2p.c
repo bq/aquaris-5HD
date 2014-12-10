@@ -742,7 +742,11 @@ static struct cfg80211_ops mtk_p2p_config_ops = {
 #endif
     .set_wiphy_params = mtk_p2p_cfg80211_set_wiphy_params,
     .del_station = mtk_p2p_cfg80211_del_station,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)    
+    .set_monitor_channel = mtk_p2p_cfg80211_set_channel,
+#else    
     .set_channel = mtk_p2p_cfg80211_set_channel,
+#endif
     .set_bitrate_mask = mtk_p2p_cfg80211_set_bitrate_mask,
     .mgmt_frame_register = mtk_p2p_cfg80211_mgmt_frame_register,
     .get_station            = mtk_p2p_cfg80211_get_station,
@@ -925,6 +929,11 @@ const struct iw_handler_def mtk_p2p_wext_handler_def = {
 #endif
 };
 
+#ifdef CONFIG_PM
+static const struct wiphy_wowlan_support p2p_wowlan_support = {
+		.flags = WIPHY_WOWLAN_DISCONNECT,
+	};
+#endif
 /*******************************************************************************
 *                                 M A C R O S
 ********************************************************************************
@@ -1309,7 +1318,6 @@ p2pNetRegister(
     )
 {
     BOOLEAN fgDoRegister = FALSE;
-    BOOLEAN fgRollbackRtnlLock = FALSE;
     BOOLEAN ret;
 
     GLUE_SPIN_LOCK_DECLARATION();
@@ -1328,12 +1336,7 @@ p2pNetRegister(
     if(!fgDoRegister) {
         return TRUE;
     }
-
-    if(fgIsRtnlLockAcquired && rtnl_is_locked()) {
-        fgRollbackRtnlLock = TRUE;
-        rtnl_unlock();
-    }
-
+	
     /* Here are functions which need rtnl_lock */
     wiphy_register(prGlueInfo->prP2PInfo->wdev.wiphy);
 
@@ -1353,11 +1356,6 @@ p2pNetRegister(
         prGlueInfo->prAdapter->rP2PNetRegState = ENUM_NET_REG_STATE_REGISTERED;
         ret = TRUE;
     }
-
-    if(fgRollbackRtnlLock) {
-        rtnl_lock();
-    }
-
     return ret;
 }
 
@@ -1368,7 +1366,6 @@ p2pNetUnregister(
     )
 {
     BOOLEAN fgDoUnregister = FALSE;
-    BOOLEAN fgRollbackRtnlLock = FALSE;
 
     GLUE_SPIN_LOCK_DECLARATION();
 
@@ -1392,21 +1389,11 @@ p2pNetUnregister(
     }
 
     netif_tx_stop_all_queues(prGlueInfo->prP2PInfo->prDevHandler);
-
-    if(fgIsRtnlLockAcquired && rtnl_is_locked()) {
-        fgRollbackRtnlLock = TRUE;
-        rtnl_unlock();
-    }
-    /* Here are functions which need rtnl_lock */
-
+	DBGLOG(P2P, INFO, ("P2P unregister_netdev 0x%p\n",
+			prGlueInfo->prP2PInfo->prDevHandler));
     unregister_netdev(prGlueInfo->prP2PInfo->prDevHandler);
 
     wiphy_unregister(prGlueInfo->prP2PInfo->wdev.wiphy);
-
-    if(fgRollbackRtnlLock) {
-        rtnl_lock();
-    }
-
     prGlueInfo->prAdapter->rP2PNetRegState = ENUM_NET_REG_STATE_UNREGISTERED;
 
     return TRUE;
@@ -1541,7 +1528,9 @@ glRegisterP2P(
     prGlueInfo->prP2PInfo->wdev.wiphy->max_remain_on_channel_duration = 5000;
     prGlueInfo->prP2PInfo->wdev.wiphy->n_cipher_suites = 5;
 	prGlueInfo->prP2PInfo->wdev.wiphy->cipher_suites = (const u32*)cipher_suites;
-	prGlueInfo->prP2PInfo->wdev.wiphy->flags = WIPHY_FLAG_CUSTOM_REGULATORY | WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
+	prGlueInfo->prP2PInfo->wdev.wiphy->flags = WIPHY_FLAG_CUSTOM_REGULATORY | WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL | 
+						   WIPHY_FLAG_HAVE_AP_SME;
+	prGlueInfo->prP2PInfo->wdev.wiphy->ap_sme_capa = 1;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32)
     prGlueInfo->prP2PInfo->wdev.wiphy->max_scan_ssids = MAX_SCAN_LIST_NUM;
@@ -1549,6 +1538,10 @@ glRegisterP2P(
     prGlueInfo->prP2PInfo->wdev.wiphy->signal_type = CFG80211_SIGNAL_TYPE_MBM;
 #endif
 
+#ifdef CONFIG_PM
+	kalMemCopy(&(prGlueInfo->prP2PInfo->wdev.wiphy->wowlan),
+		&p2p_wowlan_support, sizeof(struct wiphy_wowlan_support));
+#endif
 #if 0
     /* 2. Register WIPHY */
     if(wiphy_register(prGlueInfo->prP2PInfo->wdev.wiphy) < 0) {

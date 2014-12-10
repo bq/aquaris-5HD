@@ -14,6 +14,14 @@
 
 /*
 ** $Log: que_mgt.c $
+**
+** 05 21 2013 yuche.tsai
+** [ALPS00625499] [GN_WIFI]wifi????????
+** Fix compile warning.
+**
+** 05 06 2013 yuche.tsai
+** [ALPS00625499] [GN_WIFI]wifi????????
+** Fix p2p device interface & group interface may conflict issue.
  *
  * 03 02 2012 terry.wu
  * NULL
@@ -566,6 +574,21 @@ qmInit(
     prAdapter->rWifiVar.fgSupportULPSMP = FALSE;
 #endif
 
+#if CFG_SUPPORT_RX_SGI
+    prAdapter->rWifiVar.u8SupportRxSgi20 = 0;
+    prAdapter->rWifiVar.u8SupportRxSgi40 = 0;
+#else
+    prAdapter->rWifiVar.u8SupportRxSgi20 = 2;
+    prAdapter->rWifiVar.u8SupportRxSgi40 = 2;
+#endif
+
+#if CFG_SUPPORT_RX_HT_GF
+    prAdapter->rWifiVar.u8SupportRxGf = 0;
+#else
+    prAdapter->rWifiVar.u8SupportRxGf = 2;
+#endif
+
+
     //4 <2> Initialize other TX queues (queues not in STA_RECs)
     for(u4QueArrayIdx = 0; u4QueArrayIdx < NUM_OF_PER_TYPE_TX_QUEUES; u4QueArrayIdx++){
         QUEUE_INITIALIZE(&(prQM->arTxQueue[u4QueArrayIdx]));
@@ -781,7 +804,7 @@ qmActivateStaRec(
     }
 #endif
 
-    DBGLOG(QM, INFO, ("QM: +STA[%ld]\n", prStaRec->ucIndex));
+    DBGLOG(QM, INFO, ("QM: +STA[%u]\n", prStaRec->ucIndex));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1396,7 +1419,7 @@ qmEnqueueTxPackets(
             0                                           /* PS Session ID */
         );
 
-        //4 <4> Enqueue the packet
+        //4 <4> Enqueue the packet to different AC queue (max 5 AC queues)
         QUEUE_INSERT_TAIL(prTxQue, (P_QUE_ENTRY_T)prCurrentMsduInfo);
 #if QM_TC_RESOURCE_EMPTY_COUNTER
         {
@@ -1411,7 +1434,7 @@ qmEnqueueTxPackets(
                         prQM->au4QmTcResourceEmptyCounter[prCurrentMsduInfo->ucNetworkType][ucTC]));
 			    */
             }
-            
+
         }
 #endif
 
@@ -1423,7 +1446,7 @@ qmEnqueueTxPackets(
 
 #endif
 
-        DBGLOG(QM, LOUD, ("Current queue length = %u\n", prTxQue->u4NumElem));
+        DBGLOG(QM, LOUD, ("Current queue length = %lu\n", prTxQue->u4NumElem));
     }while(prNextMsduInfo);
 
     if(  QUEUE_IS_NOT_EMPTY(&rNotEnqueuedQue) ) {
@@ -1545,7 +1568,7 @@ qmDequeueTxPacketsFromPerStaQueues(
     BOOLEAN         fgChangeHeadSta;    /* Whether a new head STA shall be determined at the end of the function */
     P_QUE_MGT_T prQM = &prAdapter->rQM;
 
-    PUINT_8         pucFreeQuota;
+    PUINT_8         pucFreeQuota = NULL;
 
     DBGLOG(QM, LOUD, ("Enter qmDequeueTxPacketsFromPerStaQueues (TC = %u)\n", ucTC));
 
@@ -1568,7 +1591,7 @@ qmDequeueTxPacketsFromPerStaQueues(
     pu4HeadStaRecIndex = &(prQM->au4HeadStaRecIndex[ucTC]);
     pu4HeadStaRecForwardCount = &(prQM->au4ForwardCount[ucTC]);
 
-    DBGLOG(QM, LOUD, ("(Fairness) TID = %u Init Head STA = %u Resource = %u\n",
+    DBGLOG(QM, LOUD, ("(Fairness) TID = %u Init Head STA = %lu Resource = %lu\n",
         ucTC, *pu4HeadStaRecIndex, u4Resource));
 
 
@@ -1738,7 +1761,7 @@ qmDequeueTxPacketsFromPerStaQueues(
             if(prStaRec->fgIsInPS && (ucTC!=TC4_INDEX)) {
                 ASSERT(pucFreeQuota);
                 ASSERT(*pucFreeQuota>0);
-                if(*pucFreeQuota>0) {
+                if ((pucFreeQuota) && (*pucFreeQuota>0)) {
                     *pucFreeQuota = *pucFreeQuota - 1;
                 }
             }
@@ -2141,20 +2164,21 @@ qmDequeueTxPackets(
 
     prReturnedPacketListHead = NULL;
 
+    /* dequeue packets from different AC queue based on available aucFreeBufferCount */
     /* TC0 to TC4: AC0~AC3, 802.1x (commands packets are not handled by QM) */
     for(i = TC4_INDEX; i >= TC0_INDEX; i--){
-        DBGLOG(QM, LOUD, ("Dequeue packets from Per-STA queue[%u]\n", i));
+        DBGLOG(QM, LOUD, ("Dequeue packets from Per-STA queue[%ld]\n", i));
 
         qmDequeueTxPacketsFromPerStaQueues(
             prAdapter,
             &rReturnedQue,
             (UINT_8)i,
-            prTcqStatus->aucFreeBufferCount[i],
+            prTcqStatus->aucFreeBufferCount[i], /* maximum dequeue number */
             prTcqStatus->aucMaxNumOfBuffer[i]
             );
 
         /* The aggregate number of dequeued packets */
-        DBGLOG(QM, LOUD, ("DQA)[%u](%lu)\n", i, rReturnedQue.u4NumElem));
+        DBGLOG(QM, LOUD, ("DQA)[%ld](%lu)\n", i, rReturnedQue.u4NumElem));
     }
 
 
@@ -2166,7 +2190,7 @@ qmDequeueTxPackets(
             prTcqStatus->aucFreeBufferCount[TC5_INDEX]
             );
 
-    DBGLOG(QM, LOUD, ("Current total number of dequeued packets = %u\n", rReturnedQue.u4NumElem));
+    DBGLOG(QM, LOUD, ("Current total number of dequeued packets = %lu\n", rReturnedQue.u4NumElem));
 
     if (QUEUE_IS_NOT_EMPTY(&rReturnedQue)){
         prReturnedPacketListHead = (P_MSDU_INFO_T)QUEUE_GET_HEAD(&rReturnedQue);
@@ -2617,6 +2641,7 @@ qmHandleRxPackets(
     P_HIF_RX_HEADER_T   prHifRxHdr;
     QUE_T               rReturnedQue;
     PUINT_8             pucEthDestAddr;
+    BOOLEAN             fgIsBMC;
 
     //DbgPrint("QM: Enter qmHandleRxPackets()\n");
 
@@ -2639,7 +2664,7 @@ qmHandleRxPackets(
         /* Decide the Destination */
 #if CFG_RX_PKTS_DUMP
         if (prAdapter->rRxCtrl.u4RxPktsDumpTypeMask & BIT(HIF_RX_PKT_TYPE_DATA)) {
-            DBGLOG(SW4, INFO, ("QM RX DATA: net %u sta idx %u wlan idx %u ssn %u tid %u ptype %u 11 %u\n",
+            DBGLOG(SW4, INFO, ("QM RX DATA: net %lu sta idx %u wlan idx %u ssn %lu tid %lu ptype %u 11 %u\n",
                     HIF_RX_HDR_GET_NETWORK_IDX(prHifRxHdr),
                     prHifRxHdr->ucStaRecIdx,
                     prCurrSwRfb->ucWlanIdx,
@@ -2652,6 +2677,7 @@ qmHandleRxPackets(
         }
 #endif
 
+        fgIsBMC = FALSE;
         if (!HIF_RX_HDR_GET_80211_FLAG(prHifRxHdr)){
 
             UINT_8 ucNetTypeIdx;
@@ -2663,6 +2689,10 @@ qmHandleRxPackets(
             prBssInfo = &(prAdapter->rWifiVar.arBssInfo[ucNetTypeIdx]);
             //DBGLOG_MEM8(QM, TRACE,prCurrSwRfb->pvHeader, 16);
             //
+
+            if (IS_BMCAST_MAC_ADDR(pucEthDestAddr) && (OP_MODE_ACCESS_POINT != prBssInfo->eCurrentOPMode)) {
+                fgIsBMC = TRUE;
+            }
 
             if( prAdapter->rRxCtrl.rFreeSwRfbList.u4NumElem
                     > (CFG_RX_MAX_PKT_NUM - CFG_NUM_OF_QM_RX_PKT_NUM)  ) {
@@ -2703,7 +2733,7 @@ qmHandleRxPackets(
             qmProcessBarFrame(prAdapter, prCurrSwRfb, &rReturnedQue);
         }
         /* Reordering is not required for this packet, return it without buffering */
-        else if(!HIF_RX_HDR_GET_REORDER_FLAG(prHifRxHdr)){
+        else if(!HIF_RX_HDR_GET_REORDER_FLAG(prHifRxHdr) || fgIsBMC){
 #if 0
             if (!HIF_RX_HDR_GET_80211_FLAG(prHifRxHdr)){
                 UINT_8 ucNetTypeIdx;
@@ -4438,12 +4468,13 @@ qmGetFrameAction(
                  }
              }
              else if (u2TxFrameCtrl == MAC_FRAME_PROBE_RSP) {
-                 if( prBssInfo->fgIsNetAbsent) {
+                 if ((prBssInfo->fgIsNetAbsent) && (!p2pFuncIsChannelGrant(prAdapter))) {
                      break;
                  }
+                 return FRAME_ACTION_TX_PKT;
             }
             else if (u2TxFrameCtrl == MAC_FRAME_DEAUTH) {
-                if( prBssInfo->fgIsNetAbsent) {
+                if (prBssInfo->fgIsNetAbsent) {
                     break;
                 }
                 DBGLOG(P2P, LOUD, ("Sending DEAUTH Frame\n"));

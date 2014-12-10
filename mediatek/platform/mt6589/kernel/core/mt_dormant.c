@@ -575,8 +575,14 @@ extern void __inner_clean_dcache_L1(void);
 extern void __inner_clean_dcache_L2(void);
 extern void __inner_clean_dcache_all(void);
 
+#if defined (CONFIG_MTK_ETM)
 extern void trace_stop_dormant(void);
 extern void trace_start_dormant(void);
+#else //#if defined (CONFIG_MTK_ETM)
+void trace_stop_dormant(void) {}
+void trace_start_dormant(void) {}
+#endif //#if defined (CONFIG_MTK_ETM)
+
 
 //for save/restore breakpoint and watchpoint
 extern void save_dbg_regs(unsigned int data[]);
@@ -907,8 +913,8 @@ static void restore_gic_distributor_shared(u32 *pointer, unsigned gic_distributo
         copy_words(id->pending.set + 1, pointer, num_spis / 32);
 
         if (reg_read( IO_VIRT_TO_PHYS(SPM_SLEEP_ISR_RAW_STA) ) & WAKE_SRC_KP) {
-            i = MT6589_KP_IRQ_ID / GIC_PRIVATE_SIGNALS;
-            j = MT6589_KP_IRQ_ID % GIC_PRIVATE_SIGNALS;
+            i = MT_KP_IRQ_ID / GIC_PRIVATE_SIGNALS;
+            j = MT_KP_IRQ_ID % GIC_PRIVATE_SIGNALS;
             id->pending.set[i] |= (1 << j);
         }
         if (reg_read( IO_VIRT_TO_PHYS(SPM_SLEEP_ISR_RAW_STA) ) & WAKE_SRC_MD_WDT) {

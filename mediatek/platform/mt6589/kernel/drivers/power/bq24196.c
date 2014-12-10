@@ -22,6 +22,10 @@
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
 
+#ifdef MTK_BATTERY_I2C_CUST
+#include <cust_battery_i2c.h>
+#endif
+
 #include "bq24196.h"
 
 /**********************************************************
@@ -69,7 +73,8 @@ int bq24196_read_byte(kal_uint8 cmd, kal_uint8 *returnData)
     
     //new_client->addr = ((new_client->addr) & I2C_MASK_FLAG) | I2C_WR_FLAG;    
     new_client->ext_flag=((new_client->ext_flag ) & I2C_MASK_FLAG ) | I2C_WR_FLAG | I2C_DIRECTION_FLAG;
-
+    new_client->ext_flag |= I2C_POLLING_FLAG;
+    
     cmd_buf[0] = cmd;
     ret = i2c_master_send(new_client, &cmd_buf[0], (1<<8 | 1));
     if (ret < 0) 
@@ -102,7 +107,8 @@ int bq24196_write_byte(kal_uint8 cmd, kal_uint8 writeData)
     write_data[1] = writeData;
 
     new_client->ext_flag=((new_client->ext_flag ) & I2C_MASK_FLAG ) | I2C_DIRECTION_FLAG;
-	
+    new_client->ext_flag |= I2C_POLLING_FLAG;
+	  
     ret = i2c_master_send(new_client, write_data, 2);
     if (ret < 0) 
     {
@@ -268,6 +274,17 @@ void bq24196_set_ichg(kal_uint32 val)
                                     (kal_uint8)(val),
                                     (kal_uint8)(CON2_ICHG_MASK),
                                     (kal_uint8)(CON2_ICHG_SHIFT)
+                                    );
+}
+
+void bq24196_set_force_20pct(kal_uint32 val)
+{
+    kal_uint32 ret=0;    
+
+    ret=bq24196_config_interface(   (kal_uint8)(bq24196_CON2), 
+                                    (kal_uint8)(val),
+                                    (kal_uint8)(CON2_FORCE_20PCT_MASK),
+                                    (kal_uint8)(CON2_FORCE_20PCT_SHIFT)
                                     );
 }
 
@@ -504,6 +521,7 @@ void bq24196_dump_register(void)
     }
 }
 
+extern int g_pmic_init_for_bq24196;
 static int bq24196_driver_probe(struct i2c_client *client, const struct i2c_device_id *id) 
 {             
     int err=0; 
@@ -519,6 +537,7 @@ static int bq24196_driver_probe(struct i2c_client *client, const struct i2c_devi
     new_client = client;    
 
     //---------------------
+    g_pmic_init_for_bq24196 = 1;
 
     return 0;                                                                                       
 
@@ -592,7 +611,10 @@ static struct platform_driver bq24196_user_space_driver = {
     },
 };
 
+#ifndef BQ24196_BUSNUM
 #define BQ24196_BUSNUM 4
+#endif
+
 static struct i2c_board_info __initdata i2c_bq24196 = { I2C_BOARD_INFO("bq24196", (0xd6>>1))};
 
 static int __init bq24196_init(void)

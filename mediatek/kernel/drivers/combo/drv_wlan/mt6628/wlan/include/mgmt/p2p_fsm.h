@@ -624,8 +624,8 @@ struct _WFD_CFG_SETTINGS_T {
     UINT_16 u2WfdExtendCap;
     UINT_8 aucWfdCoupleSinkAddress[MAC_ADDR_LEN];
     UINT_8 aucWfdAssociatedBssid[MAC_ADDR_LEN];
-    UINT_8 aucWfdVideolp[4];
-    UINT_8 aucWfdAudiolp[4];
+    UINT_8 aucWfdVideoIp[4];
+    UINT_8 aucWfdAudioIp[4];
     UINT_16 u2WfdVideoPort;
     UINT_16 u2WfdAudioPort;
     UINT_32 u4WfdFlag;
@@ -641,7 +641,8 @@ struct _WFD_CFG_SETTINGS_T {
     UINT_8   aucWfdLocalIp[4];
     UINT_16  u2WfdLifetimeAc2; /* Unit is 2 TU */
     UINT_16  u2WfdLifetimeAc3; /* Unit is 2 TU */
-    UINT_8   aucReverved2[56];
+    UINT_16  u2WfdCounterThreshold;  /* Unit is ms */
+    UINT_8   aucReverved2[54];
     /* Group 2 64 bytes */
     UINT_8   aucReverved3[64];
     /* Group 3 64 bytes */
@@ -1819,6 +1820,8 @@ struct _P2P_SPECIFIC_BSS_INFO_T {
     PARAM_CUSTOM_NOA_PARAM_STRUC_T rNoaParam;
     PARAM_CUSTOM_OPPPS_PARAM_STRUC_T rOppPsParam;
 
+    UINT_16                 u2WpaIeLen;
+    UINT_8                  aucWpaIeBuffer[ELEM_HDR_LEN + ELEM_MAX_LEN_WPA];
 };
 
 

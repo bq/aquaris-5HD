@@ -69,7 +69,10 @@ static struct i2c_board_info __initdata i2c_kxtik1004={ I2C_BOARD_INFO(KXTIK1004
 static int kxtik1004_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id); 
 static int kxtik1004_i2c_remove(struct i2c_client *client);
 static int kxtik1004_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
-
+#ifndef USE_EARLY_SUSPEND
+static int kxtik1004_suspend(struct i2c_client *client, pm_message_t msg);
+static int kxtik1004_resume(struct i2c_client *client);
+#endif
 /*----------------------------------------------------------------------------*/
 typedef enum {
     ADX_TRC_FILTER  = 0x01,
@@ -121,7 +124,7 @@ struct kxtik1004_i2c_data {
     struct data_filter      fir;
 #endif 
     /*early suspend*/
-#if defined(CONFIG_HAS_EARLYSUSPEND)
+#ifdef USE_EARLY_SUSPEND
     struct early_suspend    early_drv;
 #endif     
 };
@@ -134,7 +137,7 @@ static struct i2c_driver kxtik1004_i2c_driver = {
 	.probe      		= kxtik1004_i2c_probe,
 	.remove    			= kxtik1004_i2c_remove,
 	.detect				= kxtik1004_i2c_detect,
-#if !defined(CONFIG_HAS_EARLYSUSPEND)    
+#if !defined(USE_EARLY_SUSPEND)    
     .suspend            = kxtik1004_suspend,
     .resume             = kxtik1004_resume,
 #endif
@@ -147,9 +150,13 @@ static struct i2c_client *kxtik1004_i2c_client = NULL;
 static struct platform_driver kxtik1004_gsensor_driver;
 static struct kxtik1004_i2c_data *obj_i2c_data = NULL;
 static bool sensor_power = true;
+static int sensor_suspend = 0;
 static GSENSOR_VECTOR3D gsensor_gain;
 static char selftestRes[8]= {0}; 
+static DEFINE_MUTEX(kxtik1004_i2c_mutex);
+static DEFINE_MUTEX(kxtik1004_op_mutex);
 
+static bool enable_status = false;
 
 /*----------------------------------------------------------------------------*/
 #define GSE_TAG                  "[Gsensor] "
@@ -163,6 +170,87 @@ static struct data_resolution kxtik1004_data_resolution[1] = {
 };
 /*----------------------------------------------------------------------------*/
 static struct data_resolution kxtik1004_offset_resolution = {{15, 6}, 64};
+/*----------------------------------------------------------------------------*/
+static int kxt_i2c_read_block(struct i2c_client *client, u8 addr, u8 *data, u8 len)
+{
+    u8 beg = addr;
+	int err;
+	struct i2c_msg msgs[2]={{0},{0}};
+	
+	mutex_lock(&kxtik1004_i2c_mutex);
+	
+	msgs[0].addr = client->addr;
+	msgs[0].flags = 0;
+	msgs[0].len =1;
+	msgs[0].buf = &beg;
+
+	msgs[1].addr = client->addr;
+	msgs[1].flags = I2C_M_RD;
+	msgs[1].len =len;
+	msgs[1].buf = data;
+	
+	if (!client)
+	{
+	    mutex_unlock(&kxtik1004_i2c_mutex);
+		return -EINVAL;
+	}
+	else if (len > C_I2C_FIFO_SIZE) 
+	{
+		GSE_ERR(" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
+		mutex_unlock(&kxtik1004_i2c_mutex);
+		return -EINVAL;
+	}
+	err = i2c_transfer(client->adapter, msgs, sizeof(msgs)/sizeof(msgs[0]));
+	if (err != 2) 
+	{
+		GSE_ERR("i2c_transfer error: (%d %p %d) %d\n",addr, data, len, err);
+		err = -EIO;
+	} 
+	else 
+	{
+		err = 0;
+	}
+	mutex_unlock(&kxtik1004_i2c_mutex);
+	return err;
+
+}
+
+static int kxt_i2c_write_block(struct i2c_client *client, u8 addr, u8 *data, u8 len)
+{   /*because address also occupies one byte, the maximum length for write is 7 bytes*/
+    int err, idx, num;
+    char buf[C_I2C_FIFO_SIZE];
+    err =0;
+	mutex_lock(&kxtik1004_i2c_mutex);
+    if (!client)
+    {
+        mutex_unlock(&kxtik1004_i2c_mutex);
+        return -EINVAL;
+    }
+    else if (len >= C_I2C_FIFO_SIZE) 
+	{        
+        GSE_ERR(" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
+		mutex_unlock(&kxtik1004_i2c_mutex);
+        return -EINVAL;
+    }    
+
+    num = 0;
+    buf[num++] = addr;
+    for (idx = 0; idx < len; idx++)
+    {
+        buf[num++] = data[idx];
+    }
+
+    err = i2c_master_send(client, buf, num);
+    if (err < 0)
+	{
+        GSE_ERR("send command error!!\n");
+		mutex_unlock(&kxtik1004_i2c_mutex);
+        return -EFAULT;
+    } 
+	mutex_unlock(&kxtik1004_i2c_mutex);
+    return err;
+}
+/*----------------------------------------------------------------------------*/
 /*----------------------------------------------------------------------------*/
 static int KXTIK1004_SetPowerMode(struct i2c_client *client, bool enable);
 /*--------------------KXTIK1004 power control function----------------------------------*/
@@ -204,7 +292,7 @@ static int KXTIK1004_SetDataResolution(struct kxtik1004_i2c_data *obj)
 
 	KXTIK1004_SetPowerMode(obj->client, false);
 
-	if(hwmsen_read_block(obj->client, KXTIK1004_REG_DATA_RESOLUTION, databuf, 0x01))
+	if(kxt_i2c_read_block(obj->client, KXTIK1004_REG_DATA_RESOLUTION, databuf, 0x01))
 	{
 		printk("kxtik1004 read Dataformat failt \n");
 		return KXTIK1004_ERR_I2C;
@@ -212,13 +300,10 @@ static int KXTIK1004_SetDataResolution(struct kxtik1004_i2c_data *obj)
 
 	databuf[0] &= ~KXTIK1004_RANGE_DATA_RESOLUTION_MASK;
 	databuf[0] |= KXTIK1004_RANGE_DATA_RESOLUTION_MASK;//12bit
-	databuf[1] = databuf[0];
-	databuf[0] = KXTIK1004_REG_DATA_RESOLUTION;
 
+	err = kxt_i2c_write_block(obj->client, KXTIK1004_REG_DATA_RESOLUTION, databuf, 0x1);
 
-	err = i2c_master_send(obj->client, databuf, 0x2);
-
-	if(err <= 0)
+	if(err < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
@@ -238,16 +323,12 @@ static int KXTIK1004_ReadData(struct i2c_client *client, s16 data[KXTIK1004_AXES
 	u8 buf[KXTIK1004_DATA_LEN] = {0};
 	int err = 0;
 	int i;
-	//int tmp=0;
-	//u8 ofs[3];
-
-
 
 	if(NULL == client)
 	{
 		err = -EINVAL;
 	}
-	else if((err = hwmsen_read_block(client, addr, buf, 0x06)))
+	else if((err = kxt_i2c_read_block(client, addr, buf, 0x06)))
 	{
 		GSE_ERR("error: %d\n", err);
 	}
@@ -358,7 +439,7 @@ static int KXTIK1004_ResetCalibration(struct i2c_client *client)
 static int KXTIK1004_ReadCalibration(struct i2c_client *client, int dat[KXTIK1004_AXES_NUM])
 {
     struct kxtik1004_i2c_data *obj = i2c_get_clientdata(client);
-    //int err;
+    int  err = 0;
     int mul;
 
 	#ifdef SW_CALIBRATION
@@ -375,22 +456,22 @@ static int KXTIK1004_ReadCalibration(struct i2c_client *client, int dat[KXTIK100
     dat[obj->cvt.map[KXTIK1004_AXIS_Y]] = obj->cvt.sign[KXTIK1004_AXIS_Y]*(obj->offset[KXTIK1004_AXIS_Y]*mul + obj->cali_sw[KXTIK1004_AXIS_Y]);
     dat[obj->cvt.map[KXTIK1004_AXIS_Z]] = obj->cvt.sign[KXTIK1004_AXIS_Z]*(obj->offset[KXTIK1004_AXIS_Z]*mul + obj->cali_sw[KXTIK1004_AXIS_Z]);                        
                                        
-    return 0;
+    return err;
 }
 /*----------------------------------------------------------------------------*/
 static int KXTIK1004_ReadCalibrationEx(struct i2c_client *client, int act[KXTIK1004_AXES_NUM], int raw[KXTIK1004_AXES_NUM])
 {  
 	/*raw: the raw calibration data; act: the actual calibration data*/
 	struct kxtik1004_i2c_data *obj = i2c_get_clientdata(client);
-	//int err;
+	int err;
 	int mul;
-
+	err = 0;
  
 
 	#ifdef SW_CALIBRATION
 		mul = 0;//only SW Calibration, disable HW Calibration
 	#else
-		if(err = KXTIK1004_ReadOffset(client, obj->offset))
+		if((err = KXTIK1004_ReadOffset(client, obj->offset)))
 		{
 			GSE_ERR("read offset fail, %d\n", err);
 			return err;
@@ -412,7 +493,7 @@ static int KXTIK1004_ReadCalibrationEx(struct i2c_client *client, int act[KXTIK1
 static int KXTIK1004_WriteCalibration(struct i2c_client *client, int dat[KXTIK1004_AXES_NUM])
 {
 	struct kxtik1004_i2c_data *obj = i2c_get_clientdata(client);
-	int err;
+	int err = 0;
 	int cali[KXTIK1004_AXES_NUM], raw[KXTIK1004_AXES_NUM];
 	//int lsb = kxtik1004_offset_resolution.sensitivity;
 	//int divisor = obj->reso->sensitivity/lsb;
@@ -457,7 +538,7 @@ static int KXTIK1004_WriteCalibration(struct i2c_client *client, int dat[KXTIK10
 		obj->offset[KXTIK1004_AXIS_X], obj->offset[KXTIK1004_AXIS_Y], obj->offset[KXTIK1004_AXIS_Z],
 		obj->cali_sw[KXTIK1004_AXIS_X], obj->cali_sw[KXTIK1004_AXIS_Y], obj->cali_sw[KXTIK1004_AXIS_Z]);
 
-	if(err = hwmsen_write_block(obj->client, KXTIK1004_REG_OFSX, obj->offset, KXTIK1004_AXES_NUM))
+	if((err = kxt_i2c_write_block(obj->client, KXTIK1004_REG_OFSX, obj->offset, KXTIK1004_AXES_NUM))<0)
 	{
 		GSE_ERR("write offset fail: %d\n", err);
 		return err;
@@ -473,36 +554,29 @@ static int KXTIK1004_CheckDeviceID(struct i2c_client *client)
 	int res = 0;
 
 	memset(databuf, 0, sizeof(u8)*10);    
-	databuf[0] = KXTIK1004_REG_DEVID;   
 
-	res = i2c_master_send(client, databuf, 0x1);
-	if(res <= 0)
+	res = kxt_i2c_read_block(client, KXTIK1004_REG_DEVID, databuf, 0x1);
+	if(res < 0)
 	{
 		goto exit_KXTIK1004_CheckDeviceID;
 	}
-	
-	udelay(500);
 
-	databuf[0] = 0x0;        
-	res = i2c_master_recv(client, databuf, 0x01);
-	if(res <= 0)
+	if(databuf[0] == KXTIK1004_DEVICE_ID)
 	{
-		goto exit_KXTIK1004_CheckDeviceID;
+		GSE_LOG("KXTIK1004_CheckDeviceID 0x%x pass!\n ", databuf[0]);
 	}
-	
-
-	if(false)
+	else if(databuf[0] == KXCJK1013_DEVICE_ID)
 	{
-		printk("KXTIK1004_CheckDeviceID 0x%x failt!\n ", databuf[0]);
-		return KXTIK1004_ERR_IDENTIFICATION;
+		GSE_LOG("KXCJK1013_CheckDeviceID 0x%x pass!\n ", databuf[0]);/*because KXCJK-1013 use same driver with KXTIK1004*/
 	}
 	else
 	{
-		printk("KXTIK1004_CheckDeviceID 0x%x pass!\n ", databuf[0]);
+		GSE_LOG("KXTIK1004_CheckDeviceID 0x%x failt!\n ", databuf[0]);
+		return KXTIK1004_ERR_IDENTIFICATION;
 	}
-	
+
 	exit_KXTIK1004_CheckDeviceID:
-	if (res <= 0)
+	if (res < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
@@ -524,7 +598,7 @@ static int KXTIK1004_SetPowerMode(struct i2c_client *client, bool enable)
 		return KXTIK1004_SUCCESS;
 	}
 
-	if(hwmsen_read_block(client, addr, databuf, 0x01))
+	if(kxt_i2c_read_block(client, addr, databuf, 0x01))
 	{
 		GSE_ERR("read power ctl register err!\n");
 		return KXTIK1004_ERR_I2C;
@@ -539,13 +613,9 @@ static int KXTIK1004_SetPowerMode(struct i2c_client *client, bool enable)
 	{
 		databuf[0] &= ~KXTIK1004_MEASURE_MODE;
 	}
-	databuf[1] = databuf[0];
-	databuf[0] = KXTIK1004_REG_POWER_CTL;
-	
 
-	res = i2c_master_send(client, databuf, 0x2);
-
-	if(res <= 0)
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_POWER_CTL, databuf, 0x1);
+	if(res < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
@@ -571,28 +641,24 @@ static int KXTIK1004_SetDataFormat(struct i2c_client *client, u8 dataformat)
 
 	KXTIK1004_SetPowerMode(client, false);
 
-	if(hwmsen_read_block(client, KXTIK1004_REG_DATA_FORMAT, databuf, 0x01))
+	if(kxt_i2c_read_block(client, KXTIK1004_REG_DATA_FORMAT, databuf, 0x01))
 	{
-		printk("kxtik1004 read Dataformat failt \n");
+		GSE_LOG("kxtik1004 read Dataformat failt \n");
 		return KXTIK1004_ERR_I2C;
 	}
 
 	databuf[0] &= ~KXTIK1004_RANGE_MASK;
 	databuf[0] |= dataformat;
-	databuf[1] = databuf[0];
-	databuf[0] = KXTIK1004_REG_DATA_FORMAT;
 
-
-	res = i2c_master_send(client, databuf, 0x2);
-
-	if(res <= 0)
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_DATA_FORMAT, databuf, 0x1);
+	if(res < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
 
 	KXTIK1004_SetPowerMode(client, true);
 	
-	printk("KXTIK1004_SetDataFormat OK! \n");
+	GSE_LOG("KXTIK1004_SetDataFormat OK! \n");
 	
 
 	return KXTIK1004_SetDataResolution(obj);    
@@ -600,31 +666,27 @@ static int KXTIK1004_SetDataFormat(struct i2c_client *client, u8 dataformat)
 /*----------------------------------------------------------------------------*/
 static int KXTIK1004_SetBWRate(struct i2c_client *client, u8 bwrate)
 {
-	u8 databuf[10];    
+	u8 databuf[10]={0};    
 	int res = 0;
 
 	memset(databuf, 0, sizeof(u8)*10);    
 
-	if(hwmsen_read_block(client, KXTIK1004_REG_BW_RATE, databuf, 0x01))
+	if(kxt_i2c_read_block(client, KXTIK1004_REG_BW_RATE, databuf, 0x01))
 	{
-		printk("kxtik1004 read rate failt \n");
+		GSE_LOG("kxtik1004 read rate failt \n");
 		return KXTIK1004_ERR_I2C;
 	}
 
 	databuf[0] &= 0xf8;
 	databuf[0] |= bwrate;
-	databuf[1] = databuf[0];
-	databuf[0] = KXTIK1004_REG_BW_RATE;
 
-
-	res = i2c_master_send(client, databuf, 0x2);
-
-	if(res <= 0)
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_BW_RATE, databuf, 0x1);
+	if(res < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
 	
-	printk("KXTIK1004_SetBWRate OK! \n");
+	GSE_LOG("KXTIK1004_SetBWRate OK! \n");
 	
 	return KXTIK1004_SUCCESS;    
 }
@@ -635,12 +697,11 @@ static int KXTIK1004_SetIntEnable(struct i2c_client *client, u8 intenable)
 	int res = 0;
 
 	memset(databuf, 0, sizeof(u8)*10);    
-	databuf[0] = KXTIK1004_REG_INT_ENABLE;    
-	databuf[1] = 0x00;
+	databuf[0] =  0x00;
 
-	res = i2c_master_send(client, databuf, 0x2);
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_INT_ENABLE, databuf, 0x1);
 
-	if(res <= 0)
+	if(res < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
@@ -659,7 +720,7 @@ static int kxtik1004_init_client(struct i2c_client *client, int reset_cali)
 		return res;
 	}	
 
-	res = KXTIK1004_SetPowerMode(client, false);
+	res = KXTIK1004_SetPowerMode(client, enable_status);
 	if(res != KXTIK1004_SUCCESS)
 	{
 		return res;
@@ -696,7 +757,7 @@ static int kxtik1004_init_client(struct i2c_client *client, int reset_cali)
 			return res;
 		}
 	}
-	printk("kxtik1004_init_client OK!\n");
+	GSE_LOG("kxtik1004_init_client OK!\n");
 #ifdef CONFIG_KXTIK1004_LOWPASS
 	memset(&obj->fir, 0x00, sizeof(obj->fir));  
 #endif
@@ -742,14 +803,11 @@ static int KXTIK1004_ReadSensorData(struct i2c_client *client, char *buf, int bu
 		*buf = 0;
 		return -2;
 	}
-
-	if(sensor_power == FALSE)
+		
+	if(sensor_suspend == 1)
 	{
-		res = KXTIK1004_SetPowerMode(client, true);
-		if(res)
-		{
-			GSE_ERR("Power on kxtik1004 error %d!\n", res);
-		}
+		//GSE_LOG("sensor in suspend read not data!\n");
+		return 0;
 	}
 
 	if((res = KXTIK1004_ReadData(client, obj->data)))
@@ -823,74 +881,58 @@ static int KXTIK1004_InitSelfTest(struct i2c_client *client)
 	int res = 0;
 	u8  data,result;
 	
-	res = hwmsen_read_byte(client, KXTIK1004_REG_CTL_REG3, &data);
-	if(res != KXTIK1004_SUCCESS)
+	res = kxt_i2c_read_block(client, KXTIK1004_REG_CTL_REG3, &data, 0x1);
+	if(res < 0)
 	{
 		return res;
 	}
 //enable selftest bit
-	res = hwmsen_write_byte(client, KXTIK1004_REG_CTL_REG3,  KXTIK1004_SELF_TEST|data);
-	if(res != KXTIK1004_SUCCESS) //0x2C->BW=100Hz
+	data |= KXTIK1004_SELF_TEST;
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_CTL_REG3,  &data, 0x1);
+	if(res < 0) //0x2C->BW=100Hz
 	{
 		return res;
 	}
 //step 1
-	res = hwmsen_read_byte(client, KXTIK1004_DCST_RESP, &result);
-	if(res != KXTIK1004_SUCCESS)
+	res = kxt_i2c_read_block(client, KXTIK1004_DCST_RESP, &result, 0x1);
+	if(res < 0)
 	{
 		return res;
 	}
-	printk("step1: result = %x",result);
+	GSE_LOG("step1: result = %x",result);
 	if(result != 0xaa)
 		return -EINVAL;
 
 //step 2
-	res = hwmsen_write_byte(client, KXTIK1004_REG_CTL_REG3,  KXTIK1004_SELF_TEST|data);
-	if(res != KXTIK1004_SUCCESS) //0x2C->BW=100Hz
+	data |= KXTIK1004_SELF_TEST;
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_CTL_REG3,  &data, 0x1);
+	if(res < 0) //0x2C->BW=100Hz
 	{
 		return res;
 	}
 //step 3
-	res = hwmsen_read_byte(client, KXTIK1004_DCST_RESP, &result);
-	if(res != KXTIK1004_SUCCESS)
+	res = kxt_i2c_read_block(client, KXTIK1004_DCST_RESP, &result, 0x1);
+	if(res < 0)
 	{
 		return res;
 	}
-	printk("step3: result = %x",result);
+	GSE_LOG("step3: result = %x",result);
 	if(result != 0xAA)
 		return -EINVAL;
 		
 //step 4
-	res = hwmsen_read_byte(client, KXTIK1004_DCST_RESP, &result);
-	if(res != KXTIK1004_SUCCESS)
+	res = kxt_i2c_read_block(client, KXTIK1004_DCST_RESP, &result, 0x1);
+	if(res < 0)
 	{
 		return res;
 	}
-	printk("step4: result = %x",result);
+	GSE_LOG("step4: result = %x",result);
 	if(result != 0x55)
 		return -EINVAL;
 	else
 		return KXTIK1004_SUCCESS;
 }
 /*----------------------------------------------------------------------------*/
-/*
-static int KXTIK1004_JudgeTestResult(struct i2c_client *client, s32 prv[KXTIK1004_AXES_NUM], s32 nxt[KXTIK1004_AXES_NUM])
-{
-
-    int res=0;
-	u8 test_result=0;
-    if(res = hwmsen_read_byte(client, 0x0c, &test_result))
-        return res;
-
-	printk("test_result = %x \n",test_result);
-    if ( test_result != 0xaa ) 
-	{
-        GSE_ERR("KXTIK1004_JudgeTestResult failt\n");
-        res = -EINVAL;
-    }
-    return res;
-}
-*/
 /*----------------------------------------------------------------------------*/
 static ssize_t show_chipinfo_value(struct device_driver *ddri, char *buf)
 {
@@ -905,22 +947,6 @@ static ssize_t show_chipinfo_value(struct device_driver *ddri, char *buf)
 	KXTIK1004_ReadChipInfo(client, strbuf, KXTIK1004_BUFSIZE);
 	return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);        
 }
-/*
-static ssize_t gsensor_init(struct device_driver *ddri, char *buf, size_t count)
-{
-		struct i2c_client *client = kxtik1004_i2c_client;
-		char strbuf[KXTIK1004_BUFSIZE];
-		
-		if(NULL == client)
-		{
-			GSE_ERR("i2c client is null!!\n");
-			return 0;
-		}
-		kxtik1004_init_client(client, 1);
-		return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);			
-}
-*/
-
 
 /*----------------------------------------------------------------------------*/
 static ssize_t show_sensordata_value(struct device_driver *ddri, char *buf)
@@ -934,25 +960,8 @@ static ssize_t show_sensordata_value(struct device_driver *ddri, char *buf)
 		return 0;
 	}
 	KXTIK1004_ReadSensorData(client, strbuf, KXTIK1004_BUFSIZE);
-	//KXTIK1004_ReadRawData(client, strbuf);
 	return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);            
 }
-/*
-static ssize_t show_sensorrawdata_value(struct device_driver *ddri, char *buf, size_t count)
-{
-		struct i2c_client *client = kxtik1004_i2c_client;
-		char strbuf[KXTIK1004_BUFSIZE];
-		
-		if(NULL == client)
-		{
-			GSE_ERR("i2c client is null!!\n");
-			return 0;
-		}
-		//KXTIK1004_ReadSensorData(client, strbuf, KXTIK1004_BUFSIZE);
-		KXTIK1004_ReadRawData(client, strbuf);
-		return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);			
-}
-*/
 /*----------------------------------------------------------------------------*/
 static ssize_t show_cali_value(struct device_driver *ddri, char *buf)
 {
@@ -1032,7 +1041,6 @@ static ssize_t store_cali_value(struct device_driver *ddri, const char *buf, siz
 static ssize_t show_self_value(struct device_driver *ddri, char *buf)
 {
 	struct i2c_client *client = kxtik1004_i2c_client;
-	//struct kxtik1004_i2c_data *obj;
 
 	if(NULL == client)
 	{
@@ -1040,8 +1048,6 @@ static ssize_t show_self_value(struct device_driver *ddri, char *buf)
 		return 0;
 	}
 
-	//obj = i2c_get_clientdata(client);
-	
     return snprintf(buf, 8, "%s\n", selftestRes);
 }
 /*----------------------------------------------------------------------------*/
@@ -1093,14 +1099,15 @@ static ssize_t store_self_value(struct device_driver *ddri, const char *buf, siz
 		strcpy(selftestRes,"n");
 	}
 
-	res = hwmsen_read_byte(client, KXTIK1004_REG_CTL_REG3, &data);
-	if(res != KXTIK1004_SUCCESS)
+	res = kxt_i2c_read_block(client, KXTIK1004_REG_CTL_REG3, &data, 0x1);
+	if(res < 0)
 	{
 		return res;
 	}
 
-	res = hwmsen_write_byte(client, KXTIK1004_REG_CTL_REG3,  ~KXTIK1004_SELF_TEST&data);
-	if(res != KXTIK1004_SUCCESS) //0x2C->BW=100Hz
+	data &= ~KXTIK1004_SELF_TEST;
+	res = kxt_i2c_write_block(client, KXTIK1004_REG_CTL_REG3,  &data, 0x1);
+	if(res < 0) //0x2C->BW=100Hz
 	{
 		return res;
 	}
@@ -1205,7 +1212,7 @@ static ssize_t store_firlen_value(struct device_driver *ddri, const char *buf, s
 	else
 	{ 
 		atomic_set(&obj->firlen, firlen);
-		if(NULL == firlen)
+		if(0 == firlen)
 		{
 			atomic_set(&obj->fir_en, 0);
 		}
@@ -1280,9 +1287,9 @@ static ssize_t show_status_value(struct device_driver *ddri, char *buf)
 static ssize_t show_power_status_value(struct device_driver *ddri, char *buf)
 {
 	if(sensor_power)
-		printk("G sensor is in work mode, sensor_power = %d\n", sensor_power);
+		GSE_LOG("G sensor is in work mode, sensor_power = %d\n", sensor_power);
 	else
-		printk("G sensor is in standby mode, sensor_power = %d\n", sensor_power);
+		GSE_LOG("G sensor is in standby mode, sensor_power = %d\n", sensor_power);
 
 	return 0;
 }
@@ -1306,7 +1313,7 @@ static ssize_t show_register(struct device_driver *pdri, char *buf)
 {
 	//int input_value;
 		
-	printk("i2c_dev_reg is 0x%2x \n", i2c_dev_reg);
+	GSE_LOG("i2c_dev_reg is 0x%2x \n", i2c_dev_reg);
 
 	return 0;
 }
@@ -1316,7 +1323,7 @@ static ssize_t store_register(struct device_driver *ddri, const char *buf, size_
 	//unsigned long input_value;
 
 	i2c_dev_reg = simple_strtoul(buf, NULL, 16);
-	printk("set i2c_dev_reg = 0x%2x \n", i2c_dev_reg);
+	GSE_LOG("set i2c_dev_reg = 0x%2x \n", i2c_dev_reg);
 
 	return 0;
 }
@@ -1330,7 +1337,7 @@ static ssize_t store_register_value(struct device_driver *ddri, const char *buf,
 	memset(databuf, 0, sizeof(u8)*2);    
 
 	input_value = simple_strtoul(buf, NULL, 16);
-	printk("input_value = 0x%2lx \n", input_value);
+	GSE_LOG("input_value = 0x%2lx \n", input_value);
 
 	if(NULL == obj)
 	{
@@ -1338,13 +1345,12 @@ static ssize_t store_register_value(struct device_driver *ddri, const char *buf,
 		return 0;
 	}
 
-	databuf[0] = i2c_dev_reg;
-	databuf[1] = input_value;
-	printk("databuf[0]=0x%2x  databuf[1]=0x%2x \n", databuf[0],databuf[1]);
+	databuf[0] = input_value;
+	GSE_LOG("databuf[0]=0x%2x  databuf[1]=0x%2x \n", databuf[0],databuf[1]);
 
-	res = i2c_master_send(obj->client, databuf, 0x2);
+	res = kxt_i2c_write_block(obj->client, i2c_dev_reg, databuf, 0x1);
 
-	if(res <= 0)
+	if(res < 0)
 	{
 		return KXTIK1004_ERR_I2C;
 	}
@@ -1365,13 +1371,13 @@ static ssize_t show_register_value(struct device_driver *ddri, char *buf)
 			return 0;
 		}
 		
-		if(hwmsen_read_block(obj->client, i2c_dev_reg, databuf, 0x01))
+		if(kxt_i2c_read_block(obj->client, i2c_dev_reg, databuf, 0x01))
 		{
 			GSE_ERR("read power ctl register err!\n");
 			return KXTIK1004_ERR_I2C;
 		}
 
-		printk("i2c_dev_reg=0x%2x  data=0x%2x \n", i2c_dev_reg,databuf[0]);
+		GSE_LOG("i2c_dev_reg=0x%2x  data=0x%2x \n", i2c_dev_reg,databuf[0]);
 	
 		return 0;
 		
@@ -1471,13 +1477,13 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 				{
 					sample_delay = KXTIK1004_BW_50HZ;
 				}
-				
+				mutex_lock(&kxtik1004_op_mutex);
 				err = KXTIK1004_SetBWRate(priv->client, sample_delay);
 				if(err != KXTIK1004_SUCCESS ) //0x2C->BW=100Hz
 				{
 					GSE_ERR("Set delay parameter error!\n");
 				}
-
+				mutex_unlock(&kxtik1004_op_mutex);
 				if(value >= 50)
 				{
 					atomic_set(&priv->filter, 0);
@@ -1505,14 +1511,20 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 			else
 			{
 				value = *(int *)buff_in;
+				mutex_lock(&kxtik1004_op_mutex);
+				GSE_LOG("Gsensor device enable function enable = %d, sensor_power = %d!\n",value,sensor_power);
 				if(((value == 0) && (sensor_power == false)) ||((value == 1) && (sensor_power == true)))
 				{
+					enable_status = sensor_power;
 					GSE_LOG("Gsensor device have updated!\n");
 				}
 				else
 				{
+					enable_status = !sensor_power;
 					err = KXTIK1004_SetPowerMode( priv->client, !sensor_power);
+					GSE_LOG("Gsensor not in suspend BMA222_SetPowerMode!, enable_status = %d\n",enable_status);
 				}
+				mutex_unlock(&kxtik1004_op_mutex);
 			}
 			break;
 
@@ -1524,12 +1536,14 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 			}
 			else
 			{
+				mutex_lock(&kxtik1004_op_mutex);
 				gsensor_data = (hwm_sensor_data *)buff_out;
 				KXTIK1004_ReadSensorData(priv->client, buff, KXTIK1004_BUFSIZE);
 				sscanf(buff, "%x %x %x", &gsensor_data->values[0], 
 					&gsensor_data->values[1], &gsensor_data->values[2]);				
 				gsensor_data->status = SENSOR_STATUS_ACCURACY_MEDIUM;				
 				gsensor_data->value_divide = 1000;
+				mutex_unlock(&kxtik1004_op_mutex); 
 			}
 			break;
 		default:
@@ -1562,8 +1576,6 @@ static int kxtik1004_release(struct inode *inode, struct file *file)
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
-//static int kxtik1004_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-//       unsigned long arg)
 static long kxtik1004_unlocked_ioctl(struct file *file, unsigned int cmd,unsigned long arg)
 {
 	struct i2c_client *client = (struct i2c_client*)file->private_data;
@@ -1619,7 +1631,7 @@ static long kxtik1004_unlocked_ioctl(struct file *file, unsigned int cmd,unsigne
 				err = -EINVAL;
 				break;	  
 			}
-			
+			KXTIK1004_SetPowerMode(client,true);	
 			KXTIK1004_ReadSensorData(client, strbuf, KXTIK1004_BUFSIZE);
 			if(copy_to_user(data, strbuf, strlen(strbuf)+1))
 			{
@@ -1728,7 +1740,6 @@ static struct file_operations kxtik1004_fops = {
 	.open = kxtik1004_open,
 	.release = kxtik1004_release,
 	.unlocked_ioctl = kxtik1004_unlocked_ioctl,
-	//.ioctl = kxtik1004_ioctl,
 };
 /*----------------------------------------------------------------------------*/
 static struct miscdevice kxtik1004_device = {
@@ -1737,31 +1748,34 @@ static struct miscdevice kxtik1004_device = {
 	.fops = &kxtik1004_fops,
 };
 /*----------------------------------------------------------------------------*/
-#ifndef CONFIG_HAS_EARLYSUSPEND
+#ifndef USE_EARLY_SUSPEND
 /*----------------------------------------------------------------------------*/
 static int kxtik1004_suspend(struct i2c_client *client, pm_message_t msg) 
 {
 	struct kxtik1004_i2c_data *obj = i2c_get_clientdata(client);    
 	int err = 0;
 	GSE_FUN();    
-
+    mutex_lock(&kxtik1004_op_mutex);
 	if(msg.event == PM_EVENT_SUSPEND)
 	{   
 		if(obj == NULL)
 		{
 			GSE_ERR("null pointer!!\n");
+			mutex_unlock(&kxtik1004_op_mutex);
 			return -EINVAL;
 		}
 		atomic_set(&obj->suspend, 1);
-		if(err = KXTIK1004_SetPowerMode(obj->client, false))
+		if((err = KXTIK1004_SetPowerMode(obj->client, false)))
 		{
 			GSE_ERR("write power control fail!!\n");
-			return;
+			mutex_unlock(&kxtik1004_op_mutex);
+			return err;
 		}
 
-		sensor_power = false;      
 		KXTIK1004_power(obj->hw, 0);
 	}
+	sensor_suspend = 1;
+	mutex_unlock(&kxtik1004_op_mutex);
 	return err;
 }
 /*----------------------------------------------------------------------------*/
@@ -1776,15 +1790,18 @@ static int kxtik1004_resume(struct i2c_client *client)
 		GSE_ERR("null pointer!!\n");
 		return -EINVAL;
 	}
+	mutex_lock(&kxtik1004_op_mutex);
 
 	KXTIK1004_power(obj->hw, 1);
-	if(err = kxtik1004_init_client(client, 0))
+	if((err = kxtik1004_init_client(client, 0)))
 	{
 		GSE_ERR("initialize client fail!!\n");
+		mutex_unlock(&kxtik1004_op_mutex);
 		return err;        
 	}
+	sensor_suspend = 0;
 	atomic_set(&obj->suspend, 0);
-
+    mutex_unlock(&kxtik1004_op_mutex);
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
@@ -1802,14 +1819,17 @@ static void kxtik1004_early_suspend(struct early_suspend *h)
 		return;
 	}
 	atomic_set(&obj->suspend, 1); 
+	mutex_lock(&kxtik1004_op_mutex);
 	if((err = KXTIK1004_SetPowerMode(obj->client, false)))
 	{
 		GSE_ERR("write power control fail!!\n");
+		mutex_unlock(&kxtik1004_op_mutex);
 		return;
 	}
 
-	sensor_power = false;
 	
+	sensor_suspend = 1;
+	mutex_unlock(&kxtik1004_op_mutex);
 	KXTIK1004_power(obj->hw, 0);
 }
 /*----------------------------------------------------------------------------*/
@@ -1826,11 +1846,15 @@ static void kxtik1004_late_resume(struct early_suspend *h)
 	}
 
 	KXTIK1004_power(obj->hw, 1);
+	mutex_lock(&kxtik1004_op_mutex);
 	if((err = kxtik1004_init_client(obj->client, 0)))
 	{
 		GSE_ERR("initialize client fail!!\n");
+		mutex_unlock(&kxtik1004_op_mutex);
 		return;        
 	}
+	sensor_suspend = 0;
+	mutex_unlock(&kxtik1004_op_mutex);
 	atomic_set(&obj->suspend, 0);    
 }
 /*----------------------------------------------------------------------------*/
@@ -1849,6 +1873,7 @@ static int kxtik1004_i2c_probe(struct i2c_client *client, const struct i2c_devic
 	struct kxtik1004_i2c_data *obj;
 	struct hwmsen_object sobj;
 	int err = 0;
+	int retry = 0;
 	GSE_FUN();
 
 	if(!(obj = kzalloc(sizeof(*obj), GFP_KERNEL)))
@@ -1894,10 +1919,15 @@ static int kxtik1004_i2c_probe(struct i2c_client *client, const struct i2c_devic
 
 	kxtik1004_i2c_client = new_client;	
 
+	for(retry = 0; retry < 3; retry++){
 	if((err = kxtik1004_init_client(new_client, 1)))
 	{
-		goto exit_init_failed;
+			GSE_ERR("kxtik1004_device init cilent fail time: %d\n", retry);
+			continue;
 	}
+	}
+	if(err != 0)
+		goto exit_init_failed;
 	
 
 	if((err = misc_register(&kxtik1004_device)))
@@ -1921,8 +1951,8 @@ static int kxtik1004_i2c_probe(struct i2c_client *client, const struct i2c_devic
 		goto exit_kfree;
 	}
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	obj->early_drv.level    = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1,
+#ifdef USE_EARLY_SUSPEND
+	obj->early_drv.level    = EARLY_SUSPEND_LEVEL_STOP_DRAWING - 2,
 	obj->early_drv.suspend  = kxtik1004_early_suspend,
 	obj->early_drv.resume   = kxtik1004_late_resume,    
 	register_early_suspend(&obj->early_drv);
@@ -1973,7 +2003,6 @@ static int kxtik1004_probe(struct platform_device *pdev)
 	GSE_FUN();
 
 	KXTIK1004_power(hw, 1);
-	//kxtik1004_force[0] = hw->i2c_num;
 	if(i2c_add_driver(&kxtik1004_i2c_driver))
 	{
 		GSE_ERR("add driver error\n");
@@ -2008,7 +2037,6 @@ static int __init kxtik1004_init(void)
 	GSE_FUN();	
 	GSE_LOG("%s: i2c_number=%d\n", __func__,hw->i2c_num);
 	i2c_register_board_info(hw->i2c_num, &i2c_kxtik1004, 1);
-	//i2c_register_board_info(0, &i2c_kxtik1004, 1);
 	if(platform_driver_register(&kxtik1004_gsensor_driver))
 	{
 		GSE_ERR("failed to register driver");

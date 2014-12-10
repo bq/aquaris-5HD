@@ -55,13 +55,13 @@ phys_addr_t memblock_find_in_range(phys_addr_t start, phys_addr_t end,
 //int memblock_free_reserved_regions(void);
 //int memblock_reserve_reserved_regions(void);
 phys_addr_t get_allocated_memblock_reserved_regions_info(phys_addr_t *addr);
-
 void memblock_allow_resize(void);
 int memblock_add_node(phys_addr_t base, phys_addr_t size, int nid);
 int memblock_add(phys_addr_t base, phys_addr_t size);
 int memblock_remove(phys_addr_t base, phys_addr_t size);
 int memblock_free(phys_addr_t base, phys_addr_t size);
 int memblock_reserve(phys_addr_t base, phys_addr_t size);
+void memblock_trim_memory(phys_addr_t align);
 
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
 void __next_mem_pfn_range(int *idx, int nid, unsigned long *out_start_pfn,

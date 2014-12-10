@@ -166,24 +166,8 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	mapping->host = inode;
 	mapping->flags = 0;
 
-        // for performance: take memory from low memory zone if possible
-        // for robustenss: if there are too many inodes, then allocate pages from high memory
-#ifdef CONFIG_MTK_MEMCFG
-        if (unlikely(mtk_memcfg_get_force_inode_gfp_lowmem())) {
-            mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE & 
-                    ~__GFP_HIGHMEM);
-        } else {
-#else
-        {
-#endif 
-            // default path
-            if (get_nr_inodes() >= 4625) {
-                mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE);
-            } else {
-                mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE & 
-                        ~__GFP_HIGHMEM);
-            }
-        }
+        mapping_set_gfp_mask(mapping, (GFP_HIGHUSER_MOVABLE & ~__GFP_HIGHMEM) | __GFP_SLOWHIGHMEM);
+        //mapping_set_gfp_mask(mapping, GFP_HIGHUSER_MOVABLE);
 
 	mapping->assoc_mapping = NULL;
 	mapping->backing_dev_info = &default_backing_dev_info;
@@ -725,7 +709,7 @@ void prune_icache_sb(struct super_block *sb, int nr_to_scan)
 		 * inode to the back of the list so we don't spin on it.
 		 */
 		if (!spin_trylock(&inode->i_lock)) {
-			list_move_tail(&inode->i_lru, &sb->s_inode_lru);
+			list_move(&inode->i_lru, &sb->s_inode_lru);
 			continue;
 		}
 

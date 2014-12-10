@@ -1,6 +1,6 @@
 VERSION = 3
 PATCHLEVEL = 4
-SUBLEVEL = 5
+SUBLEVEL = 67
 EXTRAVERSION =
 NAME = Saber-toothed Squirrel
 
@@ -379,7 +379,7 @@ KBUILD_CFLAGS_MODULE  := -DMODULE
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
 
 -include $(srctree)/$(MTK_PROJECT)_mtk_cust.mak
-MTK_INC += -I$(MTK_ROOT_CUSTOM)/$(MTK_PROJECT)/common
+#MTK_INC += -I$(MTK_ROOT_CUSTOM)/$(MTK_PROJECT)/common
 LINUXINCLUDE	+= $(MTK_INC)
 KBUILD_CFLAGS	+= $(MTK_CFLAGS) $(MTK_CDEFS)
 KBUILD_CPPFLAGS	+= $(MTK_CPPFLAGS) $(MTK_CPPDEFS)
@@ -583,6 +583,7 @@ endif
 include $(srctree)/arch/$(SRCARCH)/Makefile
 
 ifneq ($(CONFIG_FRAME_WARN),0)
+KBUILD_CFLAGS += $(call cc-option,-Werror=frame-larger-than=1)
 KBUILD_CFLAGS += $(call cc-option,-Wframe-larger-than=${CONFIG_FRAME_WARN})
 endif
 

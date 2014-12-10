@@ -4,11 +4,10 @@ typedef struct
     uint8_t retryCount;
     uint8_t command;         
     uint8_t offsetData;      
-    uint8_t length;          
+    uint8_t length; 
     union
     {
-    uint8_t msgData[ 16 ];   
-	unsigned char	*pdatabytes;			
+    uint8_t msgData[ 16 ];
     }payload_u;
 } cbus_req_t;
 bool_t 	SiiMhlTxChipInitialize( void );

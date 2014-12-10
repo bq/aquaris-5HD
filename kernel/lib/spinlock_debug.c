@@ -71,13 +71,13 @@ static void spin_dump(raw_spinlock_t *lock, const char *msg)
 
 static void spin_bug(raw_spinlock_t *lock, const char *msg)
 {
-    char aee_str[40];
+    char aee_str[50];
 //	if (!debug_locks_off())
 //		return;
 
 	spin_dump(lock, msg);
-    sprintf( aee_str, "Spinlock %s :%s\n", current->comm, msg);
-    aee_kernel_warning( aee_str,"spinlock debugger\n");
+    snprintf( aee_str, 50, "Spinlock %s :%s\n", current->comm, msg);
+    aee_kernel_warning_api(__FILE__, __LINE__, DB_OPT_DUMMY_DUMP | DB_OPT_FTRACE, aee_str,"spinlock debugger\n");
 }
 
 #define SPIN_BUG_ON(cond, lock, msg) if (unlikely(cond)) spin_bug(lock, msg)
@@ -108,9 +108,9 @@ static inline void debug_spin_unlock(raw_spinlock_t *lock)
 	lock->owner_cpu = -1;
 }
 #if HZ == 100
-#define LOOP_HZ 5 // 50 ms
+#define LOOP_HZ 8 
 #elif HZ == 10
-#define LOOP_HZ 1 // 100ms
+#define LOOP_HZ 2 
 #else
 #define LOOP_HZ HZ
 #endif
@@ -119,7 +119,7 @@ static void __spin_lock_debug(raw_spinlock_t *lock)
 	u64 i;
 	u64 loops = loops_per_jiffy * LOOP_HZ;
 	int print_once = 1;
-    char aee_str[40];
+    char aee_str[50];
     unsigned long long t1;
     t1 = sched_clock();
 	for (;;) {
@@ -137,8 +137,8 @@ static void __spin_lock_debug(raw_spinlock_t *lock)
 			trigger_all_cpu_backtrace();
 #endif
             debug_show_all_locks();
-            sprintf( aee_str, "Spinlock lockup:%s\n", current->comm);
-            aee_kernel_exception( aee_str,"spinlock debugger\n");
+            snprintf( aee_str, 50, "Spinlock lockup:%s\n", current->comm);
+            aee_kernel_warning_api(__FILE__, __LINE__, DB_OPT_DUMMY_DUMP | DB_OPT_FTRACE, aee_str,"spinlock debugger\n");
 		}
 	}
 }

@@ -36,6 +36,7 @@
 #include "wmt_plat.h"
 #include "hif_sdio.h"
 #include "stp_core.h"
+#include "stp_dbg.h"
 
 /*******************************************************************************
 *                              C O N S T A N T S
@@ -99,6 +100,8 @@ wmt_ctrl_gps_lna_set (
 
 
 static INT32  wmt_ctrl_get_patch_name(P_WMT_CTRL_DATA pWmtCtrlData);
+static INT32 wmt_ctrl_set_stp_dbg_info(P_WMT_CTRL_DATA);
+static INT32 wmt_ctrl_evt_err_trg_assert(P_WMT_CTRL_DATA pWmtCtrlData);
 
 // TODO: [FixMe][GeorgeKuo]: remove unused function
 /*static INT32  wmt_ctrl_hwver_get(P_WMT_CTRL_DATA);*/
@@ -149,6 +152,9 @@ const static WMT_CTRL_FUNC wmt_ctrl_func[] =
     [WMT_CTRL_HW_STATE_DUMP] = wmt_ctrl_hw_state_show,
     [WMT_CTRL_GET_PATCH_NUM] = wmt_ctrl_get_patch_num,
     [WMT_CTRL_GET_PATCH_INFO] = wmt_ctrl_get_patch_info,
+    [WMT_CTRL_SET_STP_DBG_INFO] = wmt_ctrl_set_stp_dbg_info,
+    [WMT_CTRL_BGW_DESENSE_CTRL] = NULL,
+    [WMT_CTRL_EVT_ERR_TRG_ASSERT] = wmt_ctrl_evt_err_trg_assert,
     [WMT_CTRL_MAX] = wmt_ctrl_others,
 };
 
@@ -712,7 +718,7 @@ INT32  wmt_ctrl_get_patch(P_WMT_CTRL_DATA pWmtCtrlData)
 INT32  wmt_ctrl_host_baudrate_set(P_WMT_CTRL_DATA pWmtCtrlData)
 {
     INT32 iRet = -1;
-    char cmdStr[NAME_MAX + 1] = {0};
+    CHAR cmdStr[NAME_MAX + 1] = {0};
     UINT32 u4Baudrate = pWmtCtrlData->au4CtrlData[0];
     UINT32 u4FlowCtrl = pWmtCtrlData->au4CtrlData[1];
 
@@ -811,7 +817,7 @@ INT32  wmt_ctrl_sdio_func(P_WMT_CTRL_DATA pWmtCtrlData)
             while (retry-- > 0 && iRet != 0) {
                 if (iRet) {
                     /* sleep 150ms before sdio slot ON ready */
-                    osal_msleep(150);
+                    osal_sleep_ms(150);
                 }
                 iRet = mtk_wcn_hif_sdio_wmt_control(sdioFuncType, MTK_WCN_BOOL_TRUE);
                 if (HIF_SDIO_ERR_NOT_PROBED == iRet) {
@@ -942,5 +948,55 @@ INT32  wmt_ctrl_others(P_WMT_CTRL_DATA pWmtCtrlData)
     return -1;
 }
 
+
+INT32 wmt_ctrl_set_stp_dbg_info(P_WMT_CTRL_DATA pWmtCtrlData)
+{
+	UINT8 *pRomVer = NULL;
+	P_WMT_PATCH pPatch = NULL;
+	UINT32 chipID = 0;
+	
+	chipID = pWmtCtrlData->au4CtrlData[0];
+	pRomVer = (UINT8 *)(pWmtCtrlData->au4CtrlData[1]);
+	pPatch = (P_WMT_PATCH)(pWmtCtrlData->au4CtrlData[2]);
+	if (!pRomVer) {
+		WMT_ERR_FUNC("pRomVer null pointer\n");
+		return -1;
+	}
+    
+	if (!pPatch) {
+		WMT_ERR_FUNC("pPatch null pointer\n");
+		return -2;
+	}
+	WMT_DBG_FUNC("chipid(0x%x),rom(%s),patch date(%s),patch plat(%s)\n", chipID, pRomVer, pPatch->ucDateTime, pPatch->ucPLat);
+	return stp_dbg_set_version_info(chipID, pRomVer, NULL, &(pPatch->ucDateTime[0]), &(pPatch->ucPLat[0]));
+}
+
+static INT32 wmt_ctrl_evt_err_trg_assert(P_WMT_CTRL_DATA pWmtCtrlData)
+{
+	INT32 iRet = -1;
+	
+	ENUM_WMTDRV_TYPE_T drv_type;
+	UINT32 reason = 0;
+
+	drv_type = pWmtCtrlData->au4CtrlData[0];
+	reason = pWmtCtrlData->au4CtrlData[1];
+	WMT_INFO_FUNC("wmt-ctrl:drv_type(%d),reason(%d)\n",drv_type,reason);
+	
+	if(0 == mtk_wcn_stp_get_wmt_evt_err_trg_assert())
+	{
+		mtk_wcn_stp_set_wmt_evt_err_trg_assert(1);
+		wmt_lib_set_host_assert_info(drv_type,reason,1);
+		
+		iRet = mtk_wcn_stp_wmt_evt_err_trg_assert();
+		if(iRet)
+		{
+			mtk_wcn_stp_set_wmt_evt_err_trg_assert(0);
+		}
+	}else
+	{
+		WMT_INFO_FUNC("do trigger assert & chip reset in stp noack \n");
+	}
+	return 0;
+}
 
 

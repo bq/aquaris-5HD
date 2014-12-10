@@ -23,7 +23,7 @@ static void tpd_print_version(void);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int tpd_i2c_remove(struct i2c_client *client);
 static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
-
+#if 0
 // TODO: should be moved into mach/xxx.h 
 extern void MT6516_EINTIRQUnmask(unsigned int line);
 extern void MT6516_EINTIRQMask(unsigned int line);
@@ -36,7 +36,7 @@ extern void MT6516_EINT_Registration(kal_uint8 eintno, kal_bool Dbounce_En,
 extern void MT6516_IRQMask(unsigned int line);
 extern void MT6516_IRQUnmask(unsigned int line);
 extern void MT6516_IRQClearInt(unsigned int line);
-
+#endif
 struct task_struct *thread = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(waiter);
 static int tpd_flag=0;
@@ -104,11 +104,10 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     mt_set_gpio_pull_enable(GPIO61, GPIO_PULL_ENABLE);
     mt_set_gpio_pull_select(GPIO61, GPIO_PULL_UP);
     
-    MT6516_EINT_Set_Sensitivity(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    MT6516_EINT_Set_HW_Debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    MT6516_EINT_Registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, 
-                             CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //MT6516_EINT_Set_Sensitivity(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //MT6516_EINT_Set_HW_Debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
    
     return 0;
 }
@@ -210,7 +209,7 @@ static int touch_event_handler(void *unused) {
     sched_setscheduler(current, SCHED_RR, &param);
     
     do {
-        MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM); // possibly to lose event?
+	mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
         set_current_state(TASK_INTERRUPTIBLE);
         if (!kthread_should_stop()) {
             while (tpd_halt) {tpd_flag=0; msleep(20);}
@@ -340,8 +339,8 @@ void tpd_suspend(struct early_suspend *h) {
     mt_set_gpio_dir(GPIO61, GPIO_DIR_OUT);
     mt_set_gpio_out(GPIO61, GPIO_OUT_ONE);
     
-    MT6516_EINTIRQMask(CUST_EINT_TOUCH_PANEL_NUM);
-    MT6516_IRQMask(MT6516_TOUCH_IRQ_LINE);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    //MT6516_IRQMask(MT6516_TOUCH_IRQ_LINE);
     msleep(50);
     
     hwPowerDown(TPD_POWER_SOURCE,"TP");
@@ -362,8 +361,8 @@ void tpd_resume(struct early_suspend *h) {
     mt_set_gpio_pull_enable(GPIO61, GPIO_PULL_ENABLE);
     mt_set_gpio_pull_select(GPIO61,GPIO_PULL_UP);
         
-    MT6516_IRQUnmask(MT6516_TOUCH_IRQ_LINE);    
-    MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);   
+    //MT6516_IRQUnmask(MT6516_TOUCH_IRQ_LINE);    
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     tpd_halt = 0;
 }
 #endif

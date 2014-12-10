@@ -168,7 +168,7 @@ void save_restore_alt_param(int replace, int quiet)
 
 	if (replace) {
 		toi_state_save = toi_state;
-		strcpy(resume_param_save, resume_file);
+		strncpy(resume_param_save, resume_file, sizeof(resume_param_save)-1);
 		strcpy(resume_file, alt_resume_param);
 	} else {
 		strcpy(resume_file, resume_param_save);
@@ -765,7 +765,7 @@ int toi_start_other_threads(void)
 		atomic_inc(&toi_num_other_threads);
 	}
 
-    hib_log("[%s] Started %ld threads.", __func__, num_started);
+    hib_warn("Started %ld threads.", num_started);
 
 	toi_message(TOI_IO, TOI_LOW, 0, "Started %d threads.", num_started);
 	return num_started;
@@ -1067,7 +1067,7 @@ static int write_module_configs(void)
 		toi_module_header.type = this_module->type;
 		toi_module_header.index = index++;
 		strncpy(toi_module_header.name, this_module->name,
-					sizeof(toi_module_header.name));
+					sizeof(toi_module_header.name)-1);
 		toiActiveAllocator->rw_header_chunk(WRITE,
 				this_module,
 				(char *) &toi_module_header,
@@ -1533,6 +1533,37 @@ static DECLARE_WAIT_QUEUE_HEAD(freeze_wait);
 
 static int freeze_result;
 
+#ifdef CONFIG_MTK_HIBERNATION
+static DECLARE_WAIT_QUEUE_HEAD(mmc_rescan_wait);
+static bool mmc_rescan_done = false;
+
+void mmc_rescan_wait_finish(void)
+{
+    if (mmc_rescan_done == true)
+        return;
+    mmc_rescan_done = true;
+    wake_up(&mmc_rescan_wait);
+    pr_warn("[%s] done\n", __func__);
+}
+EXPORT_SYMBOL_GPL(mmc_rescan_wait_finish);
+
+static int mmc_rescan_ready(void)
+{
+    int result = 0;
+
+    // for hibernation boot-up, mmc rescan job MUST finish before trap_non_toi_io sets to 1.
+    // or mmc rescan may call submit_bio()after trap_non_toi_io sets to 1, which will induce BUG_ON() in submit_bio() !!
+    wait_event_timeout(mmc_rescan_wait, mmc_rescan_done == true, 5*HZ);
+    if (mmc_rescan_done == false) {
+        pr_warn("[%s] wait mmc rescan partition timeout !!\n", __func__);
+		abort_hibernate(TOI_FAILED_IO, "Failed to wait mmc rescan ready.");
+		return -EIO;
+    }
+    ///////////
+    return result;
+}
+#endif /* CONFIG_MTK_HIBERNATION */
+
 static void do_freeze(struct work_struct *dummy)
 {
 	freeze_result = freeze_processes();
@@ -1686,6 +1717,14 @@ static int __read_pageset1(void)
 			"failed. Refusing to corrupt your filesystems!\n");
 		goto out_remove_image;
 	}
+
+#ifdef CONFIG_MTK_HIBERNATION
+    if (mmc_rescan_ready()) {
+		printk(KERN_EMERG "TuxOnIce: MMC rescan partition is not "
+			"ready. Refusing to corrupt your filesystems!\n");
+		goto out_remove_image;
+    }
+#endif /* CONFIG_MTK_HIBERNATION */
 
 	/* Read module configurations */
 	result = read_module_configs();

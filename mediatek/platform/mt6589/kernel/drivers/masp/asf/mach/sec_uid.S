@@ -1077,11 +1077,9 @@ secpal_get_uuid:
 	.ascii	"short unsigned int\000"
 .LASF26:
 	.ascii	"GNU C 4.6.x-google 20120106 (prerelease)\000"
-.LASF27:
+.LASF28:
 	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/out\000"
 .LASF4:
 	.ascii	"unsigned char\000"
 .LASF16:
@@ -1094,6 +1092,10 @@ secpal_get_uuid:
 	.ascii	"unsigned int\000"
 .LASF22:
 	.ascii	"uuid\000"
+.LASF27:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/sec_uid.c\000"
 .LASF8:
 	.ascii	"long long unsigned int\000"
 .LASF30:
@@ -1110,9 +1112,6 @@ secpal_get_uuid:
 	.ascii	"long long int\000"
 .LASF2:
 	.ascii	"char\000"
-.LASF28:
-	.ascii	""
-	.ascii	"\000"
 .LASF5:
 	.ascii	"short int\000"
 .LASF25:

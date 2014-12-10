@@ -12,7 +12,9 @@
      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
      See the License for the specific language governing permissions and
      limitations under the License.
---><resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+-->
+
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="gemini_sim_tether_nocontacts">"لا توجد أي جهات اتصال بالكمبيوتر اللوحي خاصتك, يُرجى إضافة جهة اتصال جديدة أو استيراد جهات اتصال أولاً"</string>
     <string name="wifi_ap_bandwidth_chart_summary">قد تختلف عملية حساب سرعة ناقل البيانات نظرًا لقياسه باستخدام الكمبيوتر اللوحي خاصتك.</string>
 </resources>

@@ -76,7 +76,7 @@
 #define MUSBFSH_HSDMA_BURSTMODE_INCR8	2
 #define MUSBFSH_HSDMA_BURSTMODE_INCR16	3
 
-#define MUSBFSH_HSDMA_CHANNELS		4 //should be 4 for USB1.1 on MT65xx
+#define MUSBFSH_HSDMA_CHANNELS		8 //should be 8 for USB1.1 on MT65xx
 
 struct musbfsh_dma_controller;
 

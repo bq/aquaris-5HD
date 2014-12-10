@@ -21,9 +21,13 @@
 
 #include <mach/mt_spi.h>
 //#include <mach/mt_gpio.h>
+#include "mt_spi_hal.h"
 #include <mach/mt_clkmgr.h>
 #include <mach/emi_mpu.h>
 #include "mach/memory.h"
+#if (defined(CONFIG_MTK_FPGA))
+#define  CONFIG_MT_SPI_FPGA_ENABLE
+#endif
 
 /*open base log out*/
 //#define SPI_DEBUG 
@@ -223,13 +227,17 @@ static void spi_gpio_reset(struct mt_spi_t *ms)
 
 static void enable_clk(void)
 {
+#if (!defined(CONFIG_MT_SPI_FPGA_ENABLE))
 	enable_clock(MT_CG_PERI1_SPI1, "spi");
+#endif
 	return;
 }
 
 static void disable_clk(void)
 {
+#if (!defined(CONFIG_MT_SPI_FPGA_ENABLE))
 	disable_clock(MT_CG_PERI1_SPI1, "spi");
+#endif
 	return;
 }
 

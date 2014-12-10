@@ -1903,8 +1903,8 @@ static struct platform_driver mc3210_gsensor_driver = {
 /*----------------------------------------------------------------------------*/
 static int __init mc3210_init(void)
 {
-	GSE_FUN();
 	struct acc_hw *hw = get_cust_acc_hw();
+	GSE_FUN();
 	GSE_LOG("%s: i2c_number=%d\n", __func__,hw->i2c_num); 
 	i2c_register_board_info(hw->i2c_num, &i2c_mc3210, 1);
 	if(platform_driver_register(&mc3210_gsensor_driver))

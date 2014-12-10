@@ -28,7 +28,7 @@
 //#include "camera_af_para.h"
 */
 #define SENSOR_ID   S5K4ECGX_SENSOR_ID
-#if defined(MT6516)
+//#if defined(MT6516)
 
 const NVRAM_CAMERA_DEFECT_STRUCT S5K4ECGX_YUV_CAMERA_DEFECT_DEFAULT_VALUE =
       {{ NVRAM_CAMERA_DEFECT_FILE_VERSION,S5K4ECGX_SENSOR_ID,0,0,{0},{0},{0} }};
@@ -667,7 +667,7 @@ UINT32 dataSize[CAMERA_DATA_TYPE_NUM] = {sizeof(NVRAM_CAMERA_PARA_STRUCT),
     return 0;
 }//
 
-#endif  //  defined(MT6516)
+//#endif  //  defined(MT6516)
 
 typedef NSFeature::YUVSensorInfo<SENSOR_ID> SensorInfoSingleton_T;
 namespace NSFeature {
@@ -676,11 +676,11 @@ UINT32
 SensorInfoSingleton_T::
 impGetDefaultData(CAMERA_DATA_TYPE_ENUM const CameraDataType, VOID*const pDataBuf, UINT32 const size) const
 {
-#if defined(MT6516)
+//#if defined(MT6516)
     return  S5K4EC4GX_YUV_getDefaultData(CameraDataType, pDataBuf, size);
-#else
-    return  NULL;
-#endif  //  defined(MT6516)
+//#else
+//    return  NULL;
+//#endif  //  defined(MT6516)
 }};  //  NSFeature
 
 

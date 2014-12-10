@@ -67,6 +67,7 @@ static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int tpd_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
+#if 0
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
@@ -74,7 +75,7 @@ extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
 extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
                                      kal_bool auto_umask);
-
+#endif
 static struct i2c_client *i2c_client = NULL;
 static const struct i2c_device_id tpd_i2c_id[] = {{"mtk-tpd",0},{}};
 static unsigned short force[] = {0, 0xAA, I2C_CLIENT_END,I2C_CLIENT_END};
@@ -258,11 +259,9 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     //client->addr = 0x55;
     
     //Power on
-    #ifdef MT6589
     hwPowerOn(TPD_POWER_LDO, VOL_3300, "TP");
     printk("MediaTek touch panel sets hwPowerOn!!!\n");
     //msleep(10);
-    #endif
     
     #ifndef TPD_NO_GPIO 
 
@@ -325,10 +324,10 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     
     tpd_load_status = 1;
     
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     
     printk("MediaTek touch panel i2c probe success\n");
     
@@ -541,7 +540,7 @@ static void tpd_suspend( struct early_suspend *h )
     //int retry = 0;
     u8 Wrbuf[1] = {1};
     tpd_halt = 1;
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
     TPD_DEBUG("GT819 call suspend\n");
     
     ret = i2c_write_bytes(i2c_client, TPD_POWER_MODE_REG, &Wrbuf[0], 1);
@@ -589,7 +588,7 @@ static void tpd_resume( struct early_suspend *h )
     mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_EINT);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
     mt_set_gpio_pull_enable(GPIO_CTP_EINT_PIN, GPIO_PULL_DISABLE);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
     tpd_halt = 0;
 }
 

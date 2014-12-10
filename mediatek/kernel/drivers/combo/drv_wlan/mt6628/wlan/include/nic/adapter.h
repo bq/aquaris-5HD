@@ -1048,6 +1048,9 @@ typedef struct _WIFI_VAR_T {
     BOOLEAN                 fgSupportTspec;
     BOOLEAN                 fgSupportUAPSD;
     BOOLEAN                 fgSupportULPSMP;
+    UINT_8                  u8SupportRxSgi20; /* 0: default 1: enable 2:disble */
+    UINT_8                  u8SupportRxSgi40;
+    UINT_8                  u8SupportRxGf;
 
 #if CFG_SLT_SUPPORT
     SLT_INFO_T      rSltInfo;
@@ -1301,7 +1304,8 @@ struct _ADAPTER_T {
 #endif
 
     BOOL fgDisStaAgingTimeoutDetection;
-
+	UINT_32   u4FwCompileFlag0;
+    UINT_32   u4FwCompileFlag1;
 };/* end of _ADAPTER_T */
 
 /*******************************************************************************

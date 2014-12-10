@@ -617,17 +617,6 @@ static int mtp_create_bulk_endpoints(struct mtp_dev *dev,
 	ep->driver_data = dev;		/* claim the endpoint */
 	dev->ep_out = ep;
 
-	#if 0
-	ep = usb_ep_autoconfig(cdev->gadget, out_desc);
-	if (!ep) {
-		DBG(cdev, "usb_ep_autoconfig for ep_out failed\n");
-		return -ENODEV;
-	}
-	DBG(cdev, "usb_ep_autoconfig for mtp ep_out got %s\n", ep->name);
-	ep->driver_data = dev;		/* claim the endpoint */
-	dev->ep_out = ep;
-	#endif
-
 	ep = usb_ep_autoconfig(cdev->gadget, intr_desc);
 	if (!ep) {
 		DBG(cdev, "usb_ep_autoconfig for ep_intr failed\n");
@@ -666,6 +655,56 @@ fail:
 	printk(KERN_ERR "mtp_bind() could not allocate requests\n");
 	return -1;
 }
+
+
+//ALPS00606302
+static int mtp_send_devicereset_event(struct mtp_dev *dev)
+{
+	struct usb_request *req = NULL;
+	int ret;
+	int length = 12;
+    unsigned long flags;
+
+    char buffer[12]={0x0C, 0x0, 0x0, 0x0, 0x4, 0x0, 0xb, 0x40, 0x0, 0x0, 0x0, 0x0};   //length 12, 0x00000010, type EVENT: 0x0004, event code 0x400b 
+
+	DBG(dev->cdev, "%s, line %d: dev->dev_disconnected = %d\n", __func__, __LINE__, dev->dev_disconnected);
+
+	if (length < 0 || length > INTR_BUFFER_SIZE)
+		return -EINVAL;
+	if (dev->state == STATE_OFFLINE)
+		return -ENODEV;
+
+    spin_lock_irqsave(&dev->lock, flags);
+    DBG(dev->cdev, "%s, line %d: _mtp_dev->dev_disconnected = %d, dev->state = %d \n", __func__, __LINE__, dev->dev_disconnected, dev->state);
+    if(!dev->dev_disconnected || dev->state != STATE_OFFLINE)
+    {
+        spin_unlock_irqrestore(&dev->lock, flags);
+        ret = wait_event_interruptible_timeout(dev->intr_wq,
+			(req = mtp_req_get(dev, &dev->intr_idle)),
+			msecs_to_jiffies(1000));
+    	if (!req)
+    		return -ETIME;
+
+        memcpy(req->buf, buffer, length);
+    	req->length = length;
+
+    	ret = usb_ep_queue(dev->ep_intr, req, GFP_KERNEL);
+        DBG(dev->cdev, "%s, line %d: ret = %d\n", __func__, __LINE__, ret);
+
+        if (ret)
+    		mtp_req_put(dev, &dev->intr_idle, req);
+    }
+    else
+    {
+        spin_unlock_irqrestore(&dev->lock, flags);
+        DBG(dev->cdev, "%s, line %d: usb function has been unbind!! do nothing!!\n", __func__, __LINE__);
+        ret = 0;
+    }
+
+    DBG(dev->cdev, "%s, line %d: _mtp_dev->dev_disconnected = %d, dev->state = %d, return!! \n", __func__, __LINE__, dev->dev_disconnected, dev->state);
+    return ret;
+}
+//ALPS00606302
 
 static ssize_t mtp_read(struct file *fp, char __user *buf,
 	size_t count, loff_t *pos)
@@ -1112,12 +1151,21 @@ static void receive_file_work(struct work_struct *data)
 		#if defined(MTK_SHARED_SDCARD)
 			if(total_size >= 0xFFFFFFFF)
 				read_req->short_not_ok = 0;
-			else
-				read_req->short_not_ok = 1;
+			else{
+				if (0 == (read_req->length % dev->ep_out->maxpacket ))
+					read_req->short_not_ok = 1;
+				else
+					read_req->short_not_ok = 0;
+			}
 		#else
 		//Modification for ALPS00434059 end
 			//Add for RX mode 1
-			read_req->short_not_ok = 1;
+			if (0 == (read_req->length % dev->ep_out->maxpacket  ))
+				read_req->short_not_ok = 1;
+			else
+				read_req->short_not_ok = 0;
+			DBG(cdev, "read_req->short_not_ok(%d), ep_out->maxpacket (%d)\n",
+				read_req->short_not_ok, dev->ep_out->maxpacket);
 			//Add for RX mode 1
 		//Modification for ALPS00434059 end
 		#endif
@@ -1219,7 +1267,7 @@ static void receive_file_work(struct work_struct *data)
 				//Added for USB Develpment debug, more log for more debuging help
 				usb_ep_dequeue(dev->ep_out, read_req);
 				break;
-				
+
 			}
 			//Added Modification for ALPS00255822, bug from WHQL test
 			/* if xfer_file_length is 0xFFFFFFFF, then we read until
@@ -1230,8 +1278,8 @@ static void receive_file_work(struct work_struct *data)
 
 		//Modification for ALPS00434059 begin
 		#if defined(MTK_SHARED_SDCARD)
-			total_size +=read_req->actual;
-			DBG(cdev, "%s, line %d: count = %d, total_size = %d, read_req->actual = %d, read_req->length= %d\n", __func__, __LINE__, count, total_size, read_req->actual, read_req->length);
+			total_size += read_req->actual;
+			DBG(cdev, "%s, line %d: count = %lld, total_size = %lld, read_req->actual = %d, read_req->length= %d\n", __func__, __LINE__, count, total_size, read_req->actual, read_req->length);
 		#endif
 		//Modification for ALPS00434059 begin
 
@@ -1283,6 +1331,9 @@ static int mtp_send_event(struct mtp_dev *dev, struct mtp_event *event)
 	struct usb_request *req = NULL;
 	int ret;
 	int length = event->length;
+    //ALPS00606302
+	int eventIndex = 6;
+    //ALPS00606302
 
 	DBG(dev->cdev, "mtp_send_event(%d)\n", event->length);
 
@@ -1302,6 +1353,10 @@ static int mtp_send_event(struct mtp_dev *dev, struct mtp_event *event)
 		return -EFAULT;
 	}
 	req->length = length;
+
+    //ALPS00606302
+    DBG(dev->cdev, "mtp_send_event: EventCode: req->buf[7] = 0x%x, req->buf[6] = 0x%x\n", ((char*)req->buf)[eventIndex+1], ((char*)req->buf)[eventIndex]);
+    //ALPS00606302
 	ret = usb_ep_queue(dev->ep_intr, req, GFP_KERNEL);
 	if (ret)
 		mtp_req_put(dev, &dev->intr_idle, req);
@@ -1468,7 +1523,23 @@ static int mtp_open(struct inode *ip, struct file *fp)
 
 static int mtp_release(struct inode *ip, struct file *fp)
 {
+    //ALPS00606302
+	unsigned long flags;
+    //ALPS00606302
 	printk(KERN_INFO "mtp_release\n");
+
+    //ALPS00606302
+    spin_lock_irqsave(&_mtp_dev->lock, flags);
+	printk(KERN_INFO "%s, line %d: _mtp_dev->dev_disconnected = %d\n", __func__, __LINE__, _mtp_dev->dev_disconnected);
+
+    if(!_mtp_dev->dev_disconnected)
+    {
+        spin_unlock_irqrestore(&_mtp_dev->lock, flags);
+        mtp_send_devicereset_event(_mtp_dev);
+    }
+    else
+        spin_unlock_irqrestore(&_mtp_dev->lock, flags);
+    //ALPS00606302
 
 	mtp_unlock(&_mtp_dev->open_excl);
 	return 0;
@@ -1543,7 +1614,7 @@ static void mtp_read_usb_functions(int functions_no, char * buff)
 	for(i=0;i<USB_MTP_FUNCTIONS;i++)
 	{
 		if(!strcmp(dev->usb_functions, USB_MTP_FUNC[i]))
-		{	
+		{
 			DBG(dev->cdev, "%s: usb functions = %s, i = %d \n",__func__, dev->usb_functions, i);
 			dev->curr_mtp_func_index = i;
 			break;
@@ -1631,7 +1702,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 				memcpy(cdev->req->buf, &mtp_ext_config_desc, value);
 				break;
 			case 1:			//mtp,acm	, with acm, failed so far
-			case 2:			//mtp,adb 
+			case 2:			//mtp,adb
 			case 4:			//mtp,mass_storage
 				value = (w_length < sizeof(mtp_ext_config_desc_2) ?
 						w_length : sizeof(mtp_ext_config_desc_2));
@@ -1703,14 +1774,14 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 			 */
 			if (dev->state == STATE_CANCELED)
 			//Added Modification for ALPS00255822, bug from WHQL test
-			{	
+			{
 			//Added Modification for ALPS00255822, bug from WHQL test
 				status->wCode =
 					__cpu_to_le16(MTP_RESPONSE_DEVICE_BUSY);
 			//Added Modification for ALPS00255822, bug from WHQL test
 				dev->fileTransferSend ++;
 				DBG(cdev, "%s: dev->fileTransferSend = %d \n", __func__, dev->fileTransferSend);
-				
+
 				if(dev->fileTransferSend > 5)
 				{
 					dev->fileTransferSend = 0;
@@ -1750,7 +1821,7 @@ static int mtp_ctrlrequest(struct usb_composite_dev *cdev,
 			//ALPS00428998
 			//Added Modification for ALPS00255822, bug from WHQL test
 			else
-			{	
+			{
 				dev->fileTransferSend = 0;
 				status->wCode =
 					__cpu_to_le16(MTP_RESPONSE_OK);
@@ -1939,7 +2010,7 @@ static void mtp_function_disable(struct usb_function *f)
 
 	DBG(cdev, "mtp_function_disable\n");
     //ALPS00428998
-	printk("mtp_function_disable\n");	
+	printk("mtp_function_disable\n");
     //ALPS00428998
 	dev->state = STATE_OFFLINE;
 	usb_ep_disable(dev->ep_in);

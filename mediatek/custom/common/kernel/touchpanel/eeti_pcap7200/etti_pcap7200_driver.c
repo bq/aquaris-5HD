@@ -37,7 +37,7 @@ static void tpd_eint_interrupt_handler(void);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
-
+#if 0
 // TODO: should be moved into mach/xxx.h 
 extern void MT6516_EINTIRQUnmask(unsigned int line);
 extern void MT6516_EINTIRQMask(unsigned int line);
@@ -50,6 +50,7 @@ extern void MT6516_EINT_Registration(kal_uint8 eintno, kal_bool Dbounce_En,
 extern void MT6516_IRQMask(unsigned int line);
 extern void MT6516_IRQUnmask(unsigned int line);
 extern void MT6516_IRQClearInt(unsigned int line);
+#endif
 extern int tpd_trembling_tolerance(int t, int p); 
 
 static unsigned short normal_i2c[] = { TPD_SLAVE_ADDR,  I2C_CLIENT_END };
@@ -148,10 +149,10 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     mt_set_gpio_pull_enable(GPIO61, 1);
     mt_set_gpio_pull_select(GPIO61,1);
 
-    MT6516_EINT_Set_Sensitivity(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    MT6516_EINT_Set_HW_Debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    MT6516_EINT_Registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //MT6516_EINT_Set_Sensitivity(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //MT6516_EINT_Set_HW_Debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     //msleep(20);
     if(i2c_master_send(i2c_client,wakeup,2) < 0)
     {
@@ -219,11 +220,11 @@ static void tpd_down(int raw_x, int raw_y, int x, int y, int p) {
 
 static int tpd_up(int raw_x, int raw_y, int x, int y,int *count) {
     if(*count>0) {
-        input_report_abs(tpd->dev, ABS_PRESSURE, 0);
+        //input_report_abs(tpd->dev, ABS_PRESSURE, 0);
         input_report_key(tpd->dev, BTN_TOUCH, 0);
-        input_report_abs(tpd->dev, ABS_MT_TOUCH_MAJOR, 0);
-        input_report_abs(tpd->dev, ABS_MT_POSITION_X, x);
-        input_report_abs(tpd->dev, ABS_MT_POSITION_Y, y);
+        //input_report_abs(tpd->dev, ABS_MT_TOUCH_MAJOR, 0);
+        //input_report_abs(tpd->dev, ABS_MT_POSITION_X, x);
+        //input_report_abs(tpd->dev, ABS_MT_POSITION_Y, y);
         //printk("U[%4d %4d %4d] ", x, y, 0);
         input_mt_sync(tpd->dev);
         TPD_UP_DEBUG_TRACK(x,y);
@@ -381,7 +382,7 @@ static int touch_event_handler(void *unused) {
     cinfo.pending=0;
     sched_setscheduler(current, SCHED_RR, &param);
     do {
-        MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM); // possibly to lose event?
+	mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
         set_current_state(TASK_INTERRUPTIBLE);
         if (!kthread_should_stop()) {
             TPD_DEBUG_CHECK_NO_RESPONSE;
@@ -513,8 +514,8 @@ static int touch_event_handler(void *unused) {
 /* platform device functions */
 static void tpd_suspend(struct early_suspend *h) {
     char sleep[2] = {0x07,0x01};
-    MT6516_EINTIRQMask(CUST_EINT_TOUCH_PANEL_NUM);
-    MT6516_IRQMask(MT6516_TOUCH_IRQ_LINE);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    //MT6516_IRQMask(MT6516_TOUCH_IRQ_LINE);
     i2c_master_send(i2c_client,sleep,2);
     // workaround: power down tp will also pull down ic2 bus, affect other drivers
     //             so not pull down it.
@@ -537,8 +538,8 @@ static void tpd_resume(struct early_suspend *h) {
     i2c_master_send(i2c_client,idletime,2);
     i2c_master_send(i2c_client,sleeptime,2);
     
-    MT6516_IRQUnmask(MT6516_TOUCH_IRQ_LINE);    
-    MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);    
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);    
 }
 #endif
 
@@ -573,8 +574,8 @@ static void tpd_resume(struct early_suspend *h) {
     
     TPD_DMESG("switch tpd into deep sleep mode\n");
 
-    MT6516_EINTIRQMask(CUST_EINT_TOUCH_PANEL_NUM);
-    MT6516_IRQMask(MT6516_TOUCH_IRQ_LINE);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    //MT6516_IRQMask(MT6516_TOUCH_IRQ_LINE);
     i2c_master_send(i2c_client,sleep,2);
     
     tpd_status = 0;
@@ -611,8 +612,8 @@ static void tpd_resume(struct early_suspend *h) {
     i2c_master_send(i2c_client,idletime,2);
     i2c_master_send(i2c_client,sleeptime,2);
     
-    MT6516_IRQUnmask(MT6516_TOUCH_IRQ_LINE);    
-    MT6516_EINTIRQUnmask(CUST_EINT_TOUCH_PANEL_NUM);    
+    //MT6516_IRQUnmask(MT6516_TOUCH_IRQ_LINE);    
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     
     tpd_status = 1; 
 }

@@ -30,7 +30,6 @@
 #include <asm/bitops.h>
 #include <linux/sched.h>
 #include <linux/wakelock.h>
-
 #include <ccci_ch.h>
 #include <ccif.h>
 
@@ -257,6 +256,7 @@ typedef struct _logic_dispatch_ctl_block{
 	volatile unsigned char	m_running;
 	unsigned int			m_md_id;
 	struct wake_lock		m_wakeup_wake_lock;
+	char                    m_wakelock_name[16];
 	void					(*m_send_notify_cb)(int, unsigned int);	
 	unsigned long			m_last_send_ref_jiffies;	
 	unsigned long			m_status_flag;	
@@ -309,5 +309,5 @@ extern int __init ccif_module_init(void);
 extern void __exit ccif_module_exit(void);
 
 
-#endif  /* !__CCCI_LAYER_H__ */
+#endif  // __CCCI_LAYER_H__
 

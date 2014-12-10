@@ -351,6 +351,8 @@ typedef struct
 	MINT32 i4FluorescentIndex; // Fluorescent index
 	MINT32 i4DaylightFluorescentIndex; // Daylight fluorescent index
 	MINT32 i4SceneLV; // Scene LV
+	MINT32 i4AWBMode; // AWB mode
+	MBOOL  bAWBStable; // AWB stable
 } AWB_INFO_T;
 
 // AWB gain output (for debug purpose)

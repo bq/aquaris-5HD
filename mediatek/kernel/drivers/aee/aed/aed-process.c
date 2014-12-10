@@ -10,8 +10,13 @@
 #include <linux/linkage.h>
 #include <linux/atomic.h>
 #include <linux/module.h>
+#include <linux/uaccess.h>
+#include <linux/mm.h>
+#include <asm/memory.h>
 #include <asm/stacktrace.h>
 #include <asm/traps.h>
+#include <linux/semaphore.h>
+#include <linux/delay.h>
 
 #include "../common/aee-common.h"
 #include "aed.h"
@@ -23,9 +28,20 @@ struct bt_sync {
 
 static void per_cpu_get_bt(void *info)
 {
+	int timeout_max = 500000;
 	struct bt_sync *s = (struct bt_sync *)info;
+
+	if (atomic_read(&s->cpus_lock) == 0)
+		return;
+
 	atomic_dec(&s->cpus_report);
-	while (atomic_read(&s->cpus_lock) == 1);
+	while (atomic_read(&s->cpus_lock) == 1) {
+		if (timeout_max-- > 0) {
+			udelay(1);
+		} else {
+			break;
+		}
+	}
 	atomic_dec(&s->cpus_report);
 }
 
@@ -33,6 +49,8 @@ int notrace aed_unwind_frame(struct stackframe *frame, unsigned long stack_addre
 {
 	unsigned long high, low;
 	unsigned long fp = frame->fp;
+
+	unsigned long thread_info = stack_address - THREAD_SIZE;
 
 	/* only go to a higher address on the stack */
 	low = frame->sp;
@@ -45,6 +63,11 @@ int notrace aed_unwind_frame(struct stackframe *frame, unsigned long stack_addre
 	if ((fp < (low + 12)) || ((fp + 4) >= high))
 		return -EINVAL;
 
+	if ((fp < thread_info) || (fp >= (stack_address - 4))) {
+	  printk("%s: fp(%lx) out of process stack base(%lx)\n", __func__, fp, stack_address);
+	  return -EINVAL;
+	}
+	
 	/* restore the registers from the stack frame */
 	frame->fp = *(unsigned long *)(fp - 12);
 	frame->sp = *(unsigned long *)(fp - 8);
@@ -55,26 +78,27 @@ int notrace aed_unwind_frame(struct stackframe *frame, unsigned long stack_addre
 }
 
 #define FUNCTION_OFFSET 12
-#define MAX_EXCEPTION_FRAME 32
 asmlinkage void __sched preempt_schedule_irq(void);
+static struct aee_bt_frame aed_backtrace_buffer[AEE_NR_FRAME];
 
 static int aed_walk_stackframe(struct stackframe *frame, struct aee_process_bt *bt, unsigned int stack_address)
 {
 	int count;
 	struct stackframe current_stk;
+	bt->entries = aed_backtrace_buffer;
 
 	memcpy(&current_stk, frame, sizeof(struct stackframe));
-	for (count = 0; count < MAX_EXCEPTION_FRAME; count++) {
+	for (count = 0; count < AEE_NR_FRAME; count++) {
 		unsigned long prev_fp = current_stk.fp;
 		int ret;
 
 		bt->entries[bt->nr_entries].pc = current_stk.pc;
 		bt->entries[bt->nr_entries].lr = current_stk.lr;
-		snprintf(bt->entries[bt->nr_entries].pc_symbol, MAX_AEE_KERNEL_SYMBOL, "%pS", (void *)current_stk.pc);
-		snprintf(bt->entries[bt->nr_entries].lr_symbol, MAX_AEE_KERNEL_SYMBOL, "%pS", (void *)current_stk.lr);
+		snprintf(bt->entries[bt->nr_entries].pc_symbol, AEE_SZ_SYMBOL_S, "%pS", (void *)current_stk.pc);
+		snprintf(bt->entries[bt->nr_entries].lr_symbol, AEE_SZ_SYMBOL_L, "%pS", (void *)current_stk.lr);
 
 		bt->nr_entries++;
-		if (bt->nr_entries >= MAX_AEE_KERNEL_BT) {
+		if (bt->nr_entries >= AEE_NR_FRAME) {
 			break;
 		}
 
@@ -95,9 +119,11 @@ static int aed_walk_stackframe(struct stackframe *frame, struct aee_process_bt *
 
 	}
 
-	if (bt->nr_entries < MAX_AEE_KERNEL_BT) {
-		bt->entries[bt->nr_entries].pc = ULONG_MAX;	
-		bt->entries[bt->nr_entries++].lr = ULONG_MAX;
+	if (bt->nr_entries < AEE_NR_FRAME) {
+		bt->entries[bt->nr_entries].pc = ULONG_MAX;
+		bt->entries[bt->nr_entries].pc_symbol[0] = '\0';
+		bt->entries[bt->nr_entries].lr = ULONG_MAX;
+		bt->entries[bt->nr_entries++].lr_symbol[0] = '\0';
 	}
 	return 0;
 }
@@ -105,16 +131,9 @@ static int aed_walk_stackframe(struct stackframe *frame, struct aee_process_bt *
 static void aed_get_bt(struct task_struct *tsk, struct aee_process_bt *bt)
 {
 	struct stackframe frame;
-	int i;
 	unsigned int stack_address;
 
 	bt->nr_entries = 0;
-	for (i = 0; i < MAX_AEE_KERNEL_BT; i++) {
-		bt->entries[i].pc = 0;
-		bt->entries[i].lr = 0;
-		memset(bt->entries[i].pc_symbol, 0, KSYM_SYMBOL_LEN);
-		memset(bt->entries[i].lr_symbol, 0, KSYM_SYMBOL_LEN);
-	}
 
 	memset(&frame, 0, sizeof(struct stackframe));
 	if (tsk != current) {
@@ -131,7 +150,7 @@ static void aed_get_bt(struct task_struct *tsk, struct aee_process_bt *bt)
 		frame.pc = (unsigned long)aed_get_bt;
 	}
 	stack_address = ALIGN(frame.sp, THREAD_SIZE);
-	if ((stack_address >= (PAGE_OFFSET + THREAD_SIZE)) && (stack_address <= (PAGE_OFFSET + get_memory_size())))  {
+	if ((stack_address >= (PAGE_OFFSET + THREAD_SIZE)) && virt_addr_valid(stack_address)) {
 		aed_walk_stackframe(&frame, bt, stack_address);
 	}
 	else {
@@ -139,29 +158,40 @@ static void aed_get_bt(struct task_struct *tsk, struct aee_process_bt *bt)
 	}
 }
 
+static DEFINE_SEMAPHORE(process_bt_sem);
+
 int aed_get_process_bt(struct aee_process_bt *bt)
 {
 	int nr_cpus, err;
 	struct bt_sync s;
 	struct task_struct *task;
+	int timeout_max = 500000;
 
+	if (down_interruptible(&process_bt_sem) < 0) {
+	  return -ERESTARTSYS;
+	}
+
+	err = 0;
 	if (bt->pid > 0) {
 		task = find_task_by_vpid(bt->pid);
 		if (task == NULL) {
-			return -EINVAL;
+			err = -EINVAL;
+			goto exit;
 		}
 	}
 	else {
-		return -EINVAL;
+		err = -EINVAL;
+		goto exit;
 	}
 
 	err = mutex_lock_killable(&task->signal->cred_guard_mutex);
-        if (err)
-                return err;
-        if (!ptrace_may_access(task, PTRACE_MODE_ATTACH)) {
-                mutex_unlock(&task->signal->cred_guard_mutex);
-                return -EPERM;
-        }
+	if (err)
+		goto exit;
+	if (!ptrace_may_access(task, PTRACE_MODE_ATTACH)) {
+		mutex_unlock(&task->signal->cred_guard_mutex);
+		err = -EPERM;
+		goto exit;
+	}
  
 	get_online_cpus();
 	preempt_disable();
@@ -172,18 +202,34 @@ int aed_get_process_bt(struct aee_process_bt *bt)
 
 	smp_call_function(per_cpu_get_bt, &s, 0);
 
-	while (atomic_read(&s.cpus_report) != 0);
+	while (atomic_read(&s.cpus_report) != 0) {
+		if (timeout_max-- > 0) {
+			udelay(1);
+		} else {
+			break;
+		}
+	}
 
 	aed_get_bt(task, bt);
 
 	atomic_set(&s.cpus_report, nr_cpus - 1);
 	atomic_set(&s.cpus_lock, 0);
-	while (atomic_read(&s.cpus_report) != 0);
+	timeout_max = 500000;
+	while (atomic_read(&s.cpus_report) != 0) {
+		if (timeout_max-- > 0) {
+			udelay(1);
+		} else {
+			break;
+		}
+	}
 
 	preempt_enable();
 	put_online_cpus();
 
         mutex_unlock(&task->signal->cred_guard_mutex);
 
-	return 0;
+exit:
+	up(&process_bt_sem);
+	return err;
+
 }

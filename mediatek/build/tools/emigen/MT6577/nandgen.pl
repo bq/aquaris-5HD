@@ -1,6 +1,7 @@
 #!/usr/local/bin/perl -w
 
 use File::Basename;
+use File::Path;
 #use strict;
 my $LOCAL_PATH;
 BEGIN
@@ -75,21 +76,12 @@ sub ReadNANDExcelFile
 
 sub GenNANDHeaderFile()
 {
-
-    my $NAND_LIST_DEFINE_H_NAME = "mediatek/custom/$PROJECT/common/nand_device_list.h";
-    my $CUSTOM_OUT_COMMON = "mediatek/custom/out/$FULL_PROJECT/common";
-    my $CUSTOM_COMMON = "mediatek/custom/$PROJECT/common";
+    $custom_out_prefix  = "$ENV{MTK_ROOT_OUT}/NANDGEN";#"mediatek/custom/$ArgList{PROJECT}";
+    my $NAND_LIST_DEFINE_H_NAME = "$custom_out_prefix/common/nand_device_list.h";
 	my %InFileChip;
 	my $Longest_ID=0;
 	my $Chip_count=0;
-    if(!-e $CUSTOM_COMMON)
-    {
-	    `mkdir -p $CUSTOM_COMMON `;
-    }
-	if(-e $NAND_LIST_DEFINE_H_NAME)
-	{
-		`chmod 777 $NAND_LIST_DEFINE_H_NAME`;
-	}
+	
 
 	for($iter=0;$iter<@MemoryDeviceList;$iter++){
 		if(($PAGE_SIZE eq "4K" && $MemoryDeviceList[$iter]->{PageSize_B} eq 4096) || ($PAGE_SIZE eq "2K" && $MemoryDeviceList[$iter]->{PageSize_B} eq 2048))
@@ -123,12 +115,12 @@ sub GenNANDHeaderFile()
 		}
 		
 	}
-    open(FD, ">$NAND_LIST_DEFINE_H_NAME") or &error_handler("open $NAND_LIST_DEFINE_H_NAME fail\n", __FILE__, __LINE__);
-    print FD "\n#ifndef __NAND_DEVICE_LIST_H__\n#define __NAND_DEVICE_LIST_H__\n\n";
-	print FD "#define NAND_MAX_ID\t\t$Longest_ID\n";
-	print FD "#define CHIP_CNT\t\t$Chip_count\n";
-	print FD &struct_flashdev_info_define();
-	print FD "static const flashdev_info gen_FlashTable[]={\n";
+	my $FD = &open_for_rw($NAND_LIST_DEFINE_H_NAME);
+    print $FD "\n#ifndef __NAND_DEVICE_LIST_H__\n#define __NAND_DEVICE_LIST_H__\n\n";
+	print $FD "#define NAND_MAX_ID\t\t$Longest_ID\n";
+	print $FD "#define CHIP_CNT\t\t$Chip_count\n";
+	print $FD &struct_flashdev_info_define();
+	print $FD "static const flashdev_info gen_FlashTable[]={\n";
 	foreach $ID (sort by_length (keys(%InFileChip))){
 		my $it=$InFileChip{$ID}->{Index};
 		#creat ID arry string
@@ -147,20 +139,13 @@ sub GenNANDHeaderFile()
 		$arry_str.="}";
 		print "ID=$arry_str\n";
 		#print string to file
-		print FD "\t{$arry_str, $InFileChip{$ID}->{IDLength},$MemoryDeviceList[$it]->{AddrCycle}, $MemoryDeviceList[$it]->{IOWidth},$MemoryDeviceList[$it]->{TotalSize_MB},$MemoryDeviceList[$it]->{BlockSize_KB},$MemoryDeviceList[$it]->{PageSize_B},$MemoryDeviceList[$it]->{SpareSize_B},$MemoryDeviceList[$it]->{Timing},";
-		printf FD ("\"%.13s\",%d}, \n",$MemoryDeviceList[$it]->{Part_Number},$InFileChip{$ID}->{ADV_OPT});
+		print $FD "\t{$arry_str, $InFileChip{$ID}->{IDLength},$MemoryDeviceList[$it]->{AddrCycle}, $MemoryDeviceList[$it]->{IOWidth},$MemoryDeviceList[$it]->{TotalSize_MB},$MemoryDeviceList[$it]->{BlockSize_KB},$MemoryDeviceList[$it]->{PageSize_B},$MemoryDeviceList[$it]->{SpareSize_B},$MemoryDeviceList[$it]->{Timing},";
+		printf $FD ("\"%.13s\",%d}, \n",$MemoryDeviceList[$it]->{Part_Number},$InFileChip{$ID}->{ADV_OPT});
 	}
 
-    print FD "};\n\n";
-	print FD "#endif\n";
-    close FD;
-
-    if(!-e $CUSTOM_OUT_COMMON)
-    {
-	    `mkdir -p $CUSTOM_OUT_COMMON `;
-		`rm $CUSTOM_OUT_COMMON/nand_device_list.h`;
-        `cp $NAND_LIST_DEFINE_H_NAME $CUSTOM_OUT_COMMON `;
-    }
+    print $FD "};\n\n";
+	print $FD "#endif\n";
+    close $FD;
 }
 
 #****************************************************************************************
@@ -235,4 +220,37 @@ typedef struct
 __TEMPLATE
 
    return $template;
+}
+sub open_for_rw
+{
+    my $filepath = shift @_;
+    if (-e $filepath)
+    {
+        chmod(0777, $filepath) or &error_handler_2("chmod 0777 $filepath fail", __FILE__, __LINE__);
+        if (!unlink $filepath)
+        {
+            &error_handler("remove $filepath fail ", __FILE__, __LINE__);
+        }
+    }
+    else
+    {
+        my $dirpath = substr($filepath, 0, rindex($filepath, "/"));
+        eval { mkpath($dirpath) };
+        if ($@)
+        {
+            &error_handler("Can not make dir $dirpath", __FILE__, __LINE__, $@);
+        }
+    }
+    open my $filehander, "> $filepath" or &error_handler_2(" Can not open $filepath for read and write", __FILE__, __LINE__);
+    return $filehander;
+}
+sub error_handler_2
+{
+    my ($error_msg, $file, $line_no, $sys_msg) = @_;
+    if (!$sys_msg)
+    {
+        $sys_msg = $!;
+    }
+    print "Fatal error: $error_msg <file: $file,line: $line_no> : $sys_msg";
+    die;
 }

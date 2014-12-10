@@ -41,4 +41,5 @@ extern struct ion_process_record *ion_get_freed_process_record(void);
 extern struct ion_client_usage_record *ion_get_inuse_client_record(void);
 extern struct ion_client_usage_record *ion_get_freed_client_record(void);
 extern unsigned int ion_get_data_from_record(void *record,unsigned int data_type);
+void disable_ion_debugger(void);
 #endif

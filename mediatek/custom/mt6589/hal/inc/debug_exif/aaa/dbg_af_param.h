@@ -95,6 +95,7 @@ typedef enum
     Y11,                   // 2D interpolation Y11
     FIRST_GS,              // first gsum value for scene change compare
     CHANGE_GS,             // scene change gsum value
+    POST_COMP_OFFSET,      // posture compensation offset
 
     OVER_PATH_LENGTH
 

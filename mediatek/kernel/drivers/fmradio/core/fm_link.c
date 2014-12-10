@@ -28,7 +28,7 @@
 #include "fm_err.h"
 #include "fm_stdlib.h"
 #include "fm_link.h"
-#if (defined(MT6620_FM)||defined(MT6628_FM))
+#if (defined(MT6620_FM)||defined(MT6628_FM)||defined(MT6627_FM)||defined(MT6630_FM))
 #include "stp_exp.h"
 #include "wmt_exp.h"
 static struct fm_link_event *link_event;
@@ -302,7 +302,14 @@ fm_s32 fm_event_parser(fm_s32(*rds_parser)(struct rds_rx_t*, fm_s32))
 #endif
             if (length > 0) {
                 state = FM_TASK_RX_PARSER_PKT_PAYLOAD;
-            } else {
+            } 
+            else if(opcode == CSPI_WRITE_OPCODE)
+			{
+				state = FM_TASK_RX_PARSER_PKT_TYPE;
+				FM_EVENT_SEND(link_event->ln_event, FLAG_CSPI_WRITE);
+			}
+            else 
+            {
                 state = FM_TASK_RX_PARSER_PKT_TYPE;
                 FM_EVENT_SEND(link_event->ln_event, (1 << opcode));
             }
@@ -362,7 +369,25 @@ fm_s32 fm_event_parser(fm_s32(*rds_parser)(struct rds_rx_t*, fm_s32))
 
                 FM_EVENT_SEND(link_event->ln_event, (1 << opcode));
                 break;
-
+			case CSPI_READ_OPCODE:
+			{
+				if ((i + 1) < RX_BUF_SIZE) {
+					link_event->result.cspi_rd = (rx_buf[i] + (rx_buf[i+1] << 8) + (rx_buf[i+1] << 16) + (rx_buf[i+1] << 24));
+				}
+			
+				FM_EVENT_SEND(link_event->ln_event, FLAG_CSPI_READ);
+				break;
+			}
+			case FM_HOST_READ_OPCODE:
+			{
+				if ((i + 1) < RX_BUF_SIZE) {
+					link_event->result.cspi_rd = (rx_buf[i] + (rx_buf[i+1] << 8) + (rx_buf[i+1] << 16) + (rx_buf[i+1] << 24));
+				}
+			
+				FM_EVENT_SEND(link_event->ln_event, (1 << opcode));
+				break;
+			}
+			
             case RDS_RX_DATA_OPCODE:
 
                 //check if the rds data is long enough

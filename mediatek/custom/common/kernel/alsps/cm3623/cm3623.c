@@ -1,5 +1,4 @@
-/* drivers/hwmon/mt6516/amit/cm3623.c - CM3623 ALS/PS driver
- * 
+/*  
  * Author: MingHsien Hsieh <minghsien.hsieh@mediatek.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -40,30 +39,16 @@
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
 
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
 
-	extern void mt65xx_eint_unmask(unsigned int line);
-	extern void mt65xx_eint_mask(unsigned int line);
-	extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
-	extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
-	extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
-	extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
-
-/*-------------------------MT6516&MT6573 define-------------------------------*/
-#ifdef MT6516
-#define POWER_NONE_MACRO MT6516_POWER_NONE
-#endif
-
-#ifdef MT6573
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
 
-#ifdef MT6575
-#define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
-
-#ifdef MT6577
-#define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
 /******************************************************************************
  * configuration
 *******************************************************************************/
@@ -678,18 +663,8 @@ static void cm3623_eint_work(struct work_struct *work)
 	  }
 	}
 	
-	#ifdef MT6516
-	MT6516_EINTIRQUnmask(CUST_EINT_ALS_NUM);      
-	#endif     
-	#ifdef MT6573
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
-	#endif
-	#ifdef MT6575
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
-	#endif
-	#ifdef MT6577
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
-	#endif
+	mt_eint_unmask(CUST_EINT_ALS_NUM);      
+
 }
 /*----------------------------------------------------------------------------*/
 int cm3623_setup_eint(struct i2c_client *client)
@@ -704,41 +679,10 @@ int cm3623_setup_eint(struct i2c_client *client)
 	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, GPIO_PULL_ENABLE);
 	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
-#ifdef MT6516
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, cm3623_eint_func, 0);
 
-	MT6516_EINT_Set_Sensitivity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	MT6516_EINT_Set_Polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	MT6516_EINT_Set_HW_Debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	MT6516_EINT_Registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, cm3623_eint_func, 0);
-	MT6516_EINTIRQUnmask(CUST_EINT_ALS_NUM);  
-#endif
-    //
-#ifdef MT6573
-	
-    mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, cm3623_eint_func, 0);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
-#endif  
-
-#ifdef MT6575
-		
-		mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-		mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-		mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-		mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, cm3623_eint_func, 0);
-		mt65xx_eint_unmask(CUST_EINT_ALS_NUM);	
-#endif 
-
-#ifdef MT6577
-		
-		mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-		mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-		mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-		mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, cm3623_eint_func, 0);
-		mt65xx_eint_unmask(CUST_EINT_ALS_NUM);	
-#endif
+	mt_eint_unmask(CUST_EINT_ALS_NUM); 
     return 0;
 	
 }
@@ -996,14 +940,6 @@ static ssize_t cm3623_show_status(struct device_driver *ddri, char *buf)
 	len += snprintf(buf+len, PAGE_SIZE-len, "REGS: %02X %02X %02X %02lX %02lX\n", 
 				atomic_read(&cm3623_obj->als_cmd_val), atomic_read(&cm3623_obj->ps_cmd_val), 
 				atomic_read(&cm3623_obj->ps_thd_val),cm3623_obj->enable, cm3623_obj->pending_intr);
-	#ifdef MT6516
-	len += snprintf(buf+len, PAGE_SIZE-len, "EINT: %d (%d %d %d %d)\n", mt_get_gpio_in(GPIO_ALS_EINT_PIN),
-				CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_DEBOUNCE_CN);
-
-	len += snprintf(buf+len, PAGE_SIZE-len, "GPIO: %d (%d %d %d %d)\n",	GPIO_ALS_EINT_PIN, 
-				mt_get_gpio_dir(GPIO_ALS_EINT_PIN), mt_get_gpio_mode(GPIO_ALS_EINT_PIN), 
-				mt_get_gpio_pull_enable(GPIO_ALS_EINT_PIN), mt_get_gpio_pull_select(GPIO_ALS_EINT_PIN));
-	#endif
 
 	len += snprintf(buf+len, PAGE_SIZE-len, "MISC: %d %d\n", atomic_read(&cm3623_obj->als_suspend), atomic_read(&cm3623_obj->ps_suspend));
 
@@ -1925,9 +1861,6 @@ static int cm3623_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 	kfree(obj);
 	exit:
 	cm3623_i2c_client = NULL;           
-	#ifdef MT6516        
-	MT6516_EINTIRQMask(CUST_EINT_ALS_NUM);  /*mask interrupt if fail*/
-	#endif
 	APS_ERR("%s: err = %d\n", __func__, err);
 	return err;
 }

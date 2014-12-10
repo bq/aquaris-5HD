@@ -48,6 +48,13 @@
 #define CFG_FUNC_WIFI_SUPPORT 0
 #endif
 
+#if 1 
+#define CFG_FUNC_ANT_SUPPORT 1
+#else
+#define CFG_FUNC_ANT_SUPPORT 0
+#endif
+
+
 /*******************************************************************************
 *                    E X T E R N A L   R E F E R E N C E S
 ********************************************************************************

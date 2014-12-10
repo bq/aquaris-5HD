@@ -62,6 +62,15 @@ static struct TAIFD_SW_DATA sns_sw_data;
 static int flgActivate = ACTIVE_SS_NUL;
 
 /*----------------------------------------------------------------------------*/
+#if 1
+#define MSENSOR						   0x83
+#define ALPSIO_AD_GET_ACTIVATE     _IOR(MSENSOR, 0x30, int)
+#define ALPSIO_AD_GET_DELAY        _IOR(MSENSOR, 0x31, int)
+#define ALPSIO_AD_GET_DATA         _IOR(MSENSOR, 0x32, int[11])
+#define ALPSIO_AD_SET_DATA         _IOW(MSENSOR, 0x33, int[15])
+#define ALPSIO_AD_EXE_SELF_TEST_A  _IOR(MSENSOR, 0x34, int)
+#define ALPSIO_AD_EXE_SELF_TEST_B  _IOR(MSENSOR, 0x35, int)
+#endif
 
 #define MSE_TAG                  "MSENSOR"
 #define MSE_FUN(f)               printk(KERN_INFO MSE_TAG" %s\r\n", __FUNCTION__)
@@ -94,7 +103,7 @@ static int hscdtd006_resume(struct i2c_client *client);
 
 //static struct platform_driver alps_sensor_driver;
 
-static int hscdtd006_init_flag =0; // 0<==>OK -1 <==> fail
+static int hscdtd006_init_flag =-1; // 0<==>OK -1 <==> fail
 
 static int  hscdtd006_local_init(void);
 static int  hscdtd006_remove(void);
@@ -134,6 +143,7 @@ struct _hscdtd006mid_data {
     int nay;
     int naz;
     int mag_status;
+	int ori_status;
 } hscdtd006mid_data;
 /*----------------------------------------------------------------------------*/
 struct hscdtd006_i2c_data {
@@ -377,7 +387,7 @@ static int HSCDTD006_ReadPostureData(char *buf, int bufsize)
 	
 	read_lock(&hscdtd006mid_data.datalock);
 	sprintf(buf, "%d %d %d %d", hscdtd006mid_data.yaw, hscdtd006mid_data.pitch,
-		hscdtd006mid_data.roll, hscdtd006mid_data.mag_status);
+		hscdtd006mid_data.roll, hscdtd006mid_data.ori_status);
 	read_unlock(&hscdtd006mid_data.datalock);
 	return 0;
 }
@@ -782,7 +792,8 @@ static long hscdtd006_unlocked_ioctl(struct file *file, unsigned int cmd,
 	char buff[512];	
 	int status; 				/* for OPEN/CLOSE_STATUS */
 	short sensor_status;		/* for Orientation and Msensor status */
-	
+	struct hscdtd006_i2c_data *obj = i2c_get_clientdata(hscdtd006_i2c_client);    
+
 	struct TAIFD_HW_DATA tmpval_hw;
 	 struct TAIFD_SW_DATA tmpval_sw;
 //	MSE_FUN(f);
@@ -854,7 +865,13 @@ static long hscdtd006_unlocked_ioctl(struct file *file, unsigned int cmd,
 			hscdtd006mid_data.yaw   = sns_sw_data.ori[1];
 			hscdtd006mid_data.pitch = sns_sw_data.ori[2];
 			hscdtd006mid_data.roll  = sns_sw_data.ori[3];
-			hscdtd006mid_data.mag_status = sns_sw_data.ori[4];
+			hscdtd006mid_data.ori_status = sns_sw_data.ori[4];
+
+			hscdtd006mid_data.nmx = sns_sw_data.mag[1];
+			hscdtd006mid_data.nmy = sns_sw_data.mag[2];
+			hscdtd006mid_data.nmz = sns_sw_data.mag[3];
+			hscdtd006mid_data.mag_status = sns_sw_data.mag[4];
+			
 			write_unlock(&hscdtd006mid_data.datalock);    
 			break;
 
@@ -1006,12 +1023,12 @@ static long hscdtd006_unlocked_ioctl(struct file *file, unsigned int cmd,
 			osensor_data->values[0] = hscdtd006mid_data.yaw;
 			osensor_data->values[1] = hscdtd006mid_data.pitch;
 			osensor_data->values[2] = hscdtd006mid_data.roll;
-			status = hscdtd006mid_data.mag_status;
+			status = hscdtd006mid_data.ori_status;
 			read_unlock(&hscdtd006mid_data.datalock); 
 						
 			osensor_data->value_divide = ORIENTATION_ACCURACY_RATE;	
-
-			switch (hscdtd006mid_data.mag_status)
+			/*
+			switch (hscdtd006mid_data.ori_status)
 		    {
 		            case 1: 
 		                osensor_data->status = SENSOR_STATUS_ACCURACY_LOW;
@@ -1026,7 +1043,7 @@ static long hscdtd006_unlocked_ioctl(struct file *file, unsigned int cmd,
 		                osensor_data->status = SENSOR_STATUS_UNRELIABLE;
 		                break;    
 		    }
-     
+     		*/
 			
             sprintf(buff, "%x %x %x %x %x", osensor_data->values[0], osensor_data->values[1],
 				osensor_data->values[2],osensor_data->status,osensor_data->value_divide);
@@ -1098,6 +1115,15 @@ static long hscdtd006_unlocked_ioctl(struct file *file, unsigned int cmd,
 			write_lock(&hscdtd006mid_data.ctrllock);
 			memcpy(&hscdtd006mid_data.controldata[0], controlbuf, sizeof(controlbuf));
 			write_unlock(&hscdtd006mid_data.ctrllock);        
+			break;
+
+		case ECOMPASS_IOC_GET_LAYOUT:		//used by daemon ?
+			status = atomic_read(&obj->layout);
+			if(copy_to_user(argp, &status, sizeof(status)))
+			{
+				MSE_ERR("copy_to_user failed.");
+				return -EFAULT;
+			}
 			break;
 
 		case MSENSOR_IOCTL_SET_MODE:
@@ -1225,8 +1251,8 @@ int hscdtd006_operate(void* self, uint32_t command, void* buff_in, int size_in,
 				msensor_data->values[0] = msensor_data->values[0] * CONVERT_M;
 				msensor_data->values[1] = msensor_data->values[1] * CONVERT_M;
 				msensor_data->values[2] = msensor_data->values[2] * CONVERT_M;
-				msensor_data->value_divide = 1000;
-
+				msensor_data->value_divide = 1;//1000
+				/*
 				switch (status)
 		        {
 		            case 1: case 2:
@@ -1242,7 +1268,7 @@ int hscdtd006_operate(void* self, uint32_t command, void* buff_in, int size_in,
 		                msensor_data->status = SENSOR_STATUS_UNRELIABLE;
 		                break;    
 		        }
-				
+				*/
 			}
 			break;
 		default:
@@ -1335,13 +1361,13 @@ int hscdtd006_orientation_operate(void* self, uint32_t command, void* buff_in, i
 				osensor_data->values[0] = hscdtd006mid_data.yaw;
 				osensor_data->values[1] = hscdtd006mid_data.pitch;
 				osensor_data->values[2] = hscdtd006mid_data.roll;
-				status = hscdtd006mid_data.mag_status;
+				status = hscdtd006mid_data.ori_status;
 				read_unlock(&hscdtd006mid_data.datalock); 
 				
 				
 				osensor_data->value_divide = ORIENTATION_ACCURACY_RATE;				
 			}
-
+			/*
 			switch (status)
 	        {
 	            case 1: case 2:
@@ -1357,6 +1383,7 @@ int hscdtd006_orientation_operate(void* self, uint32_t command, void* buff_in, i
 	                osensor_data->status = SENSOR_STATUS_UNRELIABLE;
 	                break;    
 	        }
+			*/
 			break;
 		default:
 			MSE_ERR("gsensor operate function no this parameter %d!\n", command);

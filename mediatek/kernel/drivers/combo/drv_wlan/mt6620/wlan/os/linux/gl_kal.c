@@ -685,7 +685,9 @@
 #include "gl_os.h"
 #include "gl_wext.h"
 #include "precomp.h"
-
+#if defined(MTK_TC1_FEATURE_TEMP)
+#include <tc1_partition.h>
+#endif
 /*******************************************************************************
 *                              C O N S T A N T S
 ********************************************************************************
@@ -2948,6 +2950,7 @@ kalRetrieveNetworkAddress(
         UINT_32 i;
         BOOLEAN fgIsReadError = FALSE;
 
+#if !defined(MTK_TC1_FEATURE_TEMP)
         for(i = 0 ; i < MAC_ADDR_LEN ; i+=2) {
             if(kalCfgDataRead16(prGlueInfo,
                         OFFSET_OF(WIFI_CFG_PARAM_STRUCT, aucMacAddress) + i,
@@ -2956,6 +2959,9 @@ kalRetrieveNetworkAddress(
                 break;
             }
         }
+#else
+	TC1_FAC_NAME(FacReadWifiMacAddr)((unsigned char *)prMacAddr);
+#endif
 
         if(fgIsReadError == TRUE) {
             return FALSE;

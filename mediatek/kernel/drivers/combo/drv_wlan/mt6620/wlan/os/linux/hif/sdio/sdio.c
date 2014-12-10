@@ -863,6 +863,25 @@ glBusSetIrq (
     sdio_claim_host(prHifInfo->func);
     ret = sdio_claim_irq(prHifInfo->func, mtk_sdio_interrupt);
     sdio_release_host(prHifInfo->func);
+#else
+    /* hif_sdio case */
+    struct net_device *prNetDevice = NULL;
+    P_GLUE_INFO_T prGlueInfo = NULL;
+
+    ASSERT(pvData);
+    if (!pvData) {
+        return -1;
+    }
+    prNetDevice = (struct net_device *) pvData;
+
+    prGlueInfo = (P_GLUE_INFO_T) pvCookie;
+    ASSERT(prGlueInfo);
+    if (!prGlueInfo) {
+        return -1;
+    }
+
+    mtk_wcn_hif_sdio_enable_irq(prGlueInfo->rHifInfo.cltCtx, MTK_WCN_BOOL_TRUE);
+
 #endif
     return ret;
 } /* end of glBusSetIrq() */

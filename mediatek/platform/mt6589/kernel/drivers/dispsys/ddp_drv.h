@@ -133,9 +133,10 @@ typedef struct{
 
 } DISPLAY_PQ_T;
 
+#define NEW_GAMMA_ARRAY_ARRANGEMENT
 typedef struct{
 
-    unsigned long entry[3][256]; //may change structure after 1302 due to NCSTool rework
+    unsigned long entry[3][257]; //may change structure after 1302 due to NCSTool rework
 
 } DISPLAY_GAMMA_T;
 
@@ -298,6 +299,8 @@ typedef struct {
 #define DISP_IOCTL_SET_GAMMALUT    _IOW    (DISP_IOCTL_MAGIC, 20 , DISPLAY_GAMMA_T)
 //Update BLS setting
 #define DISP_IOCTL_SET_PWMLUT      _IOW    (DISP_IOCTL_MAGIC, 22 , DISPLAY_PWM_T)
+//Get 3D mode data
+#define DISP_IOCTL_GET_S3DMODE     _IOR    (DISP_IOCTL_MAGIC, 33 , int)
 
 //Add for AAL control - E
 /*-----------------------------------------------------------------------------
@@ -325,6 +328,14 @@ typedef struct
     DISP_MODULE_ENUM module;
     unsigned int timeout_ms;  //timeout, unit is ms
 } disp_wait_irq_struct;
+
+// S3D mode
+typedef enum
+{
+    DISP_S3D_NONE,
+    DISP_S3D_2D_MODE,
+    DISP_S3D_3D_MODE
+}DISP_S3D_MODE;
 
 #ifdef __KERNEL__
 typedef void (*DDP_IRQ_CALLBACK)(unsigned int param);

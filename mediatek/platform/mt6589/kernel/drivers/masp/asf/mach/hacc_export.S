@@ -16,7 +16,7 @@
 sp_hacc_internal.isra.0:
 .LFB187:
 	.file 1 "alps/kernel/mediatek/platform/mt6589/kernel/drivers/masp/asf/mach/hacc_export.c"
-	.loc 1 73 0
+	.loc 1 79 0
 	@ args = 8, pretend = 0, frame = 8
 	@ frame_needed = 1, uses_anonymous_args = 0
 .LVL0:
@@ -29,136 +29,144 @@ sp_hacc_internal.isra.0:
 	sub	sp, sp, #8
 .LCFI3:
 .LVL1:
-	.loc 1 80 0
+	.loc 1 86 0
 	cmp	r3, #1
-	.loc 1 73 0
+	.loc 1 79 0
 	mov	r5, r3
 	mov	r4, r0
 	mov	r6, r1
 	ldrb	r7, [fp, #8]	@ zero_extendqisi2
-	.loc 1 80 0
-	beq	.L17
+	.loc 1 86 0
+	beq	.L19
 .LVL2:
 .L2:
-	.loc 1 95 0
-	cmp	r2, #1
-	beq	.L6
-	bcs	.L18
 	.loc 1 101 0
+	cmp	r2, #3
+	ldrls	pc, [pc, r2, asl #2]
+	b	.L14
+.L9:
+	.word	.L5
+	.word	.L6
+	.word	.L7
+	.word	.L8
+.L8:
+	.loc 1 151 0
 	adds	r0, r7, #0
 	ldr	r1, .L21
 	movne	r0, #1
-.L15:
-	.loc 1 112 0
+.L16:
 	bl	HACC_V3_Init
-	.loc 1 114 0
+	.loc 1 153 0
 	mov	r0, r4
 	mov	r1, r6
 	mov	r2, r4
 	bl	HACC_V3_Run
-	.loc 1 116 0
+	.loc 1 155 0
 	bl	HACC_V3_Terminate
-	.loc 1 149 0
+	.loc 1 166 0
 	cmp	r5, #1
-	beq	.L19
-.L9:
-	.loc 1 167 0
+	beq	.L20
+.L11:
+	.loc 1 184 0
 	mov	r0, r4
 	sub	sp, fp, #28
 	ldmfd	sp, {r4, r5, r6, r7, fp, sp, pc}
-.L18:
-	.loc 1 95 0
-	cmp	r2, #2
-	.loc 1 142 0
-	movwne	r2, #24588
-	.loc 1 95 0
-	beq	.L20
-.L4:
-.LVL3:
-	.loc 1 157 0
-	cmp	r5, #1
-	beq	.L3
-.LVL4:
-.L10:
-	.loc 1 162 0 discriminator 1
-	ldr	r1, .L21+4
-	ldr	r0, .L21+8
-	bl	printk
-	.loc 1 164 0 discriminator 1
-#APP
-@ 164 "alps/kernel/mediatek/platform/mt6589/kernel/drivers/masp/asf/mach/hacc_export.c" 1
-	.word 0xe7f001f2
-@ 0 "" 2
-.L20:
-	.loc 1 123 0
-	ldr	r3, .L21+12
+.L7:
+	.loc 1 129 0
+	ldr	r3, .L21+4
 	ldrb	r3, [r3, #0]	@ zero_extendqisi2
 	cmp	r3, #0
-	beq	.L13
-	.loc 1 130 0
-	mov	r0, r2
+	beq	.L15
+	.loc 1 136 0
+	mov	r0, #2
 	mov	r1, #32
 	bl	hacc_set_key
-.LVL5:
-	.loc 1 132 0
+.LVL3:
+	.loc 1 138 0
 	subs	r2, r0, #0
 	bne	.L4
-	.loc 1 135 0
+	.loc 1 141 0
 	mov	r2, r4
 	ldr	r0, [fp, #4]
-.LVL6:
+.LVL4:
 	mov	r1, r4
 	bic	r3, r6, #127
 	bl	hacc_do_aes
-.LVL7:
-	.loc 1 137 0
+.LVL5:
+	.loc 1 143 0
 	subs	r2, r0, #0
 	bne	.L4
-	.loc 1 149 0
+	.loc 1 166 0
 	cmp	r5, #1
-	bne	.L9
-.LVL8:
-.L19:
-	.loc 1 151 0
+	bne	.L11
+.LVL6:
+.L20:
+	.loc 1 168 0
 	bl	osal_hacc_unlock
-	b	.L9
+	b	.L11
 .L6:
-	.loc 1 112 0
+	.loc 1 118 0
 	adds	r0, r7, #0
-	ldr	r1, .L21+16
+	ldr	r1, .L21+8
 	movne	r0, #1
-	b	.L15
+	b	.L16
+.L5:
+	.loc 1 107 0
+	adds	r0, r7, #0
+	ldr	r1, .L21+12
+	movne	r0, #1
+	b	.L16
+.L14:
+	.loc 1 159 0
+	movw	r2, #24588
+.L4:
+.LVL7:
+	.loc 1 174 0
+	cmp	r5, #1
+	beq	.L3
+.LVL8:
+.L12:
+	.loc 1 179 0 discriminator 1
+	ldr	r1, .L21+16
+	ldr	r0, .L21+20
+	bl	printk
+	.loc 1 181 0 discriminator 1
+#APP
+@ 181 "alps/kernel/mediatek/platform/mt6589/kernel/drivers/masp/asf/mach/hacc_export.c" 1
+	.word 0xe7f001f2
+@ 0 "" 2
 .LVL9:
-.L17:
-	.loc 1 83 0
+.L19:
+	.loc 1 89 0
 	str	r2, [fp, #-32]
 	bl	osal_hacc_lock
 .LVL10:
-	.loc 1 85 0
+	.loc 1 91 0
 	ldr	r2, [fp, #-32]
 	cmp	r0, #0
 	beq	.L2
-	.loc 1 87 0
+	.loc 1 93 0
 	movw	r2, #24586
 .LVL11:
 .L3:
-	.loc 1 159 0
+	.loc 1 176 0
 	str	r2, [fp, #-32]
 	bl	osal_hacc_unlock
 	ldr	r2, [fp, #-32]
-	b	.L10
-.L13:
-	.loc 1 125 0
+	b	.L12
+.L15:
+	.loc 1 131 0
 	movw	r2, #24583
 	b	.L4
 .L22:
 	.align	2
 .L21:
+	.word	.LANCHOR0+64
+	.word	.LANCHOR1
+	.word	.LANCHOR0+32
 	.word	.LANCHOR0
 	.word	.LC1
 	.word	.LC0
-	.word	.LANCHOR1
-	.word	.LANCHOR0+32
 .LFE187:
 	.size	sp_hacc_internal.isra.0, .-sp_hacc_internal.isra.0
 	.align	2
@@ -166,7 +174,7 @@ sp_hacc_internal.isra.0:
 	.type	sp_hacc_enc, %function
 sp_hacc_enc:
 .LFB183:
-	.loc 1 173 0
+	.loc 1 190 0
 	@ args = 4, pretend = 0, frame = 0
 	@ frame_needed = 1, uses_anonymous_args = 0
 .LVL12:
@@ -178,7 +186,7 @@ sp_hacc_enc:
 .LCFI6:
 	sub	sp, sp, #8
 .LCFI7:
-	.loc 1 174 0
+	.loc 1 191 0
 	mov	r2, r3
 .LVL13:
 	mov	r3, #1
@@ -188,7 +196,7 @@ sp_hacc_enc:
 	ldrb	r3, [fp, #4]	@ zero_extendqisi2
 	bl	sp_hacc_internal.isra.0
 .LVL15:
-	.loc 1 175 0
+	.loc 1 192 0
 	sub	sp, fp, #12
 	ldmfd	sp, {fp, sp, pc}
 .LFE183:
@@ -198,7 +206,7 @@ sp_hacc_enc:
 	.type	sp_hacc_dec, %function
 sp_hacc_dec:
 .LFB184:
-	.loc 1 182 0
+	.loc 1 199 0
 	@ args = 4, pretend = 0, frame = 0
 	@ frame_needed = 1, uses_anonymous_args = 0
 .LVL16:
@@ -210,7 +218,7 @@ sp_hacc_dec:
 .LCFI10:
 	sub	sp, sp, #8
 .LCFI11:
-	.loc 1 183 0
+	.loc 1 200 0
 	mov	r2, r3
 .LVL17:
 	mov	r3, #0
@@ -220,7 +228,7 @@ sp_hacc_dec:
 	ldrb	r3, [fp, #4]	@ zero_extendqisi2
 	bl	sp_hacc_internal.isra.0
 .LVL19:
-	.loc 1 184 0
+	.loc 1 201 0
 	sub	sp, fp, #12
 	ldmfd	sp, {fp, sp, pc}
 .LFE184:
@@ -230,7 +238,7 @@ sp_hacc_dec:
 	.type	sp_hacc_blk_sz, %function
 sp_hacc_blk_sz:
 .LFB185:
-	.loc 1 190 0
+	.loc 1 207 0
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 1, uses_anonymous_args = 0
 	mov	ip, sp
@@ -239,7 +247,7 @@ sp_hacc_blk_sz:
 .LCFI13:
 	sub	fp, ip, #4
 .LCFI14:
-	.loc 1 192 0
+	.loc 1 209 0
 	mov	r0, #16
 	ldmfd	sp, {fp, sp, pc}
 .LFE185:
@@ -249,7 +257,7 @@ sp_hacc_blk_sz:
 	.type	sp_hacc_init, %function
 sp_hacc_init:
 .LFB186:
-	.loc 1 198 0
+	.loc 1 215 0
 	@ args = 0, pretend = 0, frame = 40
 	@ frame_needed = 1, uses_anonymous_args = 0
 .LVL20:
@@ -262,50 +270,50 @@ sp_hacc_init:
 	sub	sp, sp, #48
 .LCFI18:
 .LVL21:
-	.loc 1 202 0
+	.loc 1 219 0
 	cmp	r1, #16
-	.loc 1 204 0
+	.loc 1 221 0
 	movwne	r0, #24580
 .LVL22:
-	.loc 1 202 0
+	.loc 1 219 0
 	beq	.L31
 .LVL23:
 .L27:
-	.loc 1 217 0
+	.loc 1 234 0
 	sub	sp, fp, #12
 	ldmfd	sp, {fp, sp, pc}
 .LVL24:
 .L31:
-	.loc 1 207 0
+	.loc 1 224 0
 	sub	r1, fp, #12
 .LVL25:
-	.loc 1 208 0
+	.loc 1 225 0
 	mov	r3, #0
-	.loc 1 207 0
+	.loc 1 224 0
 	mov	r2, #32
 	str	r2, [fp, #-48]
 .LVL26:
 .L28:
-	.loc 1 197 0
+	.loc 1 214 0
 	sub	ip, fp, #48
-	.loc 1 210 0
+	.loc 1 227 0
 	ldrb	r2, [r0, r3]	@ zero_extendqisi2
-	.loc 1 197 0
+	.loc 1 214 0
 	add	lr, ip, r3
-	.loc 1 208 0 discriminator 2
+	.loc 1 225 0 discriminator 2
 	add	r3, r3, #1
 .LVL27:
-	.loc 1 208 0 is_stmt 0 discriminator 1
+	.loc 1 225 0 is_stmt 0 discriminator 1
 	cmp	r3, #16
-	.loc 1 211 0 is_stmt 1
+	.loc 1 228 0 is_stmt 1
 	add	ip, r2, #1
-	.loc 1 210 0
+	.loc 1 227 0
 	strb	r2, [lr, #4]
-	.loc 1 211 0
+	.loc 1 228 0
 	strb	ip, [r1, #-1]!
-	.loc 1 208 0 discriminator 1
+	.loc 1 225 0 discriminator 1
 	bne	.L28
-	.loc 1 214 0 discriminator 1
+	.loc 1 231 0 discriminator 1
 	ldrb	ip, [fp, #-41]	@ zero_extendqisi2
 	ldrb	r1, [fp, #-44]	@ zero_extendqisi2
 	ldrb	r2, [fp, #-43]	@ zero_extendqisi2
@@ -314,7 +322,7 @@ sp_hacc_init:
 	ldr	r0, .L32
 	str	ip, [sp, #0]
 	bl	printk
-	.loc 1 216 0
+	.loc 1 233 0
 	sub	r0, fp, #48
 	bl	hacc_init
 	b	.L27
@@ -351,6 +359,17 @@ g_HACC_CFG_2:
 	.word	-1437324070
 	.word	1431445780
 	.word	-1437324070
+	.type	g_HACC_CFG_3, %object
+	.size	g_HACC_CFG_3, 32
+g_HACC_CFG_3:
+	.word	646231696
+	.word	-345528130
+	.word	-1592585140
+	.word	393941525
+	.word	378269286
+	.word	310687364
+	.word	-549728710
+	.word	561999778
 	.section	.rodata.str1.4,"aMS",%progbits,1
 	.align	2
 .LC0:
@@ -529,15 +548,15 @@ bHACC_SWKeyInit:
 	.file 8 "alps/kernel/include/linux/kernel.h"
 	.section	.debug_info,"",%progbits
 .Ldebug_info0:
-	.4byte	0x42d
+	.4byte	0x449
 	.2byte	0x2
 	.4byte	.Ldebug_abbrev0
 	.byte	0x4
 	.uleb128 0x1
-	.4byte	.LASF46
-	.byte	0x1
-	.4byte	.LASF47
 	.4byte	.LASF48
+	.byte	0x1
+	.4byte	.LASF49
+	.4byte	.LASF50
 	.4byte	.Ltext0
 	.4byte	.Letext0
 	.4byte	.Ldebug_line0
@@ -595,7 +614,7 @@ bHACC_SWKeyInit:
 	.byte	0x4
 	.byte	0x2
 	.byte	0x2a
-	.4byte	0x9c
+	.4byte	0xa2
 	.uleb128 0x5
 	.4byte	.LASF11
 	.sleb128 0
@@ -605,19 +624,22 @@ bHACC_SWKeyInit:
 	.uleb128 0x5
 	.4byte	.LASF13
 	.sleb128 2
+	.uleb128 0x5
+	.4byte	.LASF14
+	.sleb128 3
 	.byte	0
 	.uleb128 0x6
-	.4byte	.LASF14
+	.4byte	.LASF15
 	.byte	0x2
-	.byte	0x2e
+	.byte	0x2f
 	.4byte	0x81
 	.uleb128 0x6
-	.4byte	.LASF15
+	.4byte	.LASF16
 	.byte	0x3
 	.byte	0x32
 	.4byte	0x34
 	.uleb128 0x6
-	.4byte	.LASF16
+	.4byte	.LASF17
 	.byte	0x3
 	.byte	0x33
 	.4byte	0x49
@@ -634,9 +656,9 @@ bHACC_SWKeyInit:
 	.uleb128 0x2
 	.byte	0x4
 	.byte	0x4
-	.4byte	.LASF17
-	.uleb128 0x6
 	.4byte	.LASF18
+	.uleb128 0x6
+	.4byte	.LASF19
 	.byte	0x4
 	.byte	0x8b
 	.4byte	0x49
@@ -644,339 +666,349 @@ bHACC_SWKeyInit:
 	.byte	0x4
 	.byte	0x5
 	.byte	0x60
-	.4byte	0xf9
-	.uleb128 0x5
-	.4byte	.LASF19
-	.sleb128 0
+	.4byte	0xff
 	.uleb128 0x5
 	.4byte	.LASF20
+	.sleb128 0
+	.uleb128 0x5
+	.4byte	.LASF21
 	.sleb128 1
 	.byte	0
 	.uleb128 0x6
-	.4byte	.LASF21
+	.4byte	.LASF22
 	.byte	0x5
 	.byte	0x63
-	.4byte	0xe4
+	.4byte	0xea
 	.uleb128 0x4
 	.byte	0x4
 	.byte	0x5
 	.byte	0x66
-	.4byte	0x11f
-	.uleb128 0x5
-	.4byte	.LASF22
-	.sleb128 16
+	.4byte	0x125
 	.uleb128 0x5
 	.4byte	.LASF23
-	.sleb128 24
+	.sleb128 16
 	.uleb128 0x5
 	.4byte	.LASF24
+	.sleb128 24
+	.uleb128 0x5
+	.4byte	.LASF25
 	.sleb128 32
 	.byte	0
 	.uleb128 0x4
 	.byte	0x4
 	.byte	0x5
 	.byte	0x6d
-	.4byte	0x13a
-	.uleb128 0x5
-	.4byte	.LASF25
-	.sleb128 0
+	.4byte	0x140
 	.uleb128 0x5
 	.4byte	.LASF26
-	.sleb128 1
+	.sleb128 0
 	.uleb128 0x5
 	.4byte	.LASF27
+	.sleb128 1
+	.uleb128 0x5
+	.4byte	.LASF28
 	.sleb128 2
 	.byte	0
 	.uleb128 0x8
 	.byte	0x24
 	.byte	0x5
 	.byte	0x77
-	.4byte	0x15f
+	.4byte	0x165
 	.uleb128 0x9
-	.4byte	.LASF28
+	.4byte	.LASF29
 	.byte	0x5
 	.byte	0x78
-	.4byte	0xc7
+	.4byte	0xcd
 	.byte	0x2
 	.byte	0x23
 	.uleb128 0
 	.uleb128 0x9
-	.4byte	.LASF29
+	.4byte	.LASF30
 	.byte	0x5
 	.byte	0x79
-	.4byte	0x15f
+	.4byte	0x165
 	.byte	0x2
 	.byte	0x23
 	.uleb128 0x4
 	.byte	0
 	.uleb128 0xa
-	.4byte	0xbd
-	.4byte	0x16f
+	.4byte	0xc3
+	.4byte	0x175
 	.uleb128 0xb
 	.4byte	0x34
 	.byte	0x1f
 	.byte	0
 	.uleb128 0x6
-	.4byte	.LASF30
+	.4byte	.LASF31
 	.byte	0x5
 	.byte	0x7a
-	.4byte	0x13a
+	.4byte	0x140
 	.uleb128 0xc
-	.4byte	.LASF49
+	.4byte	.LASF51
 	.byte	0x1
-	.byte	0x49
+	.byte	0x4f
 	.byte	0x1
-	.4byte	0x1eb
+	.4byte	0x1f1
 	.byte	0x1
-	.4byte	0x1eb
+	.4byte	0x1f1
 	.uleb128 0xd
 	.ascii	"buf\000"
 	.byte	0x1
-	.byte	0x49
-	.4byte	0x1eb
+	.byte	0x4f
+	.4byte	0x1f1
 	.uleb128 0xe
-	.4byte	.LASF28
+	.4byte	.LASF29
 	.byte	0x1
-	.byte	0x49
-	.4byte	0xa7
+	.byte	0x4f
+	.4byte	0xad
 	.uleb128 0xd
 	.ascii	"bAC\000"
 	.byte	0x1
-	.byte	0x49
-	.4byte	0xd9
-	.uleb128 0xe
-	.4byte	.LASF31
-	.byte	0x1
-	.byte	0x49
-	.4byte	0x9c
+	.byte	0x4f
+	.4byte	0xdf
 	.uleb128 0xe
 	.4byte	.LASF32
 	.byte	0x1
-	.byte	0x49
-	.4byte	0xd9
+	.byte	0x4f
+	.4byte	0xa2
 	.uleb128 0xe
 	.4byte	.LASF33
 	.byte	0x1
-	.byte	0x49
-	.4byte	0xf9
+	.byte	0x4f
+	.4byte	0xdf
+	.uleb128 0xe
+	.4byte	.LASF34
+	.byte	0x1
+	.byte	0x4f
+	.4byte	0xff
 	.uleb128 0xd
 	.ascii	"bEn\000"
 	.byte	0x1
-	.byte	0x49
-	.4byte	0xd9
+	.byte	0x4f
+	.4byte	0xdf
 	.uleb128 0xf
 	.ascii	"err\000"
 	.byte	0x1
-	.byte	0x4b
-	.4byte	0xa7
+	.byte	0x51
+	.4byte	0xad
 	.uleb128 0x10
-	.4byte	.LASF50
+	.4byte	.LASF52
 	.byte	0x1
-	.byte	0x9c
+	.byte	0xad
 	.byte	0
 	.uleb128 0x11
 	.byte	0x4
-	.4byte	0xb2
+	.4byte	0xb8
 	.uleb128 0x12
-	.4byte	0x17a
+	.4byte	0x180
 	.4byte	.LFB187
 	.4byte	.LFE187
 	.4byte	.LLST0
-	.4byte	0x24d
+	.4byte	0x253
 	.uleb128 0x13
-	.4byte	0x18b
+	.4byte	0x191
 	.4byte	.LLST1
 	.uleb128 0x13
-	.4byte	0x196
+	.4byte	0x19c
 	.4byte	.LLST2
 	.uleb128 0x13
-	.4byte	0x1ac
+	.4byte	0x1b2
 	.4byte	.LLST3
 	.uleb128 0x13
-	.4byte	0x1b7
+	.4byte	0x1bd
 	.4byte	.LLST4
 	.uleb128 0x14
-	.4byte	0x1c2
+	.4byte	0x1c8
 	.byte	0x2
 	.byte	0x91
 	.sleb128 0
 	.uleb128 0x14
-	.4byte	0x1cd
+	.4byte	0x1d3
 	.byte	0x2
 	.byte	0x91
 	.sleb128 4
 	.uleb128 0x15
-	.4byte	0x1d8
+	.4byte	0x1de
 	.4byte	.LLST5
 	.uleb128 0x16
-	.4byte	0x1e3
+	.4byte	0x1e9
 	.4byte	.L4
-	.byte	0
-	.uleb128 0x17
-	.byte	0x1
-	.4byte	.LASF34
-	.byte	0x1
-	.byte	0xac
-	.byte	0x1
-	.4byte	0x1eb
-	.4byte	.LFB183
-	.4byte	.LFE183
-	.4byte	.LLST6
-	.4byte	0x2b5
-	.uleb128 0x18
-	.ascii	"buf\000"
-	.byte	0x1
-	.byte	0xac
-	.4byte	0x1eb
-	.4byte	.LLST7
-	.uleb128 0x19
-	.4byte	.LASF28
-	.byte	0x1
-	.byte	0xac
-	.4byte	0xa7
-	.4byte	.LLST8
-	.uleb128 0x18
-	.ascii	"bAC\000"
-	.byte	0x1
-	.byte	0xac
-	.4byte	0xd9
-	.4byte	.LLST9
-	.uleb128 0x19
-	.4byte	.LASF31
-	.byte	0x1
-	.byte	0xac
-	.4byte	0x9c
-	.4byte	.LLST10
-	.uleb128 0x1a
-	.4byte	.LASF32
-	.byte	0x1
-	.byte	0xac
-	.4byte	0xd9
-	.byte	0x2
-	.byte	0x91
-	.sleb128 0
 	.byte	0
 	.uleb128 0x17
 	.byte	0x1
 	.4byte	.LASF35
 	.byte	0x1
-	.byte	0xb5
+	.byte	0xbd
 	.byte	0x1
-	.4byte	0x1eb
-	.4byte	.LFB184
-	.4byte	.LFE184
-	.4byte	.LLST11
-	.4byte	0x31d
+	.4byte	0x1f1
+	.4byte	.LFB183
+	.4byte	.LFE183
+	.4byte	.LLST6
+	.4byte	0x2bb
 	.uleb128 0x18
 	.ascii	"buf\000"
 	.byte	0x1
-	.byte	0xb5
-	.4byte	0x1eb
+	.byte	0xbd
+	.4byte	0x1f1
+	.4byte	.LLST7
+	.uleb128 0x19
+	.4byte	.LASF29
+	.byte	0x1
+	.byte	0xbd
+	.4byte	0xad
+	.4byte	.LLST8
+	.uleb128 0x18
+	.ascii	"bAC\000"
+	.byte	0x1
+	.byte	0xbd
+	.4byte	0xdf
+	.4byte	.LLST9
+	.uleb128 0x19
+	.4byte	.LASF32
+	.byte	0x1
+	.byte	0xbd
+	.4byte	0xa2
+	.4byte	.LLST10
+	.uleb128 0x1a
+	.4byte	.LASF33
+	.byte	0x1
+	.byte	0xbd
+	.4byte	0xdf
+	.byte	0x2
+	.byte	0x91
+	.sleb128 0
+	.byte	0
+	.uleb128 0x17
+	.byte	0x1
+	.4byte	.LASF36
+	.byte	0x1
+	.byte	0xc6
+	.byte	0x1
+	.4byte	0x1f1
+	.4byte	.LFB184
+	.4byte	.LFE184
+	.4byte	.LLST11
+	.4byte	0x323
+	.uleb128 0x18
+	.ascii	"buf\000"
+	.byte	0x1
+	.byte	0xc6
+	.4byte	0x1f1
 	.4byte	.LLST12
 	.uleb128 0x19
-	.4byte	.LASF28
+	.4byte	.LASF29
 	.byte	0x1
-	.byte	0xb5
-	.4byte	0xa7
+	.byte	0xc6
+	.4byte	0xad
 	.4byte	.LLST13
 	.uleb128 0x18
 	.ascii	"bAC\000"
 	.byte	0x1
-	.byte	0xb5
-	.4byte	0xd9
+	.byte	0xc6
+	.4byte	0xdf
 	.4byte	.LLST14
 	.uleb128 0x19
-	.4byte	.LASF31
-	.byte	0x1
-	.byte	0xb5
-	.4byte	0x9c
-	.4byte	.LLST15
-	.uleb128 0x1a
 	.4byte	.LASF32
 	.byte	0x1
-	.byte	0xb5
-	.4byte	0xd9
+	.byte	0xc6
+	.4byte	0xa2
+	.4byte	.LLST15
+	.uleb128 0x1a
+	.4byte	.LASF33
+	.byte	0x1
+	.byte	0xc6
+	.4byte	0xdf
 	.byte	0x2
 	.byte	0x91
 	.sleb128 0
 	.byte	0
 	.uleb128 0x1b
 	.byte	0x1
-	.4byte	.LASF51
+	.4byte	.LASF53
 	.byte	0x1
-	.byte	0xbd
+	.byte	0xce
 	.byte	0x1
-	.4byte	0xa7
+	.4byte	0xad
 	.4byte	.LFB185
 	.4byte	.LFE185
 	.4byte	.LLST16
 	.uleb128 0x17
 	.byte	0x1
-	.4byte	.LASF36
+	.4byte	.LASF37
 	.byte	0x1
-	.byte	0xc5
+	.byte	0xd6
 	.byte	0x1
-	.4byte	0xa7
+	.4byte	0xad
 	.4byte	.LFB186
 	.4byte	.LFE186
 	.4byte	.LLST17
-	.4byte	0x38d
+	.4byte	0x393
 	.uleb128 0x19
-	.4byte	.LASF37
-	.byte	0x1
-	.byte	0xc5
-	.4byte	0x1eb
-	.4byte	.LLST18
-	.uleb128 0x19
-	.4byte	.LASF28
-	.byte	0x1
-	.byte	0xc5
-	.4byte	0xa7
-	.4byte	.LLST19
-	.uleb128 0x1c
 	.4byte	.LASF38
 	.byte	0x1
-	.byte	0xc7
-	.4byte	0x16f
+	.byte	0xd6
+	.4byte	0x1f1
+	.4byte	.LLST18
+	.uleb128 0x19
+	.4byte	.LASF29
+	.byte	0x1
+	.byte	0xd6
+	.4byte	0xad
+	.4byte	.LLST19
+	.uleb128 0x1c
+	.4byte	.LASF39
+	.byte	0x1
+	.byte	0xd8
+	.4byte	0x175
 	.byte	0x2
 	.byte	0x91
 	.sleb128 -52
 	.uleb128 0x1d
 	.ascii	"i\000"
 	.byte	0x1
-	.byte	0xc8
-	.4byte	0xa7
+	.byte	0xd9
+	.4byte	0xad
 	.4byte	.LLST20
 	.byte	0
 	.uleb128 0xa
-	.4byte	0xa7
-	.4byte	0x39d
+	.4byte	0xad
+	.4byte	0x3a3
 	.uleb128 0xb
 	.4byte	0x34
 	.byte	0x7
 	.byte	0
 	.uleb128 0x1c
-	.4byte	.LASF39
+	.4byte	.LASF40
 	.byte	0x1
 	.byte	0x3c
-	.4byte	0x3ae
+	.4byte	0x3b4
 	.byte	0x5
 	.byte	0x3
 	.4byte	g_HACC_CFG_1
 	.uleb128 0x1e
-	.4byte	0x38d
+	.4byte	0x393
 	.uleb128 0x1c
-	.4byte	.LASF40
+	.4byte	.LASF41
 	.byte	0x1
 	.byte	0x41
-	.4byte	0x3c4
+	.4byte	0x3ca
 	.byte	0x5
 	.byte	0x3
 	.4byte	g_HACC_CFG_2
 	.uleb128 0x1e
-	.4byte	0x38d
+	.4byte	0x393
+	.uleb128 0x1c
+	.4byte	.LASF42
+	.byte	0x1
+	.byte	0x46
+	.4byte	0x3e0
+	.byte	0x5
+	.byte	0x3
+	.4byte	g_HACC_CFG_3
+	.uleb128 0x1e
+	.4byte	0x393
 	.uleb128 0x1f
-	.4byte	.LASF41
+	.4byte	.LASF43
 	.byte	0x6
 	.byte	0x23
 	.4byte	0x34
@@ -984,44 +1016,44 @@ bHACC_SWKeyInit:
 	.byte	0x1
 	.uleb128 0xa
 	.4byte	0x5e
-	.4byte	0x3e1
+	.4byte	0x3fd
 	.uleb128 0x20
 	.byte	0
 	.uleb128 0x1f
-	.4byte	.LASF42
+	.4byte	.LASF44
 	.byte	0x7
 	.byte	0x1b
-	.4byte	0x3d6
+	.4byte	0x3f2
 	.byte	0x1
 	.byte	0x1
 	.uleb128 0xa
 	.4byte	0x3b
-	.4byte	0x3f9
+	.4byte	0x415
 	.uleb128 0x20
 	.byte	0
 	.uleb128 0x21
-	.4byte	.LASF43
+	.4byte	.LASF45
 	.byte	0x8
 	.2byte	0x18a
-	.4byte	0x407
+	.4byte	0x423
 	.byte	0x1
 	.byte	0x1
 	.uleb128 0x1e
-	.4byte	0x3ee
+	.4byte	0x40a
 	.uleb128 0x22
-	.4byte	.LASF44
+	.4byte	.LASF46
 	.byte	0x1
 	.byte	0x36
-	.4byte	0xd9
+	.4byte	0xdf
 	.byte	0x1
 	.byte	0x5
 	.byte	0x3
 	.4byte	bHACC_HWWrapKeyInit
 	.uleb128 0x22
-	.4byte	.LASF45
+	.4byte	.LASF47
 	.byte	0x1
 	.byte	0x37
-	.4byte	0xd9
+	.4byte	0xdf
 	.byte	0x1
 	.byte	0x5
 	.byte	0x3
@@ -1557,7 +1589,7 @@ bHACC_SWKeyInit:
 	.4byte	.LVL3-.Ltext0
 	.4byte	.LVL4-.Ltext0
 	.2byte	0x1
-	.byte	0x52
+	.byte	0x50
 	.4byte	.LVL5-.Ltext0
 	.4byte	.LVL6-.Ltext0
 	.2byte	0x1
@@ -1565,7 +1597,7 @@ bHACC_SWKeyInit:
 	.4byte	.LVL7-.Ltext0
 	.4byte	.LVL8-.Ltext0
 	.2byte	0x1
-	.byte	0x50
+	.byte	0x52
 	.4byte	.LVL9-.Ltext0
 	.4byte	.LVL10-.Ltext0
 	.2byte	0x2
@@ -1750,27 +1782,29 @@ bHACC_SWKeyInit:
 	.4byte	0
 	.section	.debug_pubnames,"",%progbits
 .Ldebug_pubnames0:
-	.4byte	0xbc
+	.4byte	0xcd
 	.2byte	0x2
 	.4byte	.Ldebug_info0
-	.4byte	0x431
-	.4byte	0x1f1
+	.4byte	0x44d
+	.4byte	0x1f7
 	.ascii	"sp_hacc_internal.isra.0\000"
-	.4byte	0x24d
+	.4byte	0x253
 	.ascii	"sp_hacc_enc\000"
-	.4byte	0x2b5
+	.4byte	0x2bb
 	.ascii	"sp_hacc_dec\000"
-	.4byte	0x31d
+	.4byte	0x323
 	.ascii	"sp_hacc_blk_sz\000"
-	.4byte	0x336
+	.4byte	0x33c
 	.ascii	"sp_hacc_init\000"
-	.4byte	0x39d
+	.4byte	0x3a3
 	.ascii	"g_HACC_CFG_1\000"
-	.4byte	0x3b3
+	.4byte	0x3b9
 	.ascii	"g_HACC_CFG_2\000"
-	.4byte	0x40c
+	.4byte	0x3cf
+	.ascii	"g_HACC_CFG_3\000"
+	.4byte	0x428
 	.ascii	"bHACC_HWWrapKeyInit\000"
-	.4byte	0x41e
+	.4byte	0x43a
 	.ascii	"bHACC_SWKeyInit\000"
 	.4byte	0
 	.section	.debug_pubtypes,"",%progbits
@@ -1778,7 +1812,7 @@ bHACC_SWKeyInit:
 	.4byte	0x133
 	.2byte	0x2
 	.4byte	.Ldebug_info0
-	.4byte	0x431
+	.4byte	0x44d
 	.4byte	0x2d
 	.ascii	"long unsigned int\000"
 	.4byte	0x34
@@ -1803,23 +1837,23 @@ bHACC_SWKeyInit:
 	.ascii	"long int\000"
 	.4byte	0x7a
 	.ascii	"_Bool\000"
-	.4byte	0x9c
+	.4byte	0xa2
 	.ascii	"HACC_USER\000"
-	.4byte	0xa7
+	.4byte	0xad
 	.ascii	"uint32\000"
-	.4byte	0xb2
+	.4byte	0xb8
 	.ascii	"uchar\000"
-	.4byte	0xbd
+	.4byte	0xc3
 	.ascii	"U8\000"
-	.4byte	0xc7
+	.4byte	0xcd
 	.ascii	"U32\000"
-	.4byte	0xd2
+	.4byte	0xd8
 	.ascii	"float\000"
-	.4byte	0xd9
+	.4byte	0xdf
 	.ascii	"BOOL\000"
-	.4byte	0xf9
+	.4byte	0xff
 	.ascii	"AES_OPS\000"
-	.4byte	0x16f
+	.4byte	0x175
 	.ascii	"AES_KEY_SEED\000"
 	.4byte	0
 	.section	.debug_aranges,"",%progbits
@@ -1837,100 +1871,106 @@ bHACC_SWKeyInit:
 	.section	.debug_line,"",%progbits
 .Ldebug_line0:
 	.section	.debug_str,"MS",%progbits,1
-.LASF42:
-	.ascii	"console_printk\000"
-.LASF45:
-	.ascii	"bHACC_SWKeyInit\000"
-.LASF18:
-	.ascii	"BOOL\000"
-.LASF33:
-	.ascii	"aes_type\000"
+.LASF49:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/hacc_export.c\000"
 .LASF47:
-	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
+	.ascii	"bHACC_SWKeyInit\000"
+.LASF34:
+	.ascii	"aes_type\000"
+.LASF19:
+	.ascii	"BOOL\000"
 .LASF6:
 	.ascii	"short unsigned int\000"
-.LASF32:
+.LASF33:
 	.ascii	"bDoLock\000"
-.LASF44:
+.LASF46:
 	.ascii	"bHACC_HWWrapKeyInit\000"
-.LASF40:
+.LASF41:
 	.ascii	"g_HACC_CFG_2\000"
-.LASF31:
+.LASF32:
 	.ascii	"user\000"
-.LASF17:
+.LASF18:
 	.ascii	"float\000"
 .LASF8:
 	.ascii	"long long unsigned int\000"
-.LASF49:
+.LASF51:
 	.ascii	"sp_hacc_internal\000"
 .LASF4:
 	.ascii	"unsigned char\000"
-.LASF35:
+.LASF36:
 	.ascii	"sp_hacc_dec\000"
 .LASF0:
 	.ascii	"long unsigned int\000"
-.LASF36:
+.LASF37:
 	.ascii	"sp_hacc_init\000"
-.LASF22:
+.LASF23:
 	.ascii	"AES_KEY_128\000"
-.LASF46:
+.LASF48:
 	.ascii	"GNU C 4.6.x-google 20120106 (prerelease)\000"
+.LASF50:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/out\000"
 .LASF13:
 	.ascii	"HACC_USER3\000"
-.LASF34:
+.LASF35:
 	.ascii	"sp_hacc_enc\000"
-.LASF21:
+.LASF22:
 	.ascii	"AES_OPS\000"
-.LASF16:
+.LASF17:
 	.ascii	"uchar\000"
-.LASF39:
+.LASF40:
 	.ascii	"g_HACC_CFG_1\000"
-.LASF41:
+.LASF43:
 	.ascii	"elf_hwcap\000"
-.LASF5:
-	.ascii	"short int\000"
-.LASF15:
+.LASF42:
+	.ascii	"g_HACC_CFG_3\000"
+.LASF16:
 	.ascii	"uint32\000"
 .LASF1:
 	.ascii	"unsigned int\000"
-.LASF28:
+.LASF29:
 	.ascii	"size\000"
 .LASF2:
 	.ascii	"char\000"
-.LASF25:
+.LASF26:
 	.ascii	"AES_SW_KEY\000"
-.LASF37:
+.LASF38:
 	.ascii	"sec_seed\000"
-.LASF51:
+.LASF53:
 	.ascii	"sp_hacc_blk_sz\000"
-.LASF14:
+.LASF44:
+	.ascii	"console_printk\000"
+.LASF15:
 	.ascii	"HACC_USER\000"
-.LASF19:
+.LASF20:
 	.ascii	"AES_DEC\000"
 .LASF7:
 	.ascii	"long long int\000"
-.LASF23:
+.LASF24:
 	.ascii	"AES_KEY_192\000"
-.LASF30:
+.LASF31:
 	.ascii	"AES_KEY_SEED\000"
-.LASF50:
+.LASF52:
 	.ascii	"_err\000"
-.LASF26:
-	.ascii	"AES_HW_KEY\000"
-.LASF20:
-	.ascii	"AES_ENC\000"
 .LASF27:
+	.ascii	"AES_HW_KEY\000"
+.LASF21:
+	.ascii	"AES_ENC\000"
+.LASF28:
 	.ascii	"AES_HW_WRAP_KEY\000"
-.LASF43:
+.LASF45:
 	.ascii	"hex_asc\000"
-.LASF29:
+.LASF30:
 	.ascii	"seed\000"
+.LASF5:
+	.ascii	"short int\000"
 .LASF9:
 	.ascii	"long int\000"
-.LASF38:
+.LASF14:
+	.ascii	"HACC_USER4\000"
+.LASF39:
 	.ascii	"keyseed\000"
 .LASF3:
 	.ascii	"signed char\000"
@@ -1938,12 +1978,9 @@ bHACC_SWKeyInit:
 	.ascii	"HACC_USER1\000"
 .LASF12:
 	.ascii	"HACC_USER2\000"
-.LASF24:
+.LASF25:
 	.ascii	"AES_KEY_256\000"
 .LASF10:
 	.ascii	"_Bool\000"
-.LASF48:
-	.ascii	""
-	.ascii	"\000"
 	.ident	"GCC: (GNU) 4.6.x-google 20120106 (prerelease)"
 	.section	.note.GNU-stack,"",%progbits

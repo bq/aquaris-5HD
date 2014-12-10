@@ -37,26 +37,6 @@
 #include <linux/semaphore.h>
 #include <linux/version.h>
 
-#if 0
-#if defined(CONFIG_ARCH_MT6573)
-#include <mach/mt6573_devs.h>
-#include <mach/mt6573_typedefs.h>
-#elif defined(CONFIG_ARCH_MT6575)
-#include <mach/mt6575_devs.h>
-#include <mach/mt6575_typedefs.h>
-#elif defined(CONFIG_ARCH_MT6516)
-#include <mach/mt6516_devs.h>
-#include <mach/mt6516_typedefs.h>
-#include <mach/mt6516_gpio.h>
-#include <mach/mt6516_pll.h>
-#elif defined(CONFIG_ARCH_MT6575T)
-#include <mach/mt6575_devs.h>
-#include <mach/mt6575_typedefs.h>
-#elif defined(CONFIG_ARCH_MT6577)
-#include <mach/mt6577_devs.h>
-#include <mach/mt6577_typedefs.h>
-#endif
-#endif
 
 #include <mach/devs.h>
 #include <mach/mt_typedefs.h>

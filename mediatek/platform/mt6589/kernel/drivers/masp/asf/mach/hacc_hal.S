@@ -506,13 +506,17 @@ SST_Secure_DeInit:
 	.ascii	"SST_Secure_DeInit\000"
 .LASF1:
 	.ascii	"unsigned int\000"
-.LASF19:
+.LASF18:
 	.ascii	""
-	.ascii	"\000"
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/hacc_hal.c\000"
 .LASF4:
 	.ascii	"unsigned char\000"
 .LASF14:
 	.ascii	"elf_hwcap\000"
+.LASF19:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/out\000"
 .LASF0:
 	.ascii	"long unsigned int\000"
 .LASF8:
@@ -525,11 +529,6 @@ SST_Secure_DeInit:
 	.ascii	"char\000"
 .LASF9:
 	.ascii	"long int\000"
-.LASF18:
-	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
 .LASF15:
 	.ascii	"console_printk\000"
 .LASF10:

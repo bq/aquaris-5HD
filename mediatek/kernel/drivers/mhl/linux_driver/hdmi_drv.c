@@ -15,7 +15,8 @@
 #include "si_mhl_tx_api.h"
 #include "si_cra.h"
 #include "si_drvisrconfig.h"
-#include "si_drv_mhl_tx.h"
+#include "si_drv_mhl_tx.h"  
+#include "si_drv_mdt_tx.h"
 #include "si_mhl_tx.h"
 
 #include <mtk_kpd.h>        /* custom file */
@@ -67,6 +68,7 @@ static HDMI_UTIL_FUNCS hdmi_util = {0};
 
 /*************************************RCP function report added by garyyuan*********************************/
 static struct input_dev *kpd_input_dev = NULL;
+HDMI_CABLE_TYPE MHL_Connect_type = MHL_CABLE;
 
 void mhl_init_rmt_input_dev(void)
 {
@@ -524,7 +526,8 @@ static void hdmi_drv_get_params(HDMI_PARAMS *params)
 
 	params->io_driving_current = IO_DRIVING_CURRENT_2MA;
 	params->intermediat_buffer_num = 4;
-    params->scaling_factor = 5;
+    params->scaling_factor = 4;
+    params->cabletype = MHL_Connect_type;
 }
 
 void hdmi_drv_suspend(void)
@@ -548,6 +551,11 @@ static int hdmi_drv_video_config(HDMI_VIDEO_RESOLUTION vformat, HDMI_VIDEO_INPUT
 	{
 		HDMI_LOG("[hdmi_drv]720p\n");
 		siHdmiTx_VideoSel(HDMI_720P60);
+	}
+	else if(vformat == HDMI_VIDEO_1920x1080p_30Hz)
+	{
+		HDMI_LOG("[hdmi_drv]1080p\n");
+		siHdmiTx_VideoSel(HDMI_1080P30);
 	}
 	else
 	{
@@ -630,7 +638,9 @@ static int hdmi_drv_init(void)
     StartEventThread();     /* begin monitoring for events if using polling mode*/
 #endif
 
+#ifdef MDT_SUPPORT
     mhl_init_rmt_input_dev();
+#endif
 
     return 0;
 }
@@ -660,7 +670,11 @@ int hdmi_drv_power_on(void)
 {
     int ret = 0;
 	HDMI_FUNC();
-	mt65xx_eint_mask(CUST_EINT_MHL_NUM);
+#ifdef 	CUST_EINT_MHL_NUM
+	mt_eint_mask(CUST_EINT_MHL_NUM);
+#else
+    printk("%s,%d Error: CUST_EINT_MHL_NUM is not defined\n", __func__, __LINE__);
+#endif
 
 #if 1
 	SiiMhlTxHwGpioResume();
@@ -677,7 +691,9 @@ int hdmi_drv_power_on(void)
     siHdmiTx_AudioSel(I2S_44);
     ret = SiiMhlTxInitialize(EVENT_POLL_INTERVAL_MS);
     HalReleaseIsrLock();
-	mt65xx_eint_unmask(CUST_EINT_MHL_NUM);
+#ifdef 	CUST_EINT_MHL_NUM    
+	mt_eint_unmask(CUST_EINT_MHL_NUM);
+#endif	
     return ret;
 }
 

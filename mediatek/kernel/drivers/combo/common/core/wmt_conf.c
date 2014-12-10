@@ -156,7 +156,7 @@ static const struct parse_data wmtcfg_fields[] = {
 
 #define NUM_WMTCFG_FIELDS (osal_sizeof(wmtcfg_fields) / osal_sizeof(wmtcfg_fields[0]))
 
-static int wmt_conf_parse_char(P_DEV_WMT pWmtDev, const struct parse_data *data,
+static INT32 wmt_conf_parse_char(P_DEV_WMT pWmtDev, const struct parse_data *data,
                  const PCHAR pos)
 {
     PUCHAR dst;
@@ -193,7 +193,7 @@ static PCHAR  wmt_conf_write_char(P_DEV_WMT pWmtDev, const struct parse_data *da
     return value;
 }
 
-static int wmt_conf_parse_short(P_DEV_WMT pWmtDev, const struct parse_data *data,
+static INT32 wmt_conf_parse_short(P_DEV_WMT pWmtDev, const struct parse_data *data,
                  const PCHAR pos)
 {
     PUINT16 dst;
@@ -234,7 +234,7 @@ static PCHAR  wmt_conf_write_short(P_DEV_WMT pWmtDev, const struct parse_data *d
     return value;
 }
 
-static int wmt_conf_parse_int(P_DEV_WMT pWmtDev, const struct parse_data *data,
+static INT32 wmt_conf_parse_int(P_DEV_WMT pWmtDev, const struct parse_data *data,
                  const PCHAR pos)
 {
     PUINT32 dst;
@@ -280,8 +280,8 @@ static INT32 wmt_conf_parse_pair (
     const PCHAR pVal
     )
 {
-    int i = 0;
-    int ret = 0;
+    INT32 i = 0;
+    INT32 ret = 0;
 
     //WMT_INFO_FUNC( DBG_NAME "cfg(%s) val(%s) \n", pKey, pVal);
 
@@ -429,7 +429,7 @@ static INT32 wmt_conf_parse (
 }
 
 
-INT32  wmt_conf_set_cfg_file(const char *name)
+INT32  wmt_conf_set_cfg_file(const CHAR *name)
 {
     if (NULL == name)
     {

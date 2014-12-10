@@ -21,6 +21,8 @@
 
 #include "sched.h"
 
+//#define TEST_SCHED_DEBUG_ENHANCEMENT
+//#define MTK_SCHED_CMP_PRINT 1
 #define TRYLOCK_NUM 10
 #include <linux/delay.h>
 
@@ -78,13 +80,32 @@ static unsigned long nsec_low(unsigned long long nsec)
 static void print_cfs_group_stats(struct seq_file *m, int cpu, struct task_group *tg)
 {
 	struct sched_entity *se = tg->se[cpu];
+
+#ifndef CONFIG_MTK_SCHED_CMP
 	if (!se)
 		return;
+#endif
 
 #define P(F) \
 	SEQ_printf(m, "  .%-30s: %lld\n", #F, (long long)F)
 #define PN(F) \
 	SEQ_printf(m, "  .%-30s: %lld.%06ld\n", #F, SPLIT_NS((long long)F))
+
+#ifdef CONFIG_MTK_SCHED_CMP
+	if (!se) {
+# if defined(MTK_SCHED_CMP_PRINT)
+		struct sched_avg *avg = &cpu_rq(cpu)->avg;
+		P(avg->runnable_avg_sum);
+		P(avg->runnable_avg_period);
+
+		/* usage_avg_sum & load_avg_ratio are based on Linaro 12.11 */
+		P(avg->usage_avg_sum);
+		P(avg->last_runnable_update);
+# endif
+		return;
+	}
+#endif
+
 
 	PN(se->exec_start);
 	PN(se->vruntime);
@@ -102,6 +123,19 @@ static void print_cfs_group_stats(struct seq_file *m, int cpu, struct task_group
 	P(se->statistics.wait_count);
 #endif
 	P(se->load.weight);
+#if defined(CONFIG_MTK_SCHED_CMP) && defined(MTK_SCHED_CMP_PRINT)
+#ifdef CONFIG_SMP
+	P(se->avg.runnable_avg_sum);
+	P(se->avg.runnable_avg_period);
+	P(se->avg.load_avg_contrib);
+	P(se->avg.decay_count);
+
+	/* usage_avg_sum & load_avg_ratio are based on Linaro 12.11 */
+	P(se->avg.usage_avg_sum);
+	P(se->avg.load_avg_ratio);
+	P(se->avg.last_runnable_update);
+#endif
+#endif
 #undef PN
 #undef P
 }
@@ -221,6 +255,7 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 			cfs_rq->nr_spread_over);
 	SEQ_printf(m, "  .%-30s: %ld\n", "nr_running", cfs_rq->nr_running);
 	SEQ_printf(m, "  .%-30s: %ld\n", "load", cfs_rq->load.weight);
+#ifndef CONFIG_MTK_SCHED_CMP
 #ifdef CONFIG_FAIR_GROUP_SCHED
 #ifdef CONFIG_SMP
 	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "load_avg",
@@ -232,7 +267,32 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 	SEQ_printf(m, "  .%-30s: %d\n", "load_tg",
 			atomic_read(&cfs_rq->tg->load_weight));
 #endif
+#endif
+#endif
 
+/*
+ * restrict the output unless enabled on purpose.
+ */
+#if defined(CONFIG_MTK_SCHED_CMP) && defined(MTK_SCHED_CMP_PRINT)
+#ifdef CONFIG_SMP
+	SEQ_printf(m, "  .%-30s: %ld\n", "runnable_load_avg",
+			cfs_rq->runnable_load_avg);
+	SEQ_printf(m, "  .%-30s: %ld\n", "blocked_load_avg",
+			cfs_rq->blocked_load_avg);
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	SEQ_printf(m, "  .%-30s: %ld\n", "tg_load_contrib",
+			cfs_rq->tg_load_contrib);
+	SEQ_printf(m, "  .%-30s: %d\n", "tg_runnable_contrib",
+			cfs_rq->tg_runnable_contrib);
+	SEQ_printf(m, "  .%-30s: %ld\n", "tg->load_avg",
+			atomic_long_read(&cfs_rq->tg->load_avg));
+	SEQ_printf(m, "  .%-30s: %d\n", "tg->runnable_avg",
+			atomic_read(&cfs_rq->tg->runnable_avg));
+#endif
+#endif
+#endif
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
 	print_cfs_group_stats(m, cpu, cfs_rq->tg);
 #endif
 }
@@ -336,11 +396,27 @@ static const char *sched_tunable_scaling_names[] = {
 	"linear"
 };
 
+#ifdef TEST_SCHED_DEBUG_ENHANCEMENT
+extern void lock_timekeeper(void);		
+#endif
 static int sched_debug_show(struct seq_file *m, void *v)
 {
 	u64 ktime, sched_clk, cpu_clk;
 	unsigned long flags;
 	int cpu;
+
+#ifdef TEST_SCHED_DEBUG_ENHANCEMENT
+	static int i=0;
+	i++;
+	if(i==10){
+		struct rq *rq = cpu_rq(0);
+		//lock_timekeeper();	
+		raw_spin_lock_irq(&rq->lock);
+		spin_lock_irqsave(&sched_debug_lock, flags);
+		write_lock_irqsave(&tasklist_lock, flags);
+		BUG_ON(1);
+	}
+#endif
 
 	local_irq_save(flags);
 	ktime = ktime_to_ns(ktime_get());
@@ -505,6 +581,19 @@ void proc_sched_show_task(struct task_struct *p, struct seq_file *m)
 		   "nr_involuntary_switches", (long long)p->nivcsw);
 
 	P(se.load.weight);
+#if defined(CONFIG_MTK_SCHED_CMP) && defined(MTK_SCHED_CMP_PRINT)
+#ifdef CONFIG_SMP
+	P(se.avg.runnable_avg_sum);
+	P(se.avg.runnable_avg_period);
+	P(se.avg.load_avg_contrib);
+	P(se.avg.decay_count);
+
+	/* usage_avg_sum & load_avg_ratio are based on Linaro 12.11 */
+	P(se.avg.usage_avg_sum);
+	P(se.avg.load_avg_ratio);
+	P(se.avg.last_runnable_update);
+#endif
+#endif
 	P(policy);
 	P(prio);
 #undef PN
@@ -548,7 +637,9 @@ int read_trylock_n_irqsave(rwlock_t *lock, unsigned long *flags, struct seq_file
 	}while((!locked) && (trylock_cnt < TRYLOCK_NUM));
 
 	if (!locked){
+#ifdef CONFIG_DEBUG_SPINLOCK		
 		struct task_struct *owner = NULL;
+#endif		
 		SEQ_printf(m, "Warning: fail to get lock in %s\n", msg);
 #ifdef CONFIG_DEBUG_SPINLOCK
 		if (lock->owner && lock->owner != SPINLOCK_OWNER_INIT )
@@ -575,7 +666,9 @@ int raw_spin_trylock_n_irqsave(raw_spinlock_t *lock, unsigned long *flags, struc
 	}while((!locked) && (trylock_cnt < TRYLOCK_NUM));
 
 	if (!locked){
+#ifdef CONFIG_DEBUG_SPINLOCK		
 		struct task_struct *owner = NULL;
+#endif		
 		SEQ_printf(m, "Warning: fail to get lock in %s\n", msg);
 #ifdef CONFIG_DEBUG_SPINLOCK
 		if (lock->owner && lock->owner != SPINLOCK_OWNER_INIT )
@@ -603,15 +696,17 @@ int spin_trylock_n_irqsave(spinlock_t *lock, unsigned long *flags, struct seq_fi
 	}while((!locked) && (trylock_cnt < TRYLOCK_NUM));
 
 	if (!locked){
+#ifdef CONFIG_DEBUG_SPINLOCK		
 		raw_spinlock_t rlock = lock->rlock;
 		struct task_struct *owner = NULL;
+#endif				
 		SEQ_printf(m, "Warning: fail to get lock in %s\n", msg);
 #ifdef CONFIG_DEBUG_SPINLOCK
 		if (rlock.owner && rlock.owner != SPINLOCK_OWNER_INIT )
 			owner = rlock.owner;
-		SEQ_printf(m, " lock: %p, .magic: %08x, .owner: %s/%d, "
+		SEQ_printf(m, " lock: %x, .magic: %08x, .owner: %s/%d, "
 				".owner_cpu: %d, value: %d\n", 
-			rlock, rlock.magic, 
+			(int) &rlock, rlock.magic, 
 			owner ? owner-> comm: "<<none>>", 	
 			owner ? task_pid_nr(owner): -1, 
 			rlock.owner_cpu, rlock.raw_lock.lock);
@@ -628,7 +723,7 @@ void print_rq_at_KE(struct seq_file *m, struct rq *rq, int rq_cpu)
 	int locked;
 
 	SEQ_printf(m,
-	"\nrunnable tasks:\n"
+	"runnable tasks:\n"
 	"            task   PID         tree-key  switches  prio"
 	"     exec-runtime         sum-exec        sum-sleep\n"
 	"------------------------------------------------------"
@@ -648,6 +743,59 @@ void print_rq_at_KE(struct seq_file *m, struct rq *rq, int rq_cpu)
 		read_unlock_irqrestore(&tasklist_lock, flags);
 }
 
+#ifdef CONFIG_FAIR_GROUP_SCHED
+static void print_cfs_group_stats_at_KE(struct seq_file *m, int cpu, struct task_group *tg)
+{
+	struct sched_entity *se = tg->se[cpu];
+
+#ifndef CONFIG_MTK_SCHED_CMP
+	if (!se)
+		return;
+#endif
+
+#define P(F) \
+	SEQ_printf(m, "  .%-22s: %lld\n", #F, (long long)F)
+#define PN(F) \
+	SEQ_printf(m, "  .%-22s: %lld.%06ld\n", #F, SPLIT_NS((long long)F))
+
+#ifdef CONFIG_MTK_SCHED_CMP
+	if (!se) {
+# if defined(MTK_SCHED_CMP_PRINT)
+		struct sched_avg *avg = &cpu_rq(cpu)->avg;
+		P(avg->runnable_avg_sum);
+		P(avg->runnable_avg_period);
+
+		/* usage_avg_sum & load_avg_ratio are based on Linaro 12.11 */
+		P(avg->usage_avg_sum);
+		P(avg->last_runnable_update);
+# endif
+		return;
+	}
+#endif
+
+
+	PN(se->exec_start);
+	PN(se->vruntime);
+	PN(se->sum_exec_runtime);
+	P(se->load.weight);
+#if defined(CONFIG_MTK_SCHED_CMP) && defined(MTK_SCHED_CMP_PRINT)
+#ifdef CONFIG_SMP
+	P(se->avg.runnable_avg_sum);
+	P(se->avg.runnable_avg_period);
+	P(se->avg.load_avg_contrib);
+	P(se->avg.decay_count);
+
+	/* usage_avg_sum & load_avg_ratio are based on Linaro 12.11 */
+	P(se->avg.usage_avg_sum);
+	P(se->avg.load_avg_ratio);
+	P(se->avg.last_runnable_update);
+#endif
+#endif
+#undef PN
+#undef P
+}
+#endif
+
 void print_cfs_rq_at_KE(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 {
 	s64 MIN_vruntime = -1, min_vruntime, max_vruntime = -1,
@@ -658,11 +806,11 @@ void print_cfs_rq_at_KE(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 	int locked;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	SEQ_printf(m, "\ncfs_rq[%d]:%s\n", cpu, task_group_path(cfs_rq->tg));
+	SEQ_printf(m, "cfs_rq[%d]:%s\n", cpu, task_group_path(cfs_rq->tg));
 #else
-	SEQ_printf(m, "\ncfs_rq[%d]:\n", cpu);
+	SEQ_printf(m, "cfs_rq[%d]:\n", cpu);
 #endif
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "exec_clock",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "exec_clock",
 			SPLIT_NS(cfs_rq->exec_clock));
 
 	//raw_spin_lock_irqsave(&rq->lock, flags);
@@ -676,35 +824,60 @@ void print_cfs_rq_at_KE(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 	rq0_min_vruntime = cpu_rq(0)->cfs.min_vruntime;
 	if(locked)
 		raw_spin_unlock_irqrestore(&rq->lock, flags);
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "MIN_vruntime",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "MIN_vruntime",
 			SPLIT_NS(MIN_vruntime));
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "min_vruntime",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "min_vruntime",
 			SPLIT_NS(min_vruntime));
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "max_vruntime",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "max_vruntime",
 			SPLIT_NS(max_vruntime));
 	spread = max_vruntime - MIN_vruntime;
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "spread",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "spread",
 			SPLIT_NS(spread));
 	spread0 = min_vruntime - rq0_min_vruntime;
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "spread0",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "spread0",
 			SPLIT_NS(spread0));
-	SEQ_printf(m, "  .%-30s: %d\n", "nr_spread_over",
+	SEQ_printf(m, "  .%-22s: %d\n", "nr_spread_over",
 			cfs_rq->nr_spread_over);
-	SEQ_printf(m, "  .%-30s: %ld\n", "nr_running", cfs_rq->nr_running);
-	SEQ_printf(m, "  .%-30s: %ld\n", "load", cfs_rq->load.weight);
-#ifdef CONFIG_FAIR_GROUP_SCHED
-#ifdef CONFIG_SMP
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "load_avg",
+	SEQ_printf(m, "  .%-22s: %ld\n", "nr_running", cfs_rq->nr_running);
+	SEQ_printf(m, "  .%-22s: %ld\n", "load", cfs_rq->load.weight);
+/*
+ * different from print_cfs_rq(), print_cfs_rq_at_KE() is internally developed.
+ * print w/o checking MTK_SCHED_CMP_PRINT.
+ */
+#ifdef CONFIG_MTK_SCHED_CMP
+# ifdef CONFIG_SMP
+	SEQ_printf(m, "  .%-22s: %ld\n", "runnable_load_avg",
+			cfs_rq->runnable_load_avg);
+	SEQ_printf(m, "  .%-22s: %ld\n", "blocked_load_avg",
+			cfs_rq->blocked_load_avg);
+#  ifdef CONFIG_FAIR_GROUP_SCHED
+	SEQ_printf(m, "  .%-22s: %ld\n", "tg_load_contrib",
+			cfs_rq->tg_load_contrib);
+	SEQ_printf(m, "  .%-22s: %d\n", "tg_runnable_contrib",
+			cfs_rq->tg_runnable_contrib);
+	SEQ_printf(m, "  .%-22s: %ld\n", "tg->load_avg",
+			atomic_long_read(&cfs_rq->tg->load_avg));
+	SEQ_printf(m, "  .%-22s: %d\n", "tg->runnable_avg",
+			atomic_read(&cfs_rq->tg->runnable_avg));
+#  endif
+# endif
+#else /* !CONFIG_MTK_SCHED_CMP */
+# ifdef CONFIG_FAIR_GROUP_SCHED
+#  ifdef CONFIG_SMP
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "load_avg",
 			SPLIT_NS(cfs_rq->load_avg));
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", "load_period",
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", "load_period",
 			SPLIT_NS(cfs_rq->load_period));
-	SEQ_printf(m, "  .%-30s: %ld\n", "load_contrib",
+	SEQ_printf(m, "  .%-22s: %ld\n", "load_contrib",
 			cfs_rq->load_contribution);
-	SEQ_printf(m, "  .%-30s: %d\n", "load_tg",
+	SEQ_printf(m, "  .%-22s: %d\n", "load_tg",
 			atomic_read(&cfs_rq->tg->load_weight));
+#  endif
+# endif
 #endif
 
-	print_cfs_group_stats(m, cpu, cfs_rq->tg);
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	print_cfs_group_stats_at_KE(m, cpu, cfs_rq->tg);
 #endif
 }
 
@@ -721,6 +894,69 @@ void print_cfs_stats_at_KE(struct seq_file *m, int cpu)
 	rcu_read_unlock();
 }
 
+void print_rt_rq_at_KE(struct seq_file *m, int cpu, struct rt_rq *rt_rq)
+{
+#ifdef CONFIG_RT_GROUP_SCHED
+	SEQ_printf(m, "rt_rq[%d]:%s\n", cpu, task_group_path(rt_rq->tg));
+#else
+	SEQ_printf(m, "rt_rq[%d]:\n", cpu);
+#endif
+
+#define P(x) \
+	SEQ_printf(m, "  .%-22s: %Ld\n", #x, (long long)(rt_rq->x))
+#define PN(x) \
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", #x, SPLIT_NS(rt_rq->x))
+
+	P(rt_nr_running);
+	P(rt_throttled);
+	PN(rt_time);
+	PN(rt_runtime);
+
+#undef PN
+#undef P
+}
+
+#ifdef CONFIG_RT_GROUP_SCHED
+typedef struct task_group *rt_rq_iter_t;
+
+static inline struct task_group *next_task_group(struct task_group *tg)
+{
+	do {
+		tg = list_entry_rcu(tg->list.next,
+			typeof(struct task_group), list);
+	} while (&tg->list != &task_groups && task_group_is_autogroup(tg));
+
+	if (&tg->list == &task_groups)
+		tg = NULL;
+
+	return tg;
+}
+
+#define for_each_rt_rq(rt_rq, iter, rq)					\
+	for (iter = container_of(&task_groups, typeof(*iter), list);	\
+		(iter = next_task_group(iter)) &&			\
+		(rt_rq = iter->rt_rq[cpu_of(rq)]);)
+
+#else /* !CONFIG_RT_GROUP_SCHED */
+
+typedef struct rt_rq *rt_rq_iter_t;
+
+#define for_each_rt_rq(rt_rq, iter, rq) \
+	for ((void) iter, rt_rq = &rq->rt; rt_rq; rt_rq = NULL)
+
+#endif
+
+void print_rt_stats_at_KE(struct seq_file *m, int cpu)
+{
+        rt_rq_iter_t iter;
+        struct rt_rq *rt_rq;
+
+        rcu_read_lock();
+        for_each_rt_rq(rt_rq, iter, cpu_rq(cpu))
+                print_rt_rq_at_KE(m, cpu, rt_rq);
+        rcu_read_unlock();
+}
+
 static void print_cpu_at_KE(struct seq_file *m, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -735,16 +971,16 @@ static void print_cpu_at_KE(struct seq_file *m, int cpu)
 			   cpu, freq / 1000, (freq % 1000));
 	}
 #else
-	SEQ_printf(m, "\ncpu#%d: %s\n", cpu, cpu_is_offline(cpu)?"Offline":"Online");
+	SEQ_printf(m, "cpu#%d: %s\n", cpu, cpu_is_offline(cpu)?"Offline":"Online");
 #endif
 
 #define P(x) \
-	SEQ_printf(m, "  .%-30s: %Ld\n", #x, (long long)(rq->x))
+	SEQ_printf(m, "  .%-22s: %Ld\n", #x, (long long)(rq->x))
 #define PN(x) \
-	SEQ_printf(m, "  .%-30s: %Ld.%06ld\n", #x, SPLIT_NS(rq->x))
+	SEQ_printf(m, "  .%-22s: %Ld.%06ld\n", #x, SPLIT_NS(rq->x))
 
 	P(nr_running);
-	SEQ_printf(m, "  .%-30s: %lu\n", "load",
+	SEQ_printf(m, "  .%-22s: %lu\n", "load",
 		   rq->load.weight);
 	P(nr_switches);
 	P(nr_load_updates);
@@ -761,8 +997,8 @@ static void print_cpu_at_KE(struct seq_file *m, int cpu)
 #undef PN
 
 #ifdef CONFIG_SCHEDSTATS
-#define P(n) SEQ_printf(m, "  .%-30s: %d\n", #n, rq->n);
-#define P64(n) SEQ_printf(m, "  .%-30s: %Ld\n", #n, rq->n);
+#define P(n) SEQ_printf(m, "  .%-22s: %d\n", #n, rq->n);
+#define P64(n) SEQ_printf(m, "  .%-22s: %Ld\n", #n, rq->n);
 
 	P(yld_count);
 
@@ -781,7 +1017,7 @@ static void print_cpu_at_KE(struct seq_file *m, int cpu)
 	//spin_lock_irqsave(&sched_debug_lock, flags);
 	locked = spin_trylock_n_irqsave( &sched_debug_lock, &flags, m, "print_cpu_at_KE");
 	print_cfs_stats_at_KE(m, cpu);
-	print_rt_stats(m, cpu);
+	print_rt_stats_at_KE(m, cpu);
 
 	rcu_read_lock();
 	print_rq_at_KE(m, rq, cpu);
@@ -795,13 +1031,13 @@ static void print_cpu_at_KE(struct seq_file *m, int cpu)
 
 static int sched_debug_show_at_KE(struct seq_file *m, void *v)
 {
-	u64 ktime, sched_clk, cpu_clk;
+	u64 ktime=0, sched_clk, cpu_clk;
 	unsigned long flags;
 	int cpu;
 	int locked;
 
 	local_irq_save(flags);
-	ktime = ktime_to_ns(ktime_get());
+	//ktime = ktime_to_ns(ktime_get());
 	sched_clk = sched_clock();
 	cpu_clk = local_clock();
 	local_irq_restore(flags);
@@ -812,9 +1048,9 @@ static int sched_debug_show_at_KE(struct seq_file *m, void *v)
 		init_utsname()->version);
 
 #define P(x) \
-	SEQ_printf(m, "%-40s: %Ld\n", #x, (long long)(x))
+	SEQ_printf(m, "%-22s: %Ld\n", #x, (long long)(x))
 #define PN(x) \
-	SEQ_printf(m, "%-40s: %Ld.%06ld\n", #x, SPLIT_NS(x))
+	SEQ_printf(m, "%-22s: %Ld.%06ld\n", #x, SPLIT_NS(x))
 	PN(ktime);
 	PN(sched_clk);
 	PN(cpu_clk);
@@ -825,13 +1061,13 @@ static int sched_debug_show_at_KE(struct seq_file *m, void *v)
 #undef PN
 #undef P
 
-	SEQ_printf(m, "\n");
+	//SEQ_printf(m, "\n");
 	SEQ_printf(m, "sysctl_sched\n");
 
 #define P(x) \
-	SEQ_printf(m, "  .%-40s: %Ld\n", #x, (long long)(x))
+	SEQ_printf(m, "  .%-35s: %Ld\n", #x, (long long)(x))
 #define PN(x) \
-	SEQ_printf(m, "  .%-40s: %Ld.%06ld\n", #x, SPLIT_NS(x))
+	SEQ_printf(m, "  .%-35s: %Ld.%06ld\n", #x, SPLIT_NS(x))
 	PN(sysctl_sched_latency);
 	PN(sysctl_sched_min_granularity);
 	PN(sysctl_sched_wakeup_granularity);
@@ -840,7 +1076,7 @@ static int sched_debug_show_at_KE(struct seq_file *m, void *v)
 #undef PN
 #undef P
 
-	SEQ_printf(m, "  .%-40s: %d (%s)\n", "sysctl_sched_tunable_scaling",
+	SEQ_printf(m, "  .%-35s: %d (%s)\n", "sysctl_sched_tunable_scaling",
 		sysctl_sched_tunable_scaling,
 		sched_tunable_scaling_names[sysctl_sched_tunable_scaling]);
 

@@ -545,11 +545,6 @@ int mtk_p2p_cfg80211_get_station(
     struct station_info *sinfo
     );
 
-int mtk_p2p_cfg80211_scan(
-    struct wiphy *wiphy,
-    struct net_device *ndev,
-    struct cfg80211_scan_request *request
-    );
 
 int mtk_p2p_cfg80211_set_wiphy_params(
     struct wiphy *wiphy,
@@ -579,16 +574,6 @@ int mtk_p2p_cfg80211_leave_ibss(
     struct net_device *dev
     );
 
-int mtk_p2p_cfg80211_set_txpower(
-    struct wiphy *wiphy,
-    enum nl80211_tx_power_setting type,
-    int mbm
-    );
-
-int mtk_p2p_cfg80211_get_txpower(
-    struct wiphy *wiphy,
-    int *dbm
-    );
 
 int mtk_p2p_cfg80211_set_power_mgmt(
     struct wiphy *wiphy,
@@ -603,7 +588,43 @@ mtk_p2p_cfg80211_change_bss(
     struct net_device * dev,
     struct bss_parameters * params
     );
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)    
 
+int mtk_p2p_cfg80211_remain_on_channel(
+	struct wiphy *wiphy,
+    struct wireless_dev *wdev,
+    struct ieee80211_channel *chan,
+    unsigned int duration,
+    u64 *cookie
+    );
+
+int mtk_p2p_cfg80211_scan(
+	struct wiphy *wiphy,
+    struct cfg80211_scan_request *request
+    );
+
+int mtk_p2p_cfg80211_cancel_remain_on_channel(
+	struct wiphy *wiphy,
+    struct wireless_dev *wdev,
+    u64 cookie
+    );
+
+int mtk_p2p_cfg80211_set_txpower(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev,
+    enum nl80211_tx_power_setting type,
+    int mbm
+    );
+
+
+int mtk_p2p_cfg80211_get_txpower(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev,
+    int *dbm
+    );
+
+                         
+#else
 int
 mtk_p2p_cfg80211_remain_on_channel(
     struct wiphy * wiphy,
@@ -614,12 +635,34 @@ mtk_p2p_cfg80211_remain_on_channel(
     u64 * cookie
     );
 
+int mtk_p2p_cfg80211_scan(
+    struct wiphy *wiphy,
+    struct net_device *ndev,
+    struct cfg80211_scan_request *request
+    );
+
 int
 mtk_p2p_cfg80211_cancel_remain_on_channel(
     struct wiphy * wiphy,
     struct net_device * dev,
     u64 cookie
     );
+int mtk_p2p_cfg80211_set_txpower(
+    struct wiphy *wiphy,
+    enum nl80211_tx_power_setting type,
+    int mbm
+    );
+
+int mtk_p2p_cfg80211_get_txpower(
+    struct wiphy *wiphy,
+    int *dbm
+    );
+
+#endif
+
+
+
+
 
 int
 mtk_p2p_cfg80211_deauth(
@@ -658,8 +701,22 @@ mtk_p2p_cfg80211_change_beacon(
     struct cfg80211_beacon_data *info
     );
 
-int
-mtk_p2p_cfg80211_mgmt_tx(
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+
+int mtk_p2p_cfg80211_mgmt_tx(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev,
+    struct ieee80211_channel *chan,
+    bool offchan,
+    unsigned int wait,
+    const u8 *buf,
+    size_t len,
+    bool no_cck,
+    bool dont_wait_for_ack,
+    u64 *cookie);
+#else
+
+int mtk_p2p_cfg80211_mgmt_tx(
     struct wiphy *wiphy,
     struct net_device *dev,
     struct ieee80211_channel *chan,
@@ -672,6 +729,7 @@ mtk_p2p_cfg80211_mgmt_tx(
     bool no_cck,
     bool dont_wait_for_ack,
     u64 *cookie);
+#endif
 
 #else
 int
@@ -713,6 +771,20 @@ mtk_p2p_cfg80211_del_station(
     u8 * mac
     );
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+int mtk_p2p_cfg80211_set_channel(
+	struct wiphy *wiphy,
+    struct cfg80211_chan_def *chandef
+   );
+
+void mtk_p2p_cfg80211_mgmt_frame_register(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev,
+	u16 frame_type,
+	bool reg
+	);
+
+#else
 int
 mtk_p2p_cfg80211_set_channel(
     IN struct wiphy * wiphy,
@@ -721,6 +793,15 @@ mtk_p2p_cfg80211_set_channel(
     IN enum nl80211_channel_type channel_type
     );
 
+void
+mtk_p2p_cfg80211_mgmt_frame_register(
+    IN struct wiphy *wiphy,
+    IN struct net_device *dev,
+    IN u16 frame_type,
+    IN bool reg
+    );
+
+#endif
 int
 mtk_p2p_cfg80211_set_bitrate_mask(
     IN struct wiphy *wiphy,
@@ -730,13 +811,7 @@ mtk_p2p_cfg80211_set_bitrate_mask(
     );
 
 
-void
-mtk_p2p_cfg80211_mgmt_frame_register(
-    IN struct wiphy *wiphy,
-    IN struct net_device *dev,
-    IN u16 frame_type,
-    IN bool reg
-    );
+
 
 #if CONFIG_NL80211_TESTMODE
 int

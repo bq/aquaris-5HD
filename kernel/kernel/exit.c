@@ -60,6 +60,9 @@
 #include <asm/mmu_context.h>
 
 #include <mtlbprof/mtlbprof.h>
+#ifdef CONFIG_MT_PRIO_TRACER
+ #include <linux/prio_tracer.h>
+#endif
 
 static void exit_mm(struct task_struct * tsk);
 
@@ -473,7 +476,7 @@ static void close_files(struct files_struct * files)
 	rcu_read_unlock();
 	for (;;) {
 		unsigned long set;
-		i = j * __NFDBITS;
+		i = j * BITS_PER_LONG;
 		if (i >= fdt->max_fds)
 			break;
 		set = fdt->open_fds[j++];
@@ -920,6 +923,10 @@ void do_exit(long code)
 	end_mtproc_info(tsk);
 #endif
 
+#ifdef CONFIG_MT_PRIO_TRACER
+	delete_prio_tracer(tsk->pid);
+#endif
+
 	WARN_ON(blk_needs_flush_plug(tsk));
 
 	if (unlikely(in_interrupt()))
@@ -964,10 +971,13 @@ void do_exit(long code)
 	exit_signals(tsk);  /* sets PF_EXITING */
 	/*
 	 * tsk->flags are checked in the futex code to protect against
-	 * an exiting task cleaning up the robust pi futexes.
+     * an exiting task cleaning up the robust pi futexes, and in
+     * task_work_add() to avoid the race with exit_task_work().
 	 */
 	smp_mb();
 	raw_spin_unlock_wait(&tsk->pi_lock);
+
+    exit_task_work(tsk);
 
 	exit_irq_thread();
 
@@ -1044,7 +1054,7 @@ void do_exit(long code)
 	/*
 	 * Make sure we are holding no locks:
 	 */
-	debug_check_no_locks_held(tsk);
+	debug_check_no_locks_held();
 	/*
 	 * We can do this unlocked here. The futex code uses this flag
 	 * just to verify whether the pi state cleanup has been done

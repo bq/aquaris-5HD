@@ -23,9 +23,14 @@
 #include <linux/usb/composite.h>
 #include <linux/usb/gadget.h>
 #include <linux/wakelock.h>
+#include <linux/workqueue.h>
 #include <linux/device.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
+#include <linux/workqueue.h>
+#include <linux/kthread.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
 
 #define INTF_DESC       0
 #define BULKIN_DESC     1
@@ -35,10 +40,19 @@
 #define NAME_BUFFSIZE   64
 #define MAX_ATTRIBUTES    10
 
-#define MAX_TTY_RX          4
+#define MAX_TTY_RX          8
 #define MAX_TTY_RX_PACKAGE  512
 #define MAX_TTY_TX          8
-#define MAX_TTY_TX_PACKAGE  64
+#define MAX_TTY_TX_PACKAGE  512
+    
+enum transfer_id {
+    RAWBULK_TID_MODEM,
+    RAWBULK_TID_ETS,
+    RAWBULK_TID_AT,
+    RAWBULK_TID_PCV,
+    RAWBULK_TID_GPS,
+    _MAX_TID
+};
 
 struct rawbulk_function {
     int transfer_id;
@@ -52,6 +66,7 @@ struct rawbulk_function {
     int activated: 1; /* set when usb enabled */
     int tty_opened: 1;
 
+    int initialized: 1; /* init-flag for activator worker */
     struct work_struct activator; /* asynic transaction starter */
 
     struct wake_lock keep_awake;
@@ -80,16 +95,18 @@ struct rawbulk_function {
     struct list_head rx_inproc;
     struct list_head rx_throttled;
     unsigned int last_pushed;
-
+    struct workqueue_struct *tty_push_wq;
+    struct work_struct      tty_push_work;
+    int tty_throttled;
     /* Transfer Controls */
     int nups;
     int ndowns;
     int upsz;
     int downsz;
-    int splitsz;
+    //int splitsz;
     int autoreconn;
     int pushable;   /* Set to use push-way for upstream */
-
+    int cbp_reset;
     /* Descriptors and Strings */
     struct usb_descriptor_header *fs_descs[MAX_DESC_ARRAY];
     struct usb_descriptor_header *hs_descs[MAX_DESC_ARRAY];
@@ -107,19 +124,11 @@ struct rawbulk_function {
     struct device_attribute attr[MAX_ATTRIBUTES];
 };
 
-enum transfer_id {
-    RAWBULK_TID_MODEM,
-    RAWBULK_TID_ETS,
-    RAWBULK_TID_AT,
-    RAWBULK_TID_PCV,
-    RAWBULK_TID_GPS,
-    _MAX_TID
-};
-
-#define RAWBULK_INCEPT_FLAG_ENABLE          0x01
-#define RAWBULK_INCEPT_FLAG_PUSH_WAY        0x02
-typedef int (*rawbulk_intercept_t)(struct usb_interface *interface, unsigned int flags);
 typedef void (*rawbulk_autoreconn_callback_t)(int transfer_id);
+
+/* bind/unbind host interfaces */
+int rawbulk_bind_sdio_channel(int transfer_id);
+void rawbulk_unbind_sdio_channel(int transfer_id);
 
 struct rawbulk_function *rawbulk_lookup_function(int transfer_id);
 
@@ -140,27 +149,21 @@ void rawbulk_unbind_function(int trasfer_id);
 int rawbulk_check_enable(struct rawbulk_function *fn);
 void rawbulk_disable_function(struct rawbulk_function *fn);
 
-/* bind/unbind host interfaces */
-int rawbulk_bind_host_interface(struct usb_interface *interface,
-        rawbulk_intercept_t inceptor);
-void rawbulk_unbind_host_interface(struct usb_interface *interface);
+
 
 /* operations for transactions */
 int rawbulk_start_transactions(int transfer_id, int nups, int ndowns,
-        int upsz, int downsz, int splitsz, int pushable);
+        int upsz, int downsz);
 void rawbulk_stop_transactions(int transfer_id);
-int rawbulk_halt_transactions(int transfer_id);
-int rawbulk_resume_transactions(int transfer_id);
 
-int rawbulk_suspend_host_interface(int transfer_id, pm_message_t message);
-int rawbulk_resume_host_interface(int transfer_id);
 int rawbulk_push_upstream_buffer(int transfer_id, const void *buffer,
         unsigned int length);
-
-int rawbulk_forward_ctrlrequest(const struct usb_ctrlrequest *ctrl);
-
-/* statics and state */
 int rawbulk_transfer_statistics(int transfer_id, char *buf);
 int rawbulk_transfer_state(int transfer_id);
 
+extern int modem_dtr_set(int on, int low_latency);
+extern int modem_dcd_state(void);
+extern int sdio_buffer_push(int port_num, const unsigned char *buf, int count);
+extern int sdio_rawbulk_intercept(int port_num, unsigned int inception);
+                    
 #endif /* __RAWBULK_HEADER_FILE__ */

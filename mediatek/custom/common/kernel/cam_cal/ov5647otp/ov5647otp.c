@@ -379,13 +379,13 @@ static int CAM_CAL_Open(struct inode * a_pstInode, struct file * a_pstFile)
     }
     spin_unlock(&g_CAM_CALLock);
 
-
+#if 0
     if(TRUE != hwPowerOn(MT65XX_POWER_LDO_VCAMA, VOL_2800, CAM_CAL_DRVNAME))
     {
         CAM_CALDB("[S24CAM_CAL] Fail to enable analog gain\n");
         return -EIO;
     }
-
+#endif
     return 0;
 }
 

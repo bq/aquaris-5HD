@@ -602,6 +602,10 @@ static void reset_config(struct usb_composite_dev *cdev)
 		bitmap_zero(f->endpoints, 32);
 	}
 	cdev->config = NULL;
+
+	//ALPS00802402
+	cdev->delayed_status = 0;
+	//ALPS00802402
 }
 
 static int set_config(struct usb_composite_dev *cdev,
@@ -1141,8 +1145,6 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 
 			value = min(w_length, (u16) sizeof cdev->desc);
 			memcpy(req->buf, &cdev->desc, value);
-			xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_GET_DESCRIPTOR: "
-							"USB_DT_DEVICE, value=%d\n",value);
 			break;
 		case USB_DT_DEVICE_QUALIFIER:
 			if (!gadget_is_dualspeed(gadget) ||
@@ -1151,12 +1153,8 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			device_qual(cdev);
 			value = min_t(int, w_length,
 				sizeof(struct usb_qualifier_descriptor));
-			xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_GET_DESCRIPTOR: "
-							"USB_DT_DEVICE_QUALIFIER, value=%d\n",value);
 			break;
 		case USB_DT_OTHER_SPEED_CONFIG:
-			xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_GET_DESCRIPTOR: "
-							"USB_DT_OTHER_SPEED_CONFIG\n");
 			if (!gadget_is_dualspeed(gadget) ||
 			    gadget->speed >= USB_SPEED_SUPER)
 				break;
@@ -1165,25 +1163,18 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			value = config_desc(cdev, w_value);
 			if (value >= 0)
 				value = min(w_length, (u16) value);
-			xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_GET_DESCRIPTOR: "
-							"USB_DT_CONFIG, value=%d\n",value);
 			break;
 		case USB_DT_STRING:
 			value = get_string(cdev, req->buf,
 					w_index, w_value & 0xff);
-			if (value >= 0) {
+			if (value >= 0)
 				value = min(w_length, (u16) value);
-				xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_GET_DESCRIPTOR: "
-						"USB_DT_STRING, value=%d\n" ,value);
-			}
 			break;
 		case USB_DT_BOS:
 			if (gadget_is_superspeed(gadget)) {
 				value = bos_desc(cdev);
 				value = min(w_length, (u16) value);
 			}
-			xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_GET_DESCRIPTOR: "
-						"USB_DT_BOS, value=%d\n",value);
 			break;
 		}
 		break;
@@ -1203,8 +1194,6 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 		spin_lock(&cdev->lock);
 		value = set_config(cdev, ctrl, w_value);
 		spin_unlock(&cdev->lock);
-		xlog_printk(ANDROID_LOG_DEBUG, "USB", "USB_REQ_SET_CONFIGURATION: "
-						"value=%d\n",value);
 		break;
 	case USB_REQ_GET_CONFIGURATION:
 		if (ctrl->bRequestType != USB_DIR_IN)
@@ -1381,11 +1370,6 @@ unknown:
 
 done:
 	USB_LOGGER(DEC_NUM, COMPOSITE_SETUP, "ret", value);
-	if(value < 0) {
-		xlog_printk(ANDROID_LOG_DEBUG, "USB", "composite_setup: value=%d,"
-				"bRequestType=0x%x, bRequest=0x%x, w_value=0x%x, w_length=0x%x \n", value,
-				ctrl->bRequestType,	ctrl->bRequest, w_value, w_value, w_length);
-	}
 	/* device either stalls (value < 0) or reports success */
 	return value;
 }

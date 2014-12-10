@@ -26,6 +26,10 @@
 #define PMIC_WRAP_BASE              0xF000F000
 #define PERI_PWRAP_BRIDGE_BASE      0xF1017000
 
+// TODO: for 6589 BR - S
+#define AP_CCIF_BASE               0xF000C000
+// TODO: for 6589 BR - E
+
 #define DEVICE_APC_0_BASE           0xF0010000
 #define DEVICE_APC_1_BASE           0xF0010100
 #define DEVICE_APC_2_BASE           0xF0010200

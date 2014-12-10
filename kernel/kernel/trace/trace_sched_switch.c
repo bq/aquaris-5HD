@@ -292,28 +292,8 @@ static int tracing_sched_register(void)
 			" probe to kernel_sched_switch\n");
 		goto fail_deprobe_wake_new;
 	}
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	ret = register_trace_int_switch(probe_int_switch, NULL);
-	if (ret) {
-		pr_info("sched trace: Couldn't activate tracepoint"
-			" probe to kernel_int_switch\n");
-		goto fail_deprobe_trace_int_switch;
-	}
-	ret = register_trace_int_nest(probe_int_nest, NULL);
-	if (ret) {
-		pr_info("sched trace: Couldn't activate tracepoint"
-			" probe to kernel_int_nest\n");
-		goto fail_deprobe_trace_int_nest;
-	}	
-#endif
 
 	return ret;
-#ifdef CONFIG_MTK_SCHED_TRACERS
-fail_deprobe_trace_int_nest:
-	unregister_trace_int_nest(probe_int_nest, NULL);
-fail_deprobe_trace_int_switch:
-	unregister_trace_int_switch(probe_int_switch, NULL);
-#endif
 fail_deprobe_wake_new:
 	unregister_trace_sched_wakeup_new(probe_sched_wakeup, NULL);
 fail_deprobe:
@@ -326,10 +306,6 @@ static void tracing_sched_unregister(void)
 	unregister_trace_sched_switch(probe_sched_switch, NULL);
 	unregister_trace_sched_wakeup_new(probe_sched_wakeup, NULL);
 	unregister_trace_sched_wakeup(probe_sched_wakeup, NULL);
-#ifdef CONFIG_MTK_SCHED_TRACERS
-	unregister_trace_int_switch(probe_int_switch, NULL);
-	unregister_trace_int_nest(probe_int_nest, NULL);
-#endif
 }
 
 static void tracing_start_sched_switch(void)
@@ -365,12 +341,33 @@ void tracing_stop_cmdline_record(void)
  */
 void tracing_start_sched_switch_record(void)
 {
+    int ret;
+
 	if (unlikely(!ctx_trace)) {
 		WARN_ON(1);
 		return;
 	}
 
 	tracing_start_sched_switch();
+
+#ifdef CONFIG_MTK_SCHED_TRACERS
+	ret = register_trace_int_switch(probe_int_switch, NULL);
+	if (ret) {
+		pr_info("sched trace: Couldn't activate tracepoint"
+			" probe to kernel_int_switch\n");
+		goto fail_deprobe_trace_int_switch;
+	}
+	ret = register_trace_int_nest(probe_int_nest, NULL);
+	if (ret) {
+		pr_info("sched trace: Couldn't activate tracepoint"
+			" probe to kernel_int_nest\n");
+		goto fail_deprobe_trace_int_nest;
+	}	
+fail_deprobe_trace_int_nest:
+	unregister_trace_int_nest(probe_int_nest, NULL);
+fail_deprobe_trace_int_switch:
+	unregister_trace_int_switch(probe_int_switch, NULL);
+#endif
 
 	mutex_lock(&sched_register_mutex);
 	tracer_enabled++;
@@ -389,6 +386,10 @@ void tracing_stop_sched_switch_record(void)
 	WARN_ON(tracer_enabled < 0);
 	mutex_unlock(&sched_register_mutex);
 
+#ifdef CONFIG_MTK_SCHED_TRACERS
+	unregister_trace_int_switch(probe_int_switch, NULL);
+	unregister_trace_int_nest(probe_int_nest, NULL);
+#endif
 	tracing_stop_sched_switch();
 }
 
@@ -404,6 +405,8 @@ void tracing_sched_switch_assign_trace(struct trace_array *tr)
 {
 	ctx_trace = tr;
 }
+
+#if 0 // deprecated & replaced by scheduling trace events
 static void stop_sched_trace(struct trace_array *tr)
 {
     tracing_stop_sched_switch_record();
@@ -484,4 +487,4 @@ __init static int init_sched_switch_trace(void)
     return register_tracer(&sched_switch_trace);
 }
 device_initcall(init_sched_switch_trace);
-
+#endif

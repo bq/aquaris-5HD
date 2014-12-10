@@ -313,5 +313,6 @@ extern void vShowEdidRawData(void);
 extern void vClearEdidInfo(void);
 extern void mt8193_AppGetEdidInfo(HDMI_EDID_INFO_T *pv_get_info);
 extern u8 vCheckPcmBitSize(u8 ui1ChNumInx);
+extern u8 mt8193_Check_EdidHeader(void);
 #endif
 #endif

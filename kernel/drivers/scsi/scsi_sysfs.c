@@ -246,11 +246,11 @@ show_shost_active_mode(struct device *dev,
 
 static DEVICE_ATTR(active_mode, S_IRUGO | S_IWUSR, show_shost_active_mode, NULL);
 
-static int check_reset_type(char *str)
+static int check_reset_type(const char *str)
 {
-	if (strncmp(str, "adapter", 10) == 0)
+	if (sysfs_streq(str, "adapter"))
 		return SCSI_ADAPTER_RESET;
-	else if (strncmp(str, "firmware", 10) == 0)
+	else if (sysfs_streq(str, "firmware"))
 		return SCSI_FIRMWARE_RESET;
 	else
 		return 0;
@@ -263,12 +263,9 @@ store_host_reset(struct device *dev, struct device_attribute *attr,
 	struct Scsi_Host *shost = class_to_shost(dev);
 	struct scsi_host_template *sht = shost->hostt;
 	int ret = -EINVAL;
-	char str[10];
 	int type;
 
-	sscanf(buf, "%s", str);
-	type = check_reset_type(str);
-
+	type = check_reset_type(buf);
 	if (!type)
 		goto exit_store_host_reset;
 
@@ -956,10 +953,6 @@ void __scsi_remove_device(struct scsi_device *sdev)
 {
 	struct device *dev = &sdev->sdev_gendev;
 
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: sdev->sdev_gendev = %s, sdev->sdev_dev = %s \n", __func__, __LINE__, dev_name(&sdev->sdev_gendev), dev_name(&sdev->sdev_dev));
-	//ALPS00445134, add more debug message for CR debugging
-
 	if (sdev->is_visible) {
 		if (scsi_device_set_state(sdev, SDEV_CANCEL) != 0)
 			return;
@@ -975,11 +968,8 @@ void __scsi_remove_device(struct scsi_device *sdev)
 		sdev->host->hostt->slave_destroy(sdev);
 	transport_destroy_device(dev);
 
-	/* cause the request function to reject all I/O requests */
-	sdev->request_queue->queuedata = NULL;
-
 	/* Freeing the queue signals to block that we're done */
-	scsi_free_queue(sdev->request_queue);
+	blk_cleanup_queue(sdev->request_queue);
 	put_device(dev);
 }
 
@@ -1004,11 +994,6 @@ static void __scsi_remove_target(struct scsi_target *starget)
 	struct scsi_device *sdev;
 
 	spin_lock_irqsave(shost->host_lock, flags);
-	//ALPS00445134, add Linux commit for SCSI
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	//starget->reap_ref++;
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	//ALPS00445134, add Linux commit for SCSI
  restart:
 	list_for_each_entry(sdev, &shost->__devices, siblings) {
 		if (sdev->channel != starget->channel ||
@@ -1022,21 +1007,6 @@ static void __scsi_remove_target(struct scsi_target *starget)
 		goto restart;
 	}
 	spin_unlock_irqrestore(shost->host_lock, flags);
-	//ALPS00445134, add Linux commit for SCSI
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	#if 0
-	scsi_target_reap(starget);
-}
-
-static int __remove_child (struct device * dev, void * data)
-{
-	if (scsi_is_target_device(dev))
-		__scsi_remove_target(to_scsi_target(dev));
-	return 0;
-	#endif
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	//ALPS00445134, add Linux commit for SCSI
-
 }
 
 /**
@@ -1049,55 +1019,32 @@ static int __remove_child (struct device * dev, void * data)
  */
 void scsi_remove_target(struct device *dev)
 {
-	//ALPS00445134, add Linux commit for SCSI
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	#if 0
-	if (scsi_is_target_device(dev)) {
-		__scsi_remove_target(to_scsi_target(dev));
-		return;
-	}
-	#endif
 	struct Scsi_Host *shost = dev_to_shost(dev->parent);
-	struct scsi_target *starget, *found;
+	struct scsi_target *starget, *last = NULL;
 	unsigned long flags;
 
- restart:
-	found = NULL;
+	/* remove targets being careful to lookup next entry before
+	 * deleting the last
+	 */
 	spin_lock_irqsave(shost->host_lock, flags);
 	list_for_each_entry(starget, &shost->__targets, siblings) {
 		if (starget->state == STARGET_DEL)
 			continue;
 		if (starget->dev.parent == dev || &starget->dev == dev) {
-			found = starget;
-			found->reap_ref++;
-			break;
+			/* assuming new targets arrive at the end */
+			starget->reap_ref++;
+			spin_unlock_irqrestore(shost->host_lock, flags);
+			if (last)
+				scsi_target_reap(last);
+			last = starget;
+			__scsi_remove_target(starget);
+			spin_lock_irqsave(shost->host_lock, flags);
 		}
- 	}
-	spin_unlock_irqrestore(shost->host_lock, flags);	
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	//ALPS00445134, add Linux commit for SCSI
-
-
-	//ALPS00445134, add Linux commit for SCSI
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	#if 0
-	get_device(dev);
-	device_for_each_child(dev, NULL, __remove_child);
-	put_device(dev);
-	#endif
-
-	if (found) {
-		__scsi_remove_target(found);
-		scsi_target_reap(found);
-		/* in the case where @dev has multiple starget children,
-		 * continue removing.
-		 *
-		 * FIXME: does such a case exist?
-		 */
-		goto restart;
 	}
-	//10f8d5b86743b33d841a175303e2bf67fd620f42
-	//ALPS00445134, add Linux commit for SCSI
+	spin_unlock_irqrestore(shost->host_lock, flags);
+
+	if (last)
+		scsi_target_reap(last);
 }
 EXPORT_SYMBOL(scsi_remove_target);
 
@@ -1157,9 +1104,6 @@ void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 	sdev->sdev_gendev.type = &scsi_dev_type;
 	dev_set_name(&sdev->sdev_gendev, "%d:%d:%d:%d",
 		     sdev->host->host_no, sdev->channel, sdev->id, sdev->lun);
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: sdev->sdev_gendev = %s \n", __func__, __LINE__, dev_name(&sdev->sdev_gendev));
-	//ALPS00445134, add more debug message for CR debugging
 
 	device_initialize(&sdev->sdev_dev);
 	sdev->sdev_dev.parent = get_device(&sdev->sdev_gendev);
@@ -1168,10 +1112,6 @@ void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 		     sdev->host->host_no, sdev->channel, sdev->id, sdev->lun);
 	sdev->scsi_level = starget->scsi_level;
 	transport_setup_device(&sdev->sdev_gendev);
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: sdev->sdev_dev = %s , sdev->scsi_level= %d\n", __func__, __LINE__, dev_name(&sdev->sdev_dev), sdev->scsi_level);
-	//ALPS00445134, add more debug message for CR debugging
-
 	spin_lock_irqsave(shost->host_lock, flags);
 	list_add_tail(&sdev->same_target_siblings, &starget->devices);
 	list_add_tail(&sdev->siblings, &shost->__devices);

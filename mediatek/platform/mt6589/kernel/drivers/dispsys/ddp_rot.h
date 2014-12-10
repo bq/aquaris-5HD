@@ -251,19 +251,19 @@ void disp_rot_reg_reset(void);
 #define TRANSFORM_2_FLD_OUT_OFFSET_1                           REG_FLD(9, 10)
 #define TRANSFORM_2_FLD_OUT_OFFSET_0                           REG_FLD(9, 0)
 
-#define TRANSFORM_3_FLD_C_01                                   REG_FLD(12, 16)
-#define TRANSFORM_3_FLD_C_00                                   REG_FLD(12, 0)
+#define TRANSFORM_3_FLD_C_01                                   REG_FLD(13, 16)
+#define TRANSFORM_3_FLD_C_00                                   REG_FLD(13, 0)
 
-#define TRANSFORM_4_FLD_C_10                                   REG_FLD(12, 16)
-#define TRANSFORM_4_FLD_C_02                                   REG_FLD(12, 0)
+#define TRANSFORM_4_FLD_C_10                                   REG_FLD(13, 16)
+#define TRANSFORM_4_FLD_C_02                                   REG_FLD(13, 0)
 
-#define TRANSFORM_5_FLD_C_12                                   REG_FLD(12, 16)
-#define TRANSFORM_5_FLD_C_11                                   REG_FLD(12, 0)
+#define TRANSFORM_5_FLD_C_12                                   REG_FLD(13, 16)
+#define TRANSFORM_5_FLD_C_11                                   REG_FLD(13, 0)
 
-#define TRANSFORM_6_FLD_C_21                                   REG_FLD(12, 16)
-#define TRANSFORM_6_FLD_C_20                                   REG_FLD(12, 0)
+#define TRANSFORM_6_FLD_C_21                                   REG_FLD(13, 16)
+#define TRANSFORM_6_FLD_C_20                                   REG_FLD(13, 0)
 
-#define TRANSFORM_7_FLD_C_22                                   REG_FLD(12, 0)
+#define TRANSFORM_7_FLD_C_22                                   REG_FLD(13, 0)
 
 #define RESV_DUMMY_0_FLD_RESV_DUMMY_0                          REG_FLD(32, 0)
 

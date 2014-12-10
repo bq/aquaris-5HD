@@ -184,5 +184,6 @@ extern void vMoveHDCPInternalKey(HDMI_HDCP_KEY_T key);
 extern void vInitHdcpKeyGetMethod(u8 bMethod);
 extern void mt8193_hdcpkey(u8 *pbhdcpkey);
 extern void vShowHdcpRawData(void);
+extern void mt8193_mutehdmi(u8 u1flagvideomute, u8 u1flagaudiomute);
 #endif
 #endif

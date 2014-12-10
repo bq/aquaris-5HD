@@ -943,6 +943,12 @@ config CRYPTO_LZO
 	help
 	  This is the LZO algorithm.
 
+config CRYPTO_LZ4K
+	tristate "LZ4K compression algorithm"
+	select CRYPTO_ALGAPI
+	help
+	  This is the LZ4K algorithm.
+
 config CRYPTO_LZF
 	tristate "LZF compression algorithm"
 	select CRYPTO_ALGAPI

@@ -66,6 +66,12 @@ typedef enum _ccci_ch{
 	CCCI_IPC_UART_TX_ACK = 41,
 	CCCI_MD_LOG_RX = 42,
 	CCCI_MD_LOG_TX = 43,
+#ifdef MTK_ICUSB_SUPPORT
+	CCCI_ICUSB_RX = 44,
+	CCCI_ICUSB_RX_ACK = 45,
+	CCCI_ICUSB_TX = 46,
+	CCCI_ICUSB_TX_ACK = 47,
+#endif
 
 	// MAX Channel
 	CCCI_MAX_CH_NUM,
@@ -79,4 +85,4 @@ typedef enum _ccci_ch{
 	CCCI_INVALID_CH_ID = 0xffffffff,
 }ccci_ch_t;
 
-#endif
+#endif //__CCCI_CH_H__

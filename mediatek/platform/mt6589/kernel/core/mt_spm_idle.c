@@ -25,7 +25,7 @@
 #ifdef SPM_MCDI_FUNC
     #define MCDI_KICK_PCM 1
 #else
-    #define MCDI_KICK_PCM 0
+    #define MCDI_KICK_PCM 1
 #endif
 
 #define SPM_MCDI_BYPASS_SYSPWREQ 1
@@ -83,7 +83,7 @@ do {    \
 } while (0)
 
 // ==========================================
-// PCM code for MCDI (Multi Core Deep Idle)  v4.5 IPI 2013/01/08
+// PCM code for SODI (Screen On Deep Idle)  v4.563 dvs_memoff 2013/03/22
 //
 // core 0 : local timer
 // core 1 : GPT 1
@@ -92,96 +92,17 @@ do {    \
 // ==========================================
 static u32 spm_pcm_mcdi[] = {
 
-    0x10007c1f, 0x19c0001f, 0x00204800, 0x19c0001f, 0x00204800, 0x1880001f,
-    0x100041dc, 0x18c0001f, 0x10004044, 0x1a10001f, 0x100041dc, 0x1a50001f,
-    0x10004044, 0xba008008, 0xff00ffff, 0x00660000, 0xba408009, 0x00ffffff,
-    0x9f000000, 0xe0800008, 0xe0c00009, 0xa1d80407, 0x1b00001f, 0xbffff7ff,
-    0xf0000000, 0x17c07c1f, 0x1b00001f, 0x3fffe7ff, 0x1b80001f, 0x20000004,
-    0x8090840d, 0xb092044d, 0xd80009cc, 0x17c07c1f, 0x1b00001f, 0xbffff7ff,
-    0xd80009c2, 0x17c07c1f, 0x1880001f, 0x100041dc, 0x18c0001f, 0x10004044,
-    0x1a10001f, 0x100041dc, 0x1a50001f, 0x10004044, 0xba008008, 0xff00ffff,
-    0x000a0000, 0xba408009, 0x00ffffff, 0x81000000, 0xe0800008, 0xe0c00009,
-    0x1a50001f, 0x10004044, 0x19c0001f, 0x00214820, 0x19c0001f, 0x00204822,
-    0x1b80001f, 0x2000000a, 0x18c0001f, 0x10006320, 0xe0c0001f, 0x809a840d,
-    0xd8000942, 0x17c07c1f, 0xe0c0000f, 0x18c0001f, 0x10006814, 0xe0c00001,
-    0xd82009c2, 0x17c07c1f, 0xa8000000, 0x00000004, 0x1b00001f, 0x7fffefff,
-    0xf0000000, 0x17c07c1f, 0x1a50001f, 0x10006400, 0x82570409, 0xd8000be9,
-    0x17c07c1f, 0xd8000b4a, 0x17c07c1f, 0xe2e00036, 0xe2e0003e, 0xe2e0002e,
-    0xd8200c0a, 0x17c07c1f, 0xe2e0006e, 0xe2e0004e, 0xe2e0004c, 0xe2e0004d,
-    0xf0000000, 0x17c07c1f, 0x1a50001f, 0x10006400, 0x82570409, 0xd8000e09,
-    0x17c07c1f, 0xd8000d6a, 0x17c07c1f, 0xe2e0006d, 0xe2e0002d, 0xd8200e0a,
-    0x17c07c1f, 0xe2e0002f, 0xe2e0003e, 0xe2e00032, 0xf0000000, 0x17c07c1f,
-    0x1a50001f, 0x10006400, 0x82570409, 0xd8000f89, 0x17c07c1f, 0x12007c1f,
-    0xa210a001, 0xe2c00008, 0xd8000f0a, 0x02a0040a, 0xf0000000, 0x17c07c1f,
-    0x1a50001f, 0x10006400, 0x82570409, 0xd8001129, 0x17c07c1f, 0x1a00001f,
-    0xffffffff, 0x1210a01f, 0xe2c00008, 0xd80010aa, 0x02a0040a, 0xf0000000,
-    0x17c07c1f, 0x1a10001f, 0x10006608, 0xa24e3401, 0x82c02408, 0xf0000000,
-    0x17c07c1f, 0x1a50001f, 0x1000620c, 0x82802401, 0x1180a41f, 0x1a50001f,
-    0x10006224, 0x82002401, 0xa290a00a, 0xa180a406, 0x1a50001f, 0x10006228,
-    0x82002401, 0xa291200a, 0xa180a406, 0x1a50001f, 0x1000622c, 0x82002401,
-    0xa291a00a, 0xa180a406, 0x124e341f, 0xb28024aa, 0x1a10001f, 0x10006400,
-    0x8206a001, 0x6a60000a, 0x0000000f, 0x82e02009, 0x82c0040b, 0xf0000000,
-    0x17c07c1f, 0x1880001f, 0x100041dc, 0x18c0001f, 0x10004044, 0x1a10001f,
-    0x100041dc, 0x1a50001f, 0x10004044, 0xd80017eb, 0x17c07c1f, 0xba008008,
-    0xff00ffff, 0x000a0000, 0xba408009, 0x00ffffff, 0x81000000, 0xd82018eb,
-    0x17c07c1f, 0xba008008, 0xff00ffff, 0x00660000, 0xba408009, 0x00ffffff,
-    0x9f000000, 0xe0800008, 0xe0c00009, 0xf0000000, 0x17c07c1f, 0x820cb401,
-    0xd82019e8, 0x17c07c1f, 0xa1d78407, 0xf0000000, 0x17c07c1f, 0x1a10001f,
-    0x10008004, 0x82402001, 0x1290a41f, 0x8241a001, 0xa291240a, 0x82422001,
-    0xa291a40a, 0x8240a001, 0xa280240a, 0x82412001, 0xa280240a, 0x8242a001,
-    0xa280240a, 0x1a40001f, 0x10006600, 0xe240000a, 0xf0000000, 0x17c07c1f,
-    0x19c0001f, 0x00204822, 0x18c0001f, 0x10006320, 0xe0c0001f, 0x1b80001f,
-    0x20000014, 0x82da840d, 0xd8001e4b, 0x17c07c1f, 0xe0c0000f, 0x18c0001f,
-    0x10006814, 0xe0c00001, 0xf0000000, 0x17c07c1f, 0x10007c1f, 0x19c0001f,
-    0x00204800, 0x19c0001f, 0x00204800, 0xf0000000, 0x17c07c1f, 0x17c07c1f,
-    0x17c07c1f, 0x17c07c1f, 0x17c07c1f, 0x17c07c1f, 0x1840001f, 0x00000001,
-    0x11407c1f, 0x19c0001f, 0x00215800, 0xc0c01a20, 0x17c07c1f, 0x1b00001f,
-    0x3d200011, 0x1b80001f, 0xd0010000, 0x808ab001, 0xc8801962, 0x17c07c1f,
-    0xc1001160, 0x11007c1f, 0x80e01404, 0x60a07c05, 0x88900002, 0x10006814,
-    0xd8003d62, 0x17c07c1f, 0x81000403, 0xd8202344, 0x17c07c1f, 0xa1400405,
-    0x81008c01, 0xd8202584, 0x17c07c1f, 0x1900001f, 0x10006218, 0xc1000c40,
-    0x12807c1f, 0x1900001f, 0x10006264, 0x1a80001f, 0x00000010, 0xc1000e40,
-    0x17c07c1f, 0x1900001f, 0x10006218, 0xc1000c40, 0x1280041f, 0xa1508405,
-    0x81010c01, 0xd82027c4, 0x17c07c1f, 0x1900001f, 0x1000621c, 0xc1000c40,
-    0x12807c1f, 0x1900001f, 0x1000626c, 0x1a80001f, 0x00000010, 0xc1000e40,
-    0x17c07c1f, 0x1900001f, 0x1000621c, 0xc1000c40, 0x1280041f, 0xa1510405,
-    0x81018c01, 0xd8202a04, 0x17c07c1f, 0x1900001f, 0x10006220, 0xc1000c40,
-    0x12807c1f, 0x1900001f, 0x10006274, 0x1a80001f, 0x00000010, 0xc1000e40,
-    0x17c07c1f, 0x1900001f, 0x10006220, 0xc1000c40, 0x1280041f, 0xa1518405,
-    0xd820378c, 0x17c07c1f, 0xc1001160, 0x11007c1f, 0x80c01404, 0x1890001f,
-    0x10006600, 0xa0800806, 0x82000c01, 0xd8202d68, 0x17c07c1f, 0x824d3001,
-    0xb2403121, 0xb24c3121, 0xb2400921, 0xd8202d69, 0x17c07c1f, 0x89400005,
-    0xfffffffe, 0xe8208000, 0x10006f00, 0x00000000, 0xa1d18407, 0x1b80001f,
-    0x20000010, 0x89c00007, 0xfffffff7, 0x81008c01, 0xd82030c4, 0x17c07c1f,
-    0x810db001, 0xb1008881, 0xb1003081, 0xd82030c4, 0x17c07c1f, 0x1900001f,
-    0x10006218, 0xc1000a00, 0x12807c1f, 0x1900001f, 0x10006264, 0x1a80001f,
-    0x00000010, 0xc1000fc0, 0x17c07c1f, 0x1900001f, 0x10006218, 0xc1000a00,
-    0x1280041f, 0x89400005, 0xfffffffd, 0xe8208000, 0x10006f04, 0x00000000,
-    0x81010c01, 0xd8203424, 0x17c07c1f, 0x810e3001, 0xb1010881, 0xb1003081,
-    0xd8203424, 0x17c07c1f, 0x1900001f, 0x1000621c, 0xc1000a00, 0x12807c1f,
-    0x1900001f, 0x1000626c, 0x1a80001f, 0x00000010, 0xc1000fc0, 0x17c07c1f,
-    0x1900001f, 0x1000621c, 0xc1000a00, 0x1280041f, 0x89400005, 0xfffffffb,
-    0xe8208000, 0x10006f08, 0x00000000, 0x81018c01, 0xd8203784, 0x17c07c1f,
-    0x810eb001, 0xb1018881, 0xb1003081, 0xd8203784, 0x17c07c1f, 0x1900001f,
-    0x10006220, 0xc1000a00, 0x12807c1f, 0x1900001f, 0x10006274, 0x1a80001f,
-    0x00000010, 0xc1000fc0, 0x17c07c1f, 0x1900001f, 0x10006220, 0xc1000a00,
-    0x1280041f, 0x89400005, 0xfffffff7, 0xe8208000, 0x10006f0c, 0x00000000,
-    0xc0801220, 0x10807c1f, 0xd8202062, 0x17c07c1f, 0x1b00001f, 0x7fffefff,
-    0x1b80001f, 0xd0010000, 0x8098840d, 0x80d0840d, 0xb0d2046d, 0xa0800c02,
-    0xd8203a02, 0x17c07c1f, 0x8880000c, 0x3d200011, 0xd8002062, 0x17c07c1f,
-    0xd0003800, 0x17c07c1f, 0xe8208000, 0x10006310, 0x0b1600f8, 0xc10015e0,
-    0x11007c1f, 0x19c0001f, 0x00214820, 0xc0801c80, 0x10807c1f, 0xd8202062,
-    0x17c07c1f, 0xa8000000, 0x00000004, 0x1b00001f, 0x7fffefff, 0x1b80001f,
-    0x90100000, 0x80810001, 0xd8202062, 0x17c07c1f, 0xc1001e80, 0x17c07c1f,
-    0xc10015e0, 0x1100041f, 0xa1d80407, 0xd0002060, 0x17c07c1f, 0xc10015e0,
-    0x1100041f, 0x19c0001f, 0x00215800, 0x10007c1f, 0xf0000000
+    0x1840001f, 0x00000001, 0x1b00001f, 0x00200000, 0x1b80001f, 0x90001000,
+    0x8880000c, 0x00200000, 0xd8200042, 0x17c07c1f, 0x809c840d, 0xd8200042,
+    0x17c07c1f, 0x19c0001f, 0x0021d800, 0x18c0001f, 0x10006014, 0x1880001f,
+    0x0021d800, 0xe0c00002, 0xf0000000, 0x17c07c1f
     
 };
 
 #define PCM_MCDI_BASE            __pa(spm_pcm_mcdi)
-#define PCM_MCDI_LEN              ( 497 - 1 )
+#define PCM_MCDI_LEN              ( 22 - 1 )
 #define MCDI_pcm_pc_0      0
-#define MCDI_pcm_pc_1      26
+#define MCDI_pcm_pc_1      29
 #define MCDI_pcm_pc_2      MCDI_pcm_pc_0
 #define MCDI_pcm_pc_3      MCDI_pcm_pc_1
 
@@ -272,6 +193,7 @@ static void SPM_SW_Reset(void)
     spm_write(SPM_PCM_CON0, (CON0_CFG_KEY | CON0_IM_SLEEP_DVS));
 }
 
+#if 0
 static void SET_PCM_EVENT_VEC(u32 n, u32 event, u32 resume, u32 imme, u32 pc)
 {
     switch (n)
@@ -283,9 +205,11 @@ static void SET_PCM_EVENT_VEC(u32 n, u32 event, u32 resume, u32 imme, u32 pc)
         default : break;
     }
 }
+#endif 
 
 static void PCM_Init(void)
 {
+#if 0
     //Init PCM r0
     spm_write(SPM_PCM_REG_DATA_INI, spm_read(SPM_POWER_ON_VAL0));
     spm_write(SPM_PCM_PWR_IO_EN, PCM_RF_SYNC_R0);
@@ -295,10 +219,12 @@ static void PCM_Init(void)
     spm_write(SPM_PCM_REG_DATA_INI, spm_read(SPM_POWER_ON_VAL1));
     spm_write(SPM_PCM_PWR_IO_EN, PCM_RF_SYNC_R7);
     spm_write(SPM_PCM_PWR_IO_EN, 0);
-    
+#endif
+
     // set SPM_PCM_REG_DATA_INI
     spm_write(SPM_PCM_REG_DATA_INI, 0);
-        
+
+#if 0        
     // set AP STANBY CONTROL
     spm_write(SPM_AP_STANBY_CON, ((0x0<<WFI_OP) | (0x1<<WFI_L2C) | (0x1<<WFI_SCU) | (0x7<<WFI_MM) | (0x3<<WFI_MD)));  // operand or, mask l2c, mask scu, 16~18: MM, 19~20:MD
     spm_write(SPM_CORE0_CON, 0x0); // core_0 wfi_sel
@@ -308,6 +234,7 @@ static void PCM_Init(void)
  
      // SET_PCM_MASK_MASTER_REQ
     spm_write(SPM_PCM_MAS_PAUSE_MASK, 0xFFFFFFFF); // bus protect mask
+#endif
 
     /* clean ISR status */
     spm_write(SPM_SLEEP_ISR_MASK, 0x0008);
@@ -315,17 +242,43 @@ static void PCM_Init(void)
 
     // SET_PCM_WAKE_SOURCE
     #if SPM_MCDI_BYPASS_SYSPWREQ
-    spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, (~(0x3c600011))); // PCM_TIMER/Thermal/CIRQ/CSYSBDG/CPU[n]123/csyspwreq_b/xgpt
+    //spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, (~(0x3c600011))); // PCM_TIMER/Thermal/CIRQ/CSYSBDG/CPU[n]123/csyspwreq_b/xgpt
+    //spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, (~(0x3c400011))); // PCM_TIMER/Thermal/CIRQ/CSYSBDG/CPU[n]123/csyspwreq_b/xgpt / thermal
+    spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, 0xffdfffff); // Thermal
     #else
     spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, (~(0x3d600011))); // PCM_TIMER/Thermal/CIRQ/CSYSBDG/CPU[n]123/xgpt
     #endif
 
+#if 0
     // set SPM_APMCU_PWRCTL
     spm_write(SPM_APMCU_PWRCTL, 0x0);
 
     // unmask SPM ISR ( 1 : Mask and will not issue the ISR )    
-    spm_write(SPM_SLEEP_ISR_MASK, 0);
+    //spm_write(SPM_SLEEP_ISR_MASK, 0);
+    spm_write(SPM_SLEEP_ISR_MASK, 0xffff);
+#endif
 }
+
+static void spm_direct_disable_sodi(void)
+{
+    u32 clc_temp;
+
+    clc_temp = spm_read(SPM_CLK_CON);
+    clc_temp |= (0x1<<13);
+    
+    spm_write(SPM_CLK_CON, clc_temp);  
+}
+
+static void spm_direct_enable_sodi(void)
+{
+    u32 clc_temp;
+
+    clc_temp = spm_read(SPM_CLK_CON);
+    clc_temp &= 0xffffdfff; // ~(0x1<<13);
+
+    spm_write(SPM_CLK_CON, clc_temp);  
+}
+
 
 static void KICK_IM_PCM(u32 pcm_sa, u32 len)
 {
@@ -336,10 +289,17 @@ static void KICK_IM_PCM(u32 pcm_sa, u32 len)
     
     //set non-replace mde 
     //spm_write(SPM_PCM_CON1, (CON1_CFG_KEY | CON1_MIF_APBEN | CON1_IM_NONRP_EN));
-    spm_write(SPM_PCM_CON1, (CON1_CFG_KEY | CON1_IM_NONRP_EN));
+    //spm_write(SPM_PCM_CON1, (CON1_CFG_KEY | CON1_IM_NONRP_EN));
+    spm_write(SPM_PCM_CON1, CON1_CFG_KEY);
 
     //sync register and enable IO output for regiser 0 and 7
-    spm_write(SPM_PCM_PWR_IO_EN, (PCM_PWRIO_EN_R7|PCM_PWRIO_EN_R0));  
+    //spm_write(SPM_PCM_PWR_IO_EN, (PCM_PWRIO_EN_R7|PCM_PWRIO_EN_R0));
+
+    //disable IO output for regiser 0 and 7
+    spm_write(SPM_PCM_PWR_IO_EN, 0x0);
+
+    //Disable SODI
+    //spm_direct_disable_sodi();
     
     //Kick PCM & IM
     clc_temp = spm_read(SPM_PCM_CON0);
@@ -354,7 +314,7 @@ static void spm_go_to_MCDI(void)
 
     En_SPM_MCDI = 2;
     
-    #if 1
+    #if 0
     // check dram controller setting ==============================
     if(((spm_read(0xf00041dc) & 0x00ff0000) != 0x00660000 || (spm_read(0xf0004044) & 0xff000000) != 0x9f000000))
     {
@@ -365,16 +325,16 @@ static void spm_go_to_MCDI(void)
     #endif
 
     // mask SPM IRQ =======================================
-    mt_irq_mask_for_sleep(MT_SPM_IRQ_ID); // mask spm    
+    //mt_irq_mask_for_sleep(MT_SPM_IRQ_ID); // mask spm    
 
     // SPM SW reset ========================================
     SPM_SW_Reset();
 
     // Set PCM VSR =========================================
-    SET_PCM_EVENT_VEC(0, 11, 1, 0, MCDI_pcm_pc_0); //MD wake 
-    SET_PCM_EVENT_VEC(1, 12, 1, 0, MCDI_pcm_pc_1); //MD sleep
-    SET_PCM_EVENT_VEC(2, 30, 1, 0, MCDI_pcm_pc_2); //MM wake
-    SET_PCM_EVENT_VEC(3, 31, 1, 0, MCDI_pcm_pc_3); //MM sleep
+    //SET_PCM_EVENT_VEC(0, 11, 1, 0, MCDI_pcm_pc_0); //MD wake 
+    //SET_PCM_EVENT_VEC(1, 12, 1, 0, MCDI_pcm_pc_1); //MD sleep
+    //SET_PCM_EVENT_VEC(2, 30, 1, 0, MCDI_pcm_pc_2); //MM wake
+    //SET_PCM_EVENT_VEC(3, 31, 1, 0, MCDI_pcm_pc_3); //MM sleep
 
     // init PCM ============================================
     PCM_Init();    
@@ -394,8 +354,8 @@ static void spm_go_to_MCDI(void)
 
 static u32 spm_leave_MCDI(void)
 {
-    u32 spm_counter;
-    u32 spm_core_pws, hotplug_out_core_id;
+    //u32 spm_counter;
+    //u32 spm_core_pws, hotplug_out_core_id;
     unsigned long flags;
 
     /* Mask ARM i bit */
@@ -405,8 +365,8 @@ static u32 spm_leave_MCDI(void)
     En_SPM_MCDI = 2;
   
     // trigger cpu wake up event
-    spm_write(SPM_SLEEP_CPU_WAKEUP_EVENT, 0x1);   
-
+    //spm_write(SPM_SLEEP_CPU_WAKEUP_EVENT, 0x1);   
+#if 0
     // polling SPM_SLEEP_ISR_STATUS ===========================
     spm_counter = 0;
     
@@ -428,10 +388,17 @@ static u32 spm_leave_MCDI(void)
         }
         spm_counter++;
     }
+  #endif
+
+    // print spm debug log ===================================
+    spm_mcdi_dump_regs();
+
+    // SPM SW reset ========================================
+    SPM_SW_Reset();
 
     // set cpu wake up event = 0
-    spm_write(SPM_SLEEP_CPU_WAKEUP_EVENT, 0x0);   
-   
+    //spm_write(SPM_SLEEP_CPU_WAKEUP_EVENT, 0x0);   
+
     // clean SPM_SLEEP_ISR_STATUS ============================
     spm_write(SPM_SLEEP_ISR_MASK, 0x0008);
     spm_write(SPM_SLEEP_ISR_STATUS, 0x0018);
@@ -439,12 +406,15 @@ static u32 spm_leave_MCDI(void)
     //disable IO output for regiser 0 and 7
     spm_write(SPM_PCM_PWR_IO_EN, 0x0);  
 
-    // print spm debug log ===================================
-    spm_mcdi_dump_regs();
-
     // clean wakeup event raw status
     spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, 0xffffffff);
+    
+    // print spm debug log ===================================
+    //spm_mcdi_dump_regs();
 
+
+
+#if 0
     #if 1
     // check dram controller setting ==============================
     if(((spm_read(0xf00041dc) & 0x00ff0000) != 0x00660000 || (spm_read(0xf0004044) & 0xff000000) != 0x9f000000))
@@ -475,7 +445,7 @@ static u32 spm_leave_MCDI(void)
         //BUG_ON(1);
         return 0;
     }   
-    
+  #endif  
     clc_notice("spm_leave_MCDI : OK.\r\n");
 
     En_SPM_MCDI = 0;
@@ -486,7 +456,8 @@ static u32 spm_leave_MCDI(void)
     return 0;
 }
 
-void spm_clean_ISR_status(void)
+#if 0
+static void spm_clean_ISR_status(void)
 {
     // clean wakeup event raw status
     spm_write(SPM_SLEEP_WAKEUP_EVENT_MASK, 0xffffffff);
@@ -495,6 +466,7 @@ void spm_clean_ISR_status(void)
     spm_write(SPM_SLEEP_ISR_MASK, 0x0008);
     spm_write(SPM_SLEEP_ISR_STATUS, 0x0018);
 }
+#endif
 
 #if 0
 // =====================================================================
@@ -1136,7 +1108,7 @@ void spm_mcdi_wfi(void)
             spm_write(SPM_CORE0_CON, SPM_MCDI_CORE_SEL);
 
             while(1)
-            {
+            {            	
                 mcdi_wfi_with_sync(); // enter wfi 
 
                 if((spm_read(SPM_AP_STANBY_CON) & 0x1) == 0x0) // check wfi_sel_0 == 0
@@ -1149,8 +1121,7 @@ void spm_mcdi_wfi(void)
                 clc_notice("core_%d exit wfi.\n", core_id);            
             
             // debug info ===========================================================================
-            #if 1
-            
+            #if 1          
             if( (spm_read(SPM_PCM_REG_DATA_INI) != 0x0) || (spm_read(SPM_SLEEP_CPU_WAKEUP_EVENT) == 0x1) )
             {
                 clc_notice("MCDI SPM assert_0 ==================================================\n");
@@ -1602,25 +1573,6 @@ void spm_hot_plug_out_after(u32 target_core)
     #endif
 }
 
-static void spm_direct_disable_sodi(void)
-{
-    u32 clc_temp;
-
-    clc_temp = spm_read(SPM_CLK_CON);
-    clc_temp |= (0x1<<13);
-    
-    spm_write(SPM_CLK_CON, clc_temp);  
-}
-
-static void spm_direct_enable_sodi(void)
-{
-    u32 clc_temp;
-
-    clc_temp = spm_read(SPM_CLK_CON);
-    clc_temp &= 0xffffdfff; // ~(0x1<<13);
-
-    spm_write(SPM_CLK_CON, clc_temp);  
-}
 
 void spm_disable_sodi(void)
 {
@@ -1628,12 +1580,12 @@ void spm_disable_sodi(void)
 
     spm_sodi_disable_counter++;
     clc_debug("spm_disable_sodi() : spm_sodi_disable_counter = 0x%x\n", spm_sodi_disable_counter);    
-
+#if 0
     if(spm_sodi_disable_counter > 0)
     {
         spm_direct_disable_sodi();
     }
-
+#endif
     spin_unlock(&spm_sodi_lock);
 }
 
@@ -1643,15 +1595,14 @@ void spm_enable_sodi(void)
 
     spm_sodi_disable_counter--;
     clc_debug("spm_enable_sodi() : spm_sodi_disable_counter = 0x%x\n", spm_sodi_disable_counter);    
-    
+#if 0    
     if(spm_sodi_disable_counter <= 0)
     {
         spm_direct_enable_sodi();
     }
-
+#endif
     spin_unlock(&spm_sodi_lock);
 }
-
 
 // ==============================================================================
 
@@ -1659,13 +1610,13 @@ static int spm_mcdi_probe(struct platform_device *pdev)
 {
     int hibboot = 0;
     hibboot = get_env("hibboot") == NULL ? 0 : simple_strtol(get_env("hibboot"), NULL, 10);
-
+#if 0
     // set SPM_MP_CORE0_AUX
     spm_write(SPM_MP_CORE0_AUX, 0x0);
     spm_write(SPM_MP_CORE1_AUX, 0x0);
     spm_write(SPM_MP_CORE2_AUX, 0x0);
     spm_write(SPM_MP_CORE3_AUX, 0x0);
-
+#endif
     #if MCDI_KICK_PCM
     clc_notice("spm_mcdi_probe start.\n");        
     if (1 == hibboot)
@@ -1717,8 +1668,10 @@ static struct early_suspend mtk_spm_mcdi_early_suspend_driver =
 
 void spm_mcdi_LDVT_sodi(void)
 {
+
     clc_notice("spm_mcdi_LDVT_sodi() start.\n");
-    mtk_wdt_suspend();    
+#if 0
+//    mtk_wdt_suspend();    
 
     // show image on screen ============================
     spm_show_lcm_image();
@@ -1751,12 +1704,15 @@ void spm_mcdi_LDVT_sodi(void)
     wake_up_process(mcdi_task_3);
     
     clc_notice("spm_mcdi_LDVT_01() end.\n");
+#endif
 }
 
 void spm_mcdi_LDVT_mcdi(void)
 {
+
     clc_notice("spm_mcdi_LDVT_mcdi() start.\n");
-    mtk_wdt_suspend();    
+#if 0    
+//    mtk_wdt_suspend();    
 
     // spm_direct_disable_sodi ============================
     spm_direct_disable_sodi();    
@@ -1825,6 +1781,7 @@ void spm_mcdi_LDVT_mcdi(void)
     wake_up_process(mcdi_task_2);
     wake_up_process(mcdi_task_3);
 #endif
+#endif
 }
 
 /***************************
@@ -1834,7 +1791,7 @@ static int spm_mcdi_debug_read(char *buf, char **start, off_t off, int count, in
 {
     int len = 0;
     char *p = buf;
-
+    
     if (SPM_MCDI_CORE_SEL)
         p += sprintf(p, "SPM MCDI+Thermal Protect enabled.\n");
     else

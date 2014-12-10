@@ -24,7 +24,6 @@
 #include <linux/statfs.h>
 #include <linux/mount.h>
 #include "mount.h"
-#include <mach/mt_io_logger.h>
 #include <linux/mmc/mmc.h>
 #include <mach/env.h>
 
@@ -376,39 +375,12 @@ EXPORT_SYMBOL(do_sync_read);
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
-#if IO_LOGGER_ENABLE
-	unsigned long long time1 = 0,timeoffset = 0;		
-	bool add_trace_e = false;
-	const char *mount_point = NULL;
-	char path_c[20]={0}; 
-	char *path = NULL;
-	struct mount *mount_data;
-#endif
 	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
 	if (!file->f_op || (!file->f_op->read && !file->f_op->aio_read))
 		return -EINVAL;
 	if (unlikely(!access_ok(VERIFY_WRITE, buf, count)))
 		return -EFAULT;
-#if IO_LOGGER_ENABLE
-if(unlikely(en_IOLogger())){
-	mount_data = real_mount(file->f_path.mnt);
-	mount_point = mount_data->mnt_mountpoint->d_name.name;	
-	if (mount_point){
-		if((!memcmp(mount_point,"data",4))||(!memcmp(mount_point,"system",6)))
-		{
-			path = (char *)file->f_path.dentry->d_name.name;
-			if(strlen(path)>=16){			
-				memcpy(path_c,path,16);
-				path = (char *)path_c;
-			}
-			add_trace_e = true;	
-			time1 = sched_clock();
-			AddIOTrace(IO_LOGGER_MSG_VFS_INTFS,vfs_read,path,(u32)count);
-		}
-	}
-}
-#endif
 	ret = rw_verify_area(READ, file, pos, count);
 	if (ret >= 0) {
 		count = ret;
@@ -422,18 +394,6 @@ if(unlikely(en_IOLogger())){
 		}
 		inc_syscr(current);
 	}
-#if IO_LOGGER_ENABLE
-		if(unlikely(en_IOLogger()) && add_trace_e){
-			timeoffset = sched_clock() - time1;
-			add_trace_e = false;
-			if(BEYOND_TRACE_LOG_TIME(timeoffset))
-			{
-				 AddIOTrace(IO_LOGGER_MSG_VFS_INTFS_END,vfs_read,path,ret,timeoffset);	
-				 if(BEYOND_DUMP_LOG_TIME(timeoffset))
-					DumpIOTrace(timeoffset);				
-			}
-		}
-#endif
 	return ret;
 }
 
@@ -473,14 +433,7 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 	//static long long store = 0;
 	unsigned char num = 0;
 	struct mount *mount_data;
-	char *file_list[10] = {"ccci_fsd", NULL};
-#if IO_LOGGER_ENABLE
-	unsigned long long time1 = 0,timeoffset = 0;
-	bool add_trace_e = false;
-	char path_c[20]={0}; 
-	char *path = NULL;
-	const char *mount_point = NULL;
-#endif	
+	char *file_list[10] = {"ccci_fsd", "ccci2_fsd", "eemcs_fsd", NULL};
 	mount_data = real_mount(file->f_path.mnt);
 	if (!memcmp(mount_data->mnt_mountpoint->d_name.name, "data", 5)) {
 		//printk(KERN_ERR "write data detect %s",file->f_path.dentry->d_name.name);
@@ -501,7 +454,8 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 			}
 		}
 	}
-#ifdef LIMIT_SDCARD_SIZE
+//#ifdef LIMIT_SDCARD_SIZE
+#if 0
 	//if(!memcmp(mount_data->mnt_mountpoint->d_name.name, "emulated", 8)){
 	if(!memcmp(file->f_path.mnt->mnt_sb->s_type->name, "fuse", 5)){	
 		store -= count;
@@ -517,25 +471,6 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 			}
 		}
 		store +=count;
-	}
-#endif
-
-#if IO_LOGGER_ENABLE
-	if(unlikely(en_IOLogger())){
-		mount_point = mount_data->mnt_mountpoint->d_name.name;
-		if (mount_point){
-			if((!memcmp(mount_point,"data",4))||(!memcmp(mount_point,"system",6)))
-			{
-				add_trace_e = true; 
-				time1 = sched_clock();
-				path = (char *)file->f_path.dentry->d_name.name;
-				if(strlen(path)>=16){			
-					memcpy(path_c,path,16);
-					path = (char *)path_c;
-				}
-				AddIOTrace(IO_LOGGER_MSG_VFS_INTFS,vfs_write,path,count);		
-			}
-		}
 	}
 #endif
 
@@ -574,23 +509,11 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 		}
 		inc_syscw(current);
 	}
+
 #ifdef MTK_IO_PERFORMANCE_DEBUG   
 	if (('l' == *(current->comm)) && ('m' == *(current->comm + 1)) && ('d' == *(current->comm + 2)) && ('d' == *(current->comm + 3)) && g_check_read_write == 25){
 		g_req_write_buf[g_dbg_write_count][14] = sched_clock(); 
 	}	
-#endif
-#if IO_LOGGER_ENABLE
-			if(unlikely(en_IOLogger()) && add_trace_e){
-				timeoffset = sched_clock() - time1;
-				add_trace_e = false;
-				if(BEYOND_TRACE_LOG_TIME(timeoffset))
-				{
-					 AddIOTrace(IO_LOGGER_MSG_VFS_INTFS_END,vfs_write,path,ret,timeoffset);	
-					 if(BEYOND_DUMP_LOG_TIME(timeoffset))
-						DumpIOTrace(timeoffset);
-					
-				}
-			}
 #endif
 	return ret;
 }

@@ -13,10 +13,10 @@
 extern void spm_mtcmos_cpu_lock(unsigned long *flags);
 extern void spm_mtcmos_cpu_unlock(unsigned long *flags);
 
-extern int spm_mtcmos_ctrl_cpu0(int state);
-extern int spm_mtcmos_ctrl_cpu1(int state);
-extern int spm_mtcmos_ctrl_cpu2(int state);
-extern int spm_mtcmos_ctrl_cpu3(int state);
+extern int spm_mtcmos_ctrl_cpu0(int state, int chkWfiBeforePdn);
+extern int spm_mtcmos_ctrl_cpu1(int state, int chkWfiBeforePdn);
+extern int spm_mtcmos_ctrl_cpu2(int state, int chkWfiBeforePdn);
+extern int spm_mtcmos_ctrl_cpu3(int state, int chkWfiBeforePdn);
 
 extern int spm_mtcmos_ctrl_dbg(int state);
 extern int spm_mtcmos_ctrl_cpusys(int state);

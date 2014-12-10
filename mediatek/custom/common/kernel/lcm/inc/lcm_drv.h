@@ -52,6 +52,7 @@ typedef enum
 
 typedef enum
 {    
+   LCM_DRIVING_CURRENT_DEFAULT,
    LCM_DRIVING_CURRENT_8MA       = (1 << 0),
    LCM_DRIVING_CURRENT_4MA       = (1 << 1),
    LCM_DRIVING_CURRENT_2MA       = (1 << 2),
@@ -59,9 +60,25 @@ typedef enum
    LCM_DRIVING_CURRENT_6575_4MA  = (1 << 4),
    LCM_DRIVING_CURRENT_6575_8MA  = (3 << 4),
    LCM_DRIVING_CURRENT_6575_12MA  = (2 << 4),
-   LCM_DRIVING_CURRENT_6575_16MA  = (4 << 4)
+   LCM_DRIVING_CURRENT_6575_16MA  = (4 << 4),
+   LCM_DRIVING_CURRENT_6MA,
+   LCM_DRIVING_CURRENT_12MA,
+   LCM_DRIVING_CURRENT_16MA
 } LCM_DRIVING_CURRENT;
 
+typedef enum{
+	LCM_INTERFACE_NOTDEFINED = 0,
+	LCM_INTERFACE_DSI0,
+	LCM_INTERFACE_DSI1,
+	LCM_INTERFACE_DSI_DUAL,
+	LCM_INTERFACE_DPI0,
+	LCM_INTERFACE_DPI1,
+	LCM_INTERFACE_DBI0	
+}LCM_INTERFACE_ID;
+
+typedef enum{
+	LCM_IOCTL_NULL = 0,
+}LCM_IOCTL;
 
 /* DBI related enumerations */
 
@@ -82,7 +99,7 @@ typedef enum
     LCM_DBI_DATA_WIDTH_16BITS = 2,
     LCM_DBI_DATA_WIDTH_18BITS = 3,
     LCM_DBI_DATA_WIDTH_24BITS = 4,
-	LCM_DBI_DATA_WIDTH_32BITS = 5
+    LCM_DBI_DATA_WIDTH_32BITS = 5
 } LCM_DBI_DATA_WIDTH;
 
 
@@ -148,7 +165,7 @@ typedef enum
 {
     LCM_SERIAL_CLOCK_FREQ_104M = 0,
     LCM_SERIAL_CLOCK_FREQ_26M,
-	LCM_SERIAL_CLOCK_FREQ_52M
+    LCM_SERIAL_CLOCK_FREQ_52M
 } LCM_SERIAL_CLOCK_FREQ;
 
 typedef enum
@@ -164,19 +181,19 @@ typedef enum
 
 typedef enum
 {
-	CMD_MODE = 0,
-	SYNC_PULSE_VDO_MODE = 1,
-	SYNC_EVENT_VDO_MODE = 2,
-	BURST_VDO_MODE = 3
+    CMD_MODE = 0,
+    SYNC_PULSE_VDO_MODE = 1,
+    SYNC_EVENT_VDO_MODE = 2,
+    BURST_VDO_MODE = 3
 } LCM_DSI_MODE_CON;
 
 
 typedef enum
 {
-	LCM_ONE_LANE = 1,
-	LCM_TWO_LANE = 2,
-	LCM_THREE_LANE = 3,
-	LCM_FOUR_LANE = 4,
+    LCM_ONE_LANE = 1,
+    LCM_TWO_LANE = 2,
+    LCM_THREE_LANE = 3,
+    LCM_FOUR_LANE = 4,
 } LCM_LANE_NUM;
 
 
@@ -204,10 +221,10 @@ typedef enum
 
 typedef enum
 {
-	LCM_PACKED_PS_16BIT_RGB565=0,
-	LCM_LOOSELY_PS_18BIT_RGB666=1,	
-	LCM_PACKED_PS_24BIT_RGB888=2,
-	LCM_PACKED_PS_18BIT_RGB666=3		
+    LCM_PACKED_PS_16BIT_RGB565=0,
+    LCM_LOOSELY_PS_18BIT_RGB666=1,	
+    LCM_PACKED_PS_24BIT_RGB888=2,
+    LCM_PACKED_PS_18BIT_RGB666=3		
 } LCM_PS_TYPE;
 
 typedef enum
@@ -284,22 +301,22 @@ typedef struct
     LCM_CLOCK_PHASE clk_phase;
     unsigned int is_non_dbi_mode;
 
-	LCM_SERIAL_CLOCK_FREQ clock_base;
-	LCM_SERIAL_CLOCK_DIV  clock_div;
+    LCM_SERIAL_CLOCK_FREQ clock_base;
+    LCM_SERIAL_CLOCK_DIV  clock_div;
 ////////////////////////////////////MT6575 added params, and if lcm driver is for 6575, only care these below params
-	unsigned int css;
-	unsigned int csh;	
-	unsigned int rd_1st;
-	unsigned int rd_2nd;
-	unsigned int wr_1st;
-	unsigned int wr_2nd;
+    unsigned int css;
+    unsigned int csh;	
+    unsigned int rd_1st;
+    unsigned int rd_2nd;
+    unsigned int wr_1st;
+    unsigned int wr_2nd;
 
-	unsigned int sif_3wire;
-	unsigned int sif_sdi;
-	LCM_POLARITY sif_1st_pol;
-	LCM_POLARITY sif_sck_def;
-	unsigned int sif_div2;
-	unsigned int sif_hw_cs;
+    unsigned int sif_3wire;
+    unsigned int sif_sdi;
+    LCM_POLARITY sif_1st_pol;
+    LCM_POLARITY sif_sck_def;
+    unsigned int sif_div2;
+    unsigned int sif_hw_cs;
 ////////////////////////////////////	
 } LCM_DBI_SERIAL_PARAMS;
 
@@ -311,11 +328,11 @@ typedef struct
     unsigned int write_hold;
     unsigned int write_wait;
     unsigned int read_setup;
-	unsigned int read_hold;
+    unsigned int read_hold;
     unsigned int read_latency;
     unsigned int wait_period;
-	/*only for 6575*/
-	unsigned int cs_high_width;
+    /*only for 6575*/
+    unsigned int cs_high_width;
 } LCM_DBI_PARALLEL_PARAMS;
 
 
@@ -339,6 +356,7 @@ typedef struct
     LCM_DBI_DATA_FORMAT    data_format;
     LCM_DBI_CPU_WRITE_BITS cpu_write_bits;
     LCM_DRIVING_CURRENT    io_driving_current;
+    LCM_DRIVING_CURRENT    msb_io_driving_current;
     
     /* tearing control */
     LCM_DBI_TE_MODE              te_mode;
@@ -348,10 +366,8 @@ typedef struct
     LCM_DBI_TE_VS_WIDTH_CNT_DIV  te_vs_width_cnt_div;
     
     /* particular parameters for serial & parallel interface */
-    union {
-        LCM_DBI_SERIAL_PARAMS serial;
-        LCM_DBI_PARALLEL_PARAMS parallel;
-    };
+    LCM_DBI_SERIAL_PARAMS serial;
+    LCM_DBI_PARALLEL_PARAMS parallel;
 } LCM_DBI_PARAMS;
 
 
@@ -366,10 +382,19 @@ typedef struct
     unsigned int mipi_pll_clk_ref;   // 0..1
     unsigned int mipi_pll_clk_div1;  // 0..63
     unsigned int mipi_pll_clk_div2;  // 0..15
+    unsigned int mipi_pll_clk_fbk_div;  //PCLK=> 8: 26MHz, 10: 35MHz, 12: 40MHz
     unsigned int dpi_clk_div;        // 2..32
-
     unsigned int dpi_clk_duty;       // (dpi_clk_div - 1) .. 31
+    unsigned int PLL_CLOCK;
+    unsigned int dpi_clock;
+    unsigned int ssc_disable;
+    unsigned int ssc_range;
 
+    unsigned int width;
+    unsigned int height;
+    unsigned int bg_width;
+    unsigned int bg_height;
+    
     /* polarity parameters */
     LCM_POLARITY clk_pol;
     LCM_POLARITY de_pol;
@@ -388,14 +413,16 @@ typedef struct
     LCM_DPI_FORMAT format;
     LCM_COLOR_ORDER rgb_order;
     unsigned int is_serial_output;
-	unsigned int i2x_en;
-	unsigned int i2x_edge;
-	unsigned int embsync;
+    unsigned int i2x_en;
+    unsigned int i2x_edge;
+    unsigned int embsync;
+	unsigned int lvds_tx_en;	
     /* intermediate buffers parameters */
     unsigned int intermediat_buffer_num; // 2..3
 
     /* iopad parameters */
     LCM_DRIVING_CURRENT io_driving_current;
+    LCM_DRIVING_CURRENT lsb_io_driving_current;
     
 } LCM_DPI_PARAMS;
 
@@ -404,80 +431,89 @@ typedef struct
 
 typedef struct
 {
-	LCM_DSI_MODE_CON 	mode;
-	unsigned int		DSI_WMEM_CONTI;
-	unsigned int		DSI_RMEM_CONTI;	
-	unsigned int		VC_NUM;
-
-	LCM_LANE_NUM		LANE_NUM;
-	LCM_DSI_DATA_FORMAT	data_format;
+    LCM_DSI_MODE_CON 	mode;
+    unsigned int		DSI_WMEM_CONTI;
+    unsigned int		DSI_RMEM_CONTI;	
+    unsigned int		VC_NUM;
+    
+    LCM_LANE_NUM		LANE_NUM;
+    LCM_DSI_DATA_FORMAT	data_format;
 
     /* intermediate buffers parameters */
     unsigned int 		intermediat_buffer_num; // 2..3
-	
-	LCM_PS_TYPE			PS;	
-	unsigned int		word_count;
-	
-	unsigned int		packet_size;
+    
+    LCM_PS_TYPE			PS;	
+    unsigned int		word_count;
+    
+    unsigned int		packet_size;
+    
+    unsigned int		vertical_sync_active;
+    unsigned int		vertical_backporch;
+    unsigned int		vertical_frontporch;
+    unsigned int		vertical_active_line;
+    
+    unsigned int		horizontal_sync_active;
+    unsigned int		horizontal_backporch;
+    unsigned int		horizontal_frontporch;
+    unsigned int		horizontal_blanking_pixel;
+    unsigned int		horizontal_active_pixel;
+    unsigned int		horizontal_bllp;
+    
+    unsigned int		line_byte;
+    unsigned int		horizontal_sync_active_byte;
+    unsigned int		horizontal_backporch_byte;
+    unsigned int		horizontal_frontporch_byte; 
+    unsigned int		rgb_byte; 
+    
+    unsigned int		horizontal_sync_active_word_count;	
+    unsigned int		horizontal_backporch_word_count;
+    unsigned int		horizontal_frontporch_word_count;
+    
+    unsigned char		HS_TRAIL;
+    unsigned char		HS_ZERO;
+    unsigned char		HS_PRPR;
+    unsigned char		LPX;
+    
+    unsigned char		TA_SACK;
+    unsigned char		TA_GET;
+    unsigned char		TA_SURE;	
+    unsigned char		TA_GO;
+    
+    unsigned char		CLK_TRAIL;
+    unsigned char		CLK_ZERO;	
+    unsigned char		LPX_WAIT;
+    unsigned char		CONT_DET;
+    
+    unsigned char		CLK_HS_PRPR;
+    unsigned char		CLK_HS_POST;
+    unsigned char       DA_HS_EXIT;
+    unsigned char       CLK_HS_EXIT;
 
-	unsigned int		vertical_sync_active;
-	unsigned int		vertical_backporch;
-	unsigned int		vertical_frontporch;
-	unsigned int		vertical_active_line;
-
-	unsigned int		horizontal_sync_active;
-	unsigned int		horizontal_backporch;
-	unsigned int		horizontal_frontporch;
-	unsigned int		horizontal_active_pixel;
-
-	unsigned int		line_byte;
-	unsigned int		horizontal_sync_active_byte;
-	unsigned int		horizontal_backporch_byte;
-	unsigned int		horizontal_frontporch_byte; 
-	unsigned int		rgb_byte; 
-
-	unsigned int		horizontal_sync_active_word_count;	
-	unsigned int		horizontal_backporch_word_count;
-	unsigned int		horizontal_frontporch_word_count;
-
-	unsigned char		HS_TRAIL;
-	unsigned char		HS_ZERO;
-	unsigned char		HS_PRPR;
-	unsigned char		LPX;
-
-	unsigned char		TA_SACK;
-	unsigned char		TA_GET;
-	unsigned char		TA_SURE;	
-	unsigned char		TA_GO;
-
-	unsigned char		CLK_TRAIL;
-	unsigned char		CLK_ZERO;	
-	unsigned char		LPX_WAIT;
-	unsigned char		CONT_DET;
-
-	unsigned char		CLK_HS_PRPR;
-	unsigned char		CLK_HS_POST;
-	unsigned char       DA_HS_EXIT;
-	unsigned char       CLK_HS_EXIT;
-	
-	unsigned int		pll_select;
-	unsigned int		pll_div1;
-	unsigned int		pll_div2;	
-	unsigned int        fbk_div;
-	unsigned int		fbk_sel;
-	unsigned int		rg_bir;
-	unsigned int		rg_bic;
-	unsigned int		rg_bp;
-	LCM_DSI_PLL_CLOCK	PLL_CLOCK;
-	
-	unsigned int		lcm_int_te_monitor;
-	unsigned int		lcm_int_te_period;
-	
-	unsigned int		lcm_ext_te_monitor;
-	
-	unsigned int		noncont_clock;
-	unsigned int		noncont_clock_period;
-	
+    unsigned int		pll_select;
+    unsigned int		pll_div1;
+    unsigned int		pll_div2;	
+    unsigned int        fbk_div;
+    unsigned int		fbk_sel;
+    unsigned int		rg_bir;
+    unsigned int		rg_bic;
+    unsigned int		rg_bp;
+    unsigned int		PLL_CLOCK;
+    unsigned int		dsi_clock;
+    unsigned int		ssc_disable;
+    unsigned int		ssc_range;
+    unsigned int		compatibility_for_nvk;
+    unsigned int		cont_clock;
+    unsigned int		ufoe_enable;
+    
+    unsigned int		lcm_int_te_monitor;
+    unsigned int		lcm_int_te_period;
+    
+    unsigned int		lcm_ext_te_monitor;
+    unsigned int		lcm_ext_te_enable;
+    
+    unsigned int		noncont_clock;
+    unsigned int		noncont_clock_period;
+    
 } LCM_DSI_PARAMS;
 
 // ---------------------------------------------------------------------------
@@ -486,17 +522,29 @@ typedef struct
 {
     LCM_TYPE type;
     LCM_CTRL ctrl;  //! how to control LCM registers
-
+    LCM_INTERFACE_ID lcm_if;
+	LCM_INTERFACE_ID lcm_cmd_if; 
     /* common parameters */
     unsigned int width;
     unsigned int height;
-	unsigned int io_select_mode; //DBI or DPI should select IO mode according to chip spec
+    unsigned int io_select_mode; //DBI or DPI should select IO mode according to chip spec
+
+	//add for devinfo
+#ifdef SLT_DEVINFO_LCM
+	char *ic;
+	char *vendor;
+	char *module;
+	char *info;
+#endif
+
     /* particular parameters */
     LCM_DBI_PARAMS dbi;
     LCM_DPI_PARAMS dpi;
     LCM_DSI_PARAMS dsi;
-    unsigned int active_width;
-    unsigned int active_height;
+    unsigned int physical_width;
+    unsigned int physical_height;
+	unsigned int od_table_size;
+	void *od_table;
 } LCM_PARAMS;
 
 
@@ -515,6 +563,7 @@ typedef struct {
 typedef struct
 {
     void (*set_reset_pin)(unsigned int value);
+    void (*set_chip_select)(unsigned int value);
     int  (*set_gpio_out)(unsigned int gpio, unsigned int value);
 
     void (*udelay)(unsigned int us);
@@ -524,14 +573,14 @@ typedef struct
     void (*send_data)(unsigned int data);
     unsigned int (*read_data)(void);
 
-	void (*dsi_set_cmdq_V3)(LCM_setting_table_V3 *para_list, unsigned int size, unsigned char force_update);
-	void (*dsi_set_cmdq_V2)(unsigned cmd, unsigned char count, unsigned char *para_list, unsigned char force_update);
-	void (*dsi_set_cmdq)(unsigned int *pdata, unsigned int queue_size, unsigned char force_update);
-	void (*dsi_write_cmd)(unsigned int cmd);
-	void (*dsi_write_regs)(unsigned int addr, unsigned int *para, unsigned int nums);
-	unsigned int (*dsi_read_reg)(void);
-	unsigned int (*dsi_dcs_read_lcm_reg)(unsigned char cmd);
-	unsigned int (*dsi_dcs_read_lcm_reg_v2)(unsigned char cmd, unsigned char *buffer, unsigned char buffer_size);
+    void (*dsi_set_cmdq_V3)(LCM_setting_table_V3 *para_list, unsigned int size, unsigned char force_update);
+    void (*dsi_set_cmdq_V2)(unsigned cmd, unsigned char count, unsigned char *para_list, unsigned char force_update);
+    void (*dsi_set_cmdq)(unsigned int *pdata, unsigned int queue_size, unsigned char force_update);
+    void (*dsi_write_cmd)(unsigned int cmd);
+    void (*dsi_write_regs)(unsigned int addr, unsigned int *para, unsigned int nums);
+    unsigned int (*dsi_read_reg)(void);
+    unsigned int (*dsi_dcs_read_lcm_reg)(unsigned char cmd);
+    unsigned int (*dsi_dcs_read_lcm_reg_v2)(unsigned char cmd, unsigned char *buffer, unsigned char buffer_size);
     void (*wait_transfer_done)(void);
 
     /** FIXME: GPIO mode should not be configured in lcm driver
@@ -542,7 +591,10 @@ typedef struct
     int (*set_gpio_pull_enable)(unsigned int pin, unsigned char pull_en);
     
 } LCM_UTIL_FUNCS;
-
+typedef enum
+{
+	LCM_DRV_IOCTL_ENABLE_CMD_MODE = 0x100,
+}LCM_DRV_IOCTL_CMD;
 
 typedef struct
 {
@@ -554,22 +606,29 @@ typedef struct
     void (*suspend)(void);
     void (*resume)(void);
 
-    void (*update)(unsigned int x, unsigned int y,
-                   unsigned int width, unsigned int height);
-	unsigned int (*compare_id)(void);
-///////////////////////////CABC backlight related function
-	void (*set_backlight)(unsigned int level);
-	void (*set_pwm)(unsigned int divider);
-	unsigned int (*get_pwm)(unsigned int divider);
-	void (*set_backlight_mode)(unsigned int mode);
-///////////////////////////
+    // for power-on sequence refinement
+    void (*init_power)(void);
+    void (*suspend_power)(void);
+    void (*resume_power)(void);
 
-/////////////ESD_RECOVERY//////////////////////
+    void (*update)(unsigned int x, unsigned int y, unsigned int width, unsigned int height);
+    unsigned int (*compare_id)(void);
+
+    ///////////////////////////CABC backlight related function
+    void (*set_backlight)(unsigned int level);
+    void (*set_pwm)(unsigned int divider);
+    unsigned int (*get_pwm)(unsigned int divider);
+    void (*set_backlight_mode)(unsigned int mode);
+    ///////////////////////////
+
+    /////////////ESD_RECOVERY//////////////////////
     unsigned int (*esd_check)(void);
     unsigned int  (*esd_recover)(void);
-	unsigned int (*check_status)(void);
-/////////////////////////////////////////////////
-
+    unsigned int (*check_status)(void);
+    unsigned int (*ata_check)(unsigned char *buffer);
+	void (*read_fb)(unsigned char *buffer);	
+    int (*ioctl)(LCM_DRV_IOCTL_CMD cmd, unsigned int data);
+    /////////////////////////////////////////////////
 } LCM_DRIVER;
 
 
@@ -578,5 +637,6 @@ typedef struct
 // ---------------------------------------------------------------------------
 
 const LCM_DRIVER* LCM_GetDriver(void);
+unsigned char which_lcd_module_triple(void);
 
 #endif // __LCM_DRV_H__

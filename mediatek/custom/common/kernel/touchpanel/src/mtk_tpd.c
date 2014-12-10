@@ -21,8 +21,11 @@
 #include "tpd.h"
 
 //#ifdef VELOCITY_CUSTOM
+#include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/miscdevice.h>
+#include <linux/device.h>
+#include <linux/slab.h>
 #include <asm/uaccess.h>
 
 // for magnify velocity********************************************
@@ -33,6 +36,10 @@
 
 extern int tpd_v_magnify_x;
 extern int tpd_v_magnify_y;
+//liangzhiqiang add for hx8526 wakeup
+int lct_tp_early_suspend = 1;
+extern UINT32 DISP_GetScreenHeight(void);
+extern UINT32 DISP_GetScreenWidth(void);
 
 static int tpd_misc_open(struct inode *inode, struct file *file)
 {
@@ -208,6 +215,7 @@ int tpd_driver_add(struct tpd_driver_t *tpd_drv)
 			tpd_driver_list[i].suspend = tpd_drv->suspend;
 			tpd_driver_list[i].resume = tpd_drv->resume;
 			tpd_driver_list[i].tpd_have_button = tpd_drv->tpd_have_button;
+			tpd_driver_list[i].attrs = tpd_drv->attrs;
 			#if 0
 			if(tpd_drv->tpd_local_init()==0)
 			{
@@ -246,6 +254,14 @@ int tpd_driver_remove(struct tpd_driver_t *tpd_drv)
 	return 0;
 }
 
+static void tpd_create_attributes(struct device *dev, struct tpd_attrs *attrs)
+{
+	int num = attrs->num;
+
+	for (; num>0;)
+		device_create_file(dev, attrs->attr[--num]);
+}
+
 /* touch panel probe */
 static int tpd_probe(struct platform_device *pdev) {
 		int  touch_type = 1; // 0:R-touch, 1: Cap-touch
@@ -280,8 +296,11 @@ static int tpd_probe(struct platform_device *pdev) {
     /* allocate input device */
     if((tpd->dev=input_allocate_device())==NULL) { kfree(tpd); return -ENOMEM; }
   
-    TPD_RES_X = simple_strtoul(LCM_WIDTH, NULL, 0);
-    TPD_RES_Y = simple_strtoul(LCM_HEIGHT, NULL, 0);
+  //TPD_RES_X = simple_strtoul(LCM_WIDTH, NULL, 0);
+  //TPD_RES_Y = simple_strtoul(LCM_HEIGHT, NULL, 0);    
+  TPD_RES_X = DISP_GetScreenWidth();
+    TPD_RES_Y = DISP_GetScreenHeight();
+
   
     printk("mtk_tpd: TPD_RES_X = %d, TPD_RES_Y = %d\n", TPD_RES_X, TPD_RES_Y);
   
@@ -329,6 +348,11 @@ static int tpd_probe(struct platform_device *pdev) {
     #ifdef CONFIG_HAS_EARLYSUSPEND
     MTK_TS_early_suspend_handler.suspend = g_tpd_drv->suspend;
     MTK_TS_early_suspend_handler.resume = g_tpd_drv->resume;
+	//liangzhiqiang add for tp wakeup
+	if(lct_tp_early_suspend == 0)
+	{
+		MTK_TS_early_suspend_handler.level = EARLY_SUSPEND_LEVEL_DISABLE_FB+10;
+	}
     register_early_suspend(&MTK_TS_early_suspend_handler);
     #endif		  
 #endif	  
@@ -388,6 +412,9 @@ static int tpd_probe(struct platform_device *pdev) {
     {
     	tpd_button_init();
     }
+
+	if (g_tpd_drv->attrs.num)
+		tpd_create_attributes(&pdev->dev, &g_tpd_drv->attrs);
 
     return 0;
 }

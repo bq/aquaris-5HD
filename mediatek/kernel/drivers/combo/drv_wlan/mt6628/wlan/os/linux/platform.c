@@ -297,7 +297,7 @@ static int netdev_event(struct notifier_block *nb, unsigned long notification, v
 #endif
         ASSERT(u4Len <= sizeof(aucBuf));
 
-    DBGLOG(REQ, INFO, ("kalIoctl (0x%x, 0x%x)\n", prGlueInfo, prParamNetAddrList));
+    DBGLOG(REQ, INFO, ("kalIoctl (0x%p, 0x%p)\n", prGlueInfo, prParamNetAddrList));
 
         rStatus = kalIoctl(prGlueInfo,
                 wlanoidSetNetworkAddress,

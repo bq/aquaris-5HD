@@ -3,7 +3,6 @@ ifneq (,$(DO_PUT_ARTIFACTS))
   policy_path := $(call policy-path,$(LOCAL_PATH))
   LOCAL_RELEASE_POLICY :=
 
-
   $(foreach item,$(strip $(LOCAL_JNI_SHARED_LIBRARIES) $(LOCAL_SHARED_LIBRARIES)),\
     $(eval _item := $(addprefix $($(my_prefix)OUT_INTERMEDIATE_LIBRARIES)/, \
       $(addsuffix $(so_suffix), $(item)))) \
@@ -25,11 +24,14 @@ ifneq (,$(DO_PUT_ARTIFACTS))
     $(eval ARTIFACT.$(item).FILES := $(ARTIFACT.$(item).FILES) $(_item):$(patsubst $(OUT_DIR)/%,$(ARTIFACT_DIR)/out/%,$(_item))) \
   )
 
+  ifneq (,$(LOCAL_INSTALLED_MODULE))
+    ARTIFACT.$(LOCAL_INSTALLED_MODULE).LIBRARIES := $(LOCAL_JNI_SHARED_LIBRARIES) $(LOCAL_SHARED_LIBRARIES)
+  endif
   ifdef $(policy_path).RELEASE_POLICY
     LOCAL_RELEASE_POLICY := $($(policy_path).RELEASE_POLICY)
   endif
   ifeq (,$(LOCAL_RELEASE_POLICY))
-  LOCAL_RELEASE_POLICY := $(VALID_RELEASE_POLICY)
+    LOCAL_RELEASE_POLICY := $(VALID_RELEASE_POLICY)
   endif
   ifeq (,$(filter $(VALID_RELEASE_POLICY),$(LOCAL_RELEASE_POLICY)))
     $(error local release policy for $(LOCAL_MODULE) should in $(VALID_RELEASE_POLICY), not $(LOCAL_RELEASE_POLICY))
@@ -40,14 +42,14 @@ ifneq (,$(DO_PUT_ARTIFACTS))
       # use product makefile for APP modules
       ifeq (optional,$(LOCAL_MODULE_TAGS))
         ifneq (,$(filter $(LOCAL_MODULE),$(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_PACKAGES)))
-           ARTIFACT_RELEASE := true
+          ARTIFACT_RELEASE := true
         endif
       endif
     else
       # use tags for non-APP modules
       # filter "tags_to_install" modules & static libraries tagged as "optional"
       ifneq (,$(filter optional $(tags_to_install),$(LOCAL_MODULE_TAGS)))
-         ARTIFACT_RELEASE := true
+        ARTIFACT_RELEASE := true
       endif
     endif
 
@@ -74,22 +76,18 @@ ifneq (,$(DO_PUT_ARTIFACTS))
       ARTIFACT_MODULE += $(_install_module)
       ARTIFACT.$(_install_module).SRC := $(LOCAL_MODULE)
 
-      $(foreach item,$(LOCAL_JNI_SHARED_LIBRARIES) $(LOCAL_SHARED_LIBRARIES),\
+      ifneq ($(filter $(LOCAL_MODULE_CLASS),EXECUTABLES SHARED_LIBRARIES),)
+        $(foreach item,$(LOCAL_JNI_SHARED_LIBRARIES) $(LOCAL_SHARED_LIBRARIES),\
           $(eval ARTIFACT_TARGET += $(LOCAL_BUILT_MODULE):$(addprefix $($(my_prefix)OUT_INTERMEDIATE_LIBRARIES)/,\
               $(addsuffix $(so_suffix), $(item))))\
-       )
-
-      $(foreach item,$(LOCAL_JNI_SHARED_LIBRARIES) $(LOCAL_SHARED_LIBRARIES),\
+        )
+        $(foreach item,$(LOCAL_JNI_SHARED_LIBRARIES) $(LOCAL_SHARED_LIBRARIES),\
           $(eval ARTIFACT_TARGET += $(LOCAL_BUILT_MODULE):$(addprefix $($(my_prefix)OUT_SHARED_LIBRARIES)/, \
               $(notdir  $(addprefix $($(my_prefix)OUT_INTERMEDIATE_LIBRARIES)/,\
                   $(addsuffix $(so_suffix), $(item))))))\
-       )
-
-      ifeq (,$(ARTIFACT.$(LOCAL_MODULE).FILES))
-        ARTIFACT.$(LOCAL_MODULE).FILES := 
+        )
       endif
-
-      ARTIFACT.$(LOCAL_MODULE).FILES := $(ARTIFACT.$(LOCAL_MODULE).FILES) $(_artifacts)
+      ARTIFACT.$(LOCAL_MODULE).FILES := $(strip $(ARTIFACT.$(LOCAL_MODULE).FILES)) $(_artifacts)
 
     endif # ARTIFACT_RELEASE 
   endif # LOCAL_RELEASE_POLICY
@@ -128,37 +126,103 @@ ifneq (,$(LOCAL_GENERATE_CUSTOM_FOLDER))
   endif
 endif
 
-            
+
 # Check every module that do not use source file or other resource in protect folder
 define protect-err
-$(error $(1): Please do not use this protect source $(2))
+  $(warning *** Module name: $(LOCAL_MODULE))
+  $(warning *** Makefile location: $(1))
+  $(warning * )
+  $(warning * The following protect paths are used by this module)
+  $(warning * $(2))
+  $(warning * )
+  $(warning * It may cause subsidiary/customer build error)
+  $(error $(1): Please do not use this protect source)
 endef
+define user-space-header-err
+  $(warning *** Module name :$(LOCAL_MODULE))
+  $(warning * Makefile location: $(1))
+  $(error $(1):Please do not use kernel header file $(2))
+endef
+Check_Item := $(LOCAL_SRC_FILES) $(LOCAL_C_INCLUDES)
+Check_Item += \
+              $(LOCAL_PREBUILT_OBJ_FILES) \
+              $(LOCAL_CLASSPATH) \
+              $(LOCAL_DROIDDOC_SOURCE_PATH) \
+              $(LOCAL_DROIDDOC_HTML_DIR) \
+              $(LOCAL_ASSET_FILES) \
+              $(LOCAL_ASSET_DIR) \
+              $(LOCAL_RESOURCE_DIR) \
+              $(LOCAL_JAVA_RESOURCE_DIRS) \
+              $(LOCAL_JAVA_RESOURCE_FILES) \
+              $(LOCAL_COPY_HEADERS) \
+              $(LOCAL_ADDITIONAL_DEPENDENCIES) \
+              $(LOCAL_JAR_MANIFEST) \
+              $(LOCAL_AIDL_INCLUDES) \
+              $(LOCAL_JARJAR_RULES) \
+              $(LOCAL_ADDITIONAL_JAVA_DIR) \
+              $(LOCAL_CERTIFICATE) \
+              $(LOCAL_PROGUARD_FLAG_FILES) \
+              $(LOCAL_MANIFEST_FILE) \
+              $(LOCAL_RENDERSCRIPT_INCLUDES) \
+              $(LOCAL_RENDERSCRIPT_INCLUDES_OVERRIDE)
+Check_Item += \
+              $(LOCAL_JAVASSIST_OPTIONS)
+Check_Path := protect \
+              protect-bsp \
+              protect-app
+Check_Path += protect-private
 
-Check_Item := $(LOCAL_SRC_FILES) $(LOCAL_C_INCLUDE)
-Check_Path := mediatek/protect/ \
-              mediatek/protect-bsp/ \
-              mediatek/protect-app/
-PROTECT_FILES :=
-$(foreach path,$(Check_Path), \
-   $(if $(filter $(path)/%,$(LOCAL_PATH)),, \
-      $(foreach item,$(Check_Item),\
-         $(if $(findstring $(path),$(item)),\
-             $(eval PROTECT_FILES += $(item)) \
-         ) \
-      ) \
-   ) \
-)
-# Add exception case for gemini for workaround
-ERROR_FILES :=
-$(foreach item,$(PROTECT_FILES),  \
-  $(if $(filter ../../mediatek/protect/frameworks/base/telephony/java/com/android/internal/telephony/gemini/%,$(PRODUCT_FILES)),  \
-    $(eval ERROR_FILES += $(item))  \
-  ) \
-)
-ifneq ($(ERROR_FILES),)
-  $(call protect-err,$(LOCAL_PATH),$(PROTECT_FILES))
+Check_Path_Used := $(foreach path,$(Check_Path),$(if $(filter mediatek/$(path)/%,$(LOCAL_PATH)),$(path)))
+ifeq ($(strip $(Check_Path_Used)),)
+#  $(info outside mediatek/protect*/)
+  PROTECT_FILES := $(foreach path,$(Check_Path),$(foreach item,$(Check_Item),$(if $(findstring /$(path)/,$(item)),$(item))))
+else
+#  $(info inside mediatek/protect*/)
+  Check_Path := $(filter-out $(Check_Path_Used),$(Check_Path))
+  PROTECT_FILES := $(foreach path,$(Check_Path),$(foreach item,$(Check_Item),$(if $(findstring /$(path)/,$(item)),$(if $(findstring ../,$(item)),$(item)))))
 endif
 
+# Add exception case for gemini for workaround
+PROTECT_WHITELIST := \
+                     ../../../mediatek/protect/frameworks/base/telephony/java/com/android/internal/telephony/gemini/% \
+                     ../../../mediatek/protect/frameworks/base/telephony/java/com/android/internal/telephony/worldphone/% \
+                     mediatek/protect/frameworks/base/telephony/java \
+                     ../../../mediatek/protect/frameworks/base/jpe/files/% \
+                     mediatek/protect/frameworks/base/jpe/files/%
+LOCAL_PATH_WHITELIST := \
+                        mediatek/protect-private/mtee/% \
+                        mediatek/protect-private/sec_drv/% \
+                        mediatek/protect-private/security/%
+ifneq ($(filter $(LOCAL_PATH_WHITELIST),$(LOCAL_PATH)),)
+PROTECT_WHITELIST += \
+                     mediatek/protect/% \
+                     mediatek/protect-bsp/% \
+                     mediatek/protect-app/%
+endif
+
+ERROR_FILES := $(filter-out $(PROTECT_WHITELIST),$(PROTECT_FILES))
+
+ifneq ($(ERROR_FILES),)
+  $(call protect-err,$(LOCAL_PATH),$(ERROR_FILES))
+endif
+###########################################
+#for multiple kernel check userspace used header files
+Uspace_Header_Path := kernel 
+Check_Header_Used := $(foreach header_path,$(Uspace_Hader_Path),$(if $(filter $(header_path)/%, $(LOCAL_PATH)),$(header_path)))
+#$(info Check_Header_Used:$(Check_Header_Used))
+ifeq ($(strip $(Check_Header_Used)),)
+#   $(info Check_Item :$(Check_Item))
+  HEADER_FILES := $(foreach header, $(Uspace_Header_Path),$(foreach item,$(Check_Item),$(if $(findstring ../$(header),$(item)),$(item))))
+  HEADER_FILES += $(foreach header, $(Uspace_Header_Path),$(foreach item,$(Check_Item),$(if $(filter $(header)/% ./$(header)/%,$(item)),$(item))))
+#  $(info ERROR_HEADERS :$(HEADER_FILES))
+  ifneq ($(strip $(HEADER_FILES)),)
+    $(call user-space-header-err,$(LOCAL_PATH),$(HEADER_FILES))
+  endif
+else
+#it's possible to build kernel install module used kernel header files
+endif
+#no exception 
+###########################################
 ifeq ($(DUMP_COMP_BUILD_INFO),true)
 -include $(BUILD_SYSTEM_MTK_EXTENSION)/dump_comp_build_info.mk
 endif

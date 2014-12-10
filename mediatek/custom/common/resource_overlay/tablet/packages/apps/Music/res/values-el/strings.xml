@@ -15,10 +15,7 @@
 ** See the License for the specific language governing permissions and 
 ** limitations under the License.
 */
- -->
-
-<resources xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+ --><resources xmlns:android="http://schemas.android.com/apk/res/android" xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="sdcard_missing_message">Δεν έχετε εισαγάγει κάρτα SD στη συσκευή σας.</string>
     <string name="sdcard_missing_message_nosdcard">Η συσκευή σας δεν διαθέτει χώρο αποθήκευσης USB.</string>  
 </resources>

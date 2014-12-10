@@ -16,7 +16,10 @@
 #include "mt_sd.h"
 #include "mt_dump.h"
 #include <mach/board.h> 
-#include <sd_misc.h>
+#include<linux/mmc/sd_misc.h>
+#ifdef MTK_EMMC_SUPPORT
+#include "partition_define.h"
+#endif
 MODULE_LICENSE("GPL");
 /*--------------------------------------------------------------------------*/
 /* head file define                                                         */
@@ -837,7 +840,7 @@ static int simp_mmc_select_card(struct simp_mmc_host *host, struct simp_mmc_card
  * Mask off any voltages we don't support and select
  * the lowest voltage
  */
-unsigned int simp_mmc_select_voltage(struct simp_mmc_host *host, unsigned int ocr)
+static unsigned int simp_mmc_select_voltage(struct simp_mmc_host *host, unsigned int ocr)
 {
 #if 0
 
@@ -891,7 +894,7 @@ static u64 simp_msdc_get_user_capacity(struct simp_mmc_card *card)
 	return device_capacity;
 }
 #endif
-void simp_emmc_cal_offset(struct simp_mmc_card *card)
+static void simp_emmc_cal_offset(struct simp_mmc_card *card)
 {
 #ifdef MTK_EMMC_SUPPORT
 	u64 device_capacity = 0;
@@ -923,7 +926,7 @@ void simp_emmc_cal_offset(struct simp_mmc_card *card)
 static int simp_msdc_pio_read(struct simp_msdc_host *host, unsigned int *ptr, unsigned int size);
 static void simp_msdc_set_blknum(struct simp_msdc_host *host, unsigned int blknum);
 
-int simp_mmc_read_ext_csd(struct simp_mmc_host *host, struct simp_mmc_card *card)
+static int simp_mmc_read_ext_csd(struct simp_mmc_host *host, struct simp_mmc_card *card)
 {
     int err = 0;
 	unsigned int resp; 
@@ -1169,9 +1172,10 @@ static unsigned int simple_mmc_attach_mmc(struct simp_mmc_host *host)
     unsigned int ocr;
 
     /* power up host */
-	simp_mmc_power_up(host,0);
-	mdelay(20);
+//	simp_mmc_power_up(host,0);
+//	mdelay(20);
     simp_mmc_power_up(host,1);
+	mdelay(10);
 
     /*
      * Some eMMCs (with VCCQ always on) may not be reset after power up, so
@@ -1730,7 +1734,7 @@ static int simp_sd_dump_write(unsigned char* buf, unsigned int len, unsigned int
 			ret = SIMP_SUCCESS;
 		return ret;
 }
-int sd_dump_read(unsigned char* buf, unsigned int len, unsigned int offset)
+static int sd_dump_read(unsigned char* buf, unsigned int len, unsigned int offset)
 {
 	static int sd_init = 0;
 //	unsigned int i;
@@ -1813,7 +1817,89 @@ int card_dump_func_write(unsigned char* buf, unsigned int len, unsigned long lon
     return ret;
 }
 EXPORT_SYMBOL(card_dump_func_write);
-extern int emmc_dump_read(unsigned char* buf, unsigned int len, unsigned int offset,unsigned int slot);
+extern int simple_sd_ioctl_rw(struct msdc_ioctl* msdc_ctl);
+#ifdef MTK_EMMC_SUPPORT
+
+#define SD_FALSE             -1
+#define SD_TRUE              0
+static int emmc_dump_read(unsigned char* buf, unsigned int len, unsigned int offset,unsigned int slot)
+{
+    /* maybe delete in furture */
+    struct msdc_ioctl     msdc_ctl;
+    unsigned int i;
+    unsigned int l_user_begin_num = 0;
+    unsigned int l_dest_num = 0;
+    unsigned long long l_start_offset = 0;
+    unsigned int ret = SD_FALSE;
+
+    if ((0 != slot) || (0 != offset % 512) || (0 != len % 512)) {
+        /* emmc always in slot0 */
+        printk("debug: slot is not use for emmc!\n");
+        return ret;
+    }
+
+    /* find the offset in emmc */
+    for (i = 0; i < PART_NUM; i++) {
+    //for (i = 0; i < 1; i++) {
+        if ('m' == *(PartInfo[i].name) && 'b' == *(PartInfo[i].name + 1) &&
+                'r' == *(PartInfo[i].name + 2)){
+            l_user_begin_num = i;
+        }
+
+        if ('e' == *(PartInfo[i].name) && 'x' == *(PartInfo[i].name + 1) &&
+                'p' == *(PartInfo[i].name + 2) && 'd' == *(PartInfo[i].name + 3) &&
+                'b' == *(PartInfo[i].name + 4)){
+            l_dest_num = i;
+        }
+    }
+
+#if DEBUG_MMC_IOCTL
+    printk("l_user_begin_num = %d l_dest_num = %d\n",l_user_begin_num,l_dest_num);
+#endif
+
+    if (l_user_begin_num >= PART_NUM && l_dest_num >= PART_NUM) {
+        printk("not find in scatter file error!\n");
+        return ret;
+    }
+
+    if (PartInfo[l_dest_num].size < (len + offset)) {
+        printk("read operation oversize!\n");
+        return ret;
+    }
+
+#if DEBUG_MMC_IOCTL
+    printk("read start address=0x%llx\n", PartInfo[l_dest_num].start_address - PartInfo[l_user_begin_num].start_address);
+#endif 
+    l_start_offset = offset + PartInfo[l_dest_num].start_address - PartInfo[l_user_begin_num].start_address;
+
+    msdc_ctl.partition = 0;
+    msdc_ctl.iswrite = 0;
+    msdc_ctl.host_num = slot;
+    msdc_ctl.opcode = MSDC_CARD_DUNM_FUNC;
+    msdc_ctl.total_size = 512;
+    msdc_ctl.trans_type = 0;
+    for (i = 0; i < (len/512); i++) {
+        /* code */
+        msdc_ctl.address = (l_start_offset >> 9) + i; //blk address
+        msdc_ctl.buffer =(u32*)(buf + i * 512);
+
+#if DEBUG_MMC_IOCTL
+        printk("l_start_offset = 0x%x\n", msdc_ctl.address);
+#endif        
+        msdc_ctl.result = simple_sd_ioctl_rw(&msdc_ctl);
+    }
+    
+#if DEBUG_MMC_IOCTL
+    printk("read data:");
+    for (i = 0; i < 32; i++) {
+        printk("0x%x", buf[i]);
+        if (0 == (i+1)%32)
+            printk("\n");
+    }
+#endif
+    return SD_TRUE;
+}
+#endif
 int card_dump_func_read(unsigned char* buf, unsigned int len, unsigned long long offset, int dev)
 {
 

@@ -19,6 +19,150 @@
 
 #include "usb.h"
 
+
+#ifdef MTK_ICUSB_SUPPORT
+
+struct usb_interface *stor_intf = NULL;
+
+struct my_attr power_resume_time_neogo_attr = {
+	.attr.name = "power_resume_time_neogo",
+	.attr.mode = 0644,
+#ifdef MTK_ICUSB_POWER_AND_RESUME_TIME_NEOGO_SUPPORT
+	.value = 1
+#else
+	.value = 0
+#endif
+};
+
+
+enum PHY_VOLTAGE_TYPE get_usb11_phy_voltage(void);
+void dump_data(char *buf, int len);
+void set_usb11_phy_power_negotiation_fail(void);
+void set_usb11_phy_power_negotiation_ok(void);
+void set_usb11_data_of_interface_power_request(short data);
+
+void ic_usb_resume_time_negotiation(struct usb_device *dev)
+{
+	int ret;
+	int retries = IC_USB_RETRIES_RESUME_TIME_NEGOTIATION;
+	char resume_time_negotiation_data[IC_USB_LEN_RESUME_TIME_NEGOTIATION];
+	while(retries-- > 0)
+	{
+		MYDBG("");
+		ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+				IC_USB_REQ_GET_INTERFACE_RESUME_TIME,
+				IC_USB_REQ_TYPE_GET_INTERFACE_RESUME_TIME,
+				IC_USB_WVALUE_RESUME_TIME_NEGOTIATION,
+				IC_USB_WINDEX_RESUME_TIME_NEGOTIATION,
+				resume_time_negotiation_data,
+				IC_USB_LEN_RESUME_TIME_NEGOTIATION,
+				USB_CTRL_GET_TIMEOUT);
+		if (ret < 0) {
+			MYDBG("ret : %d\n", ret);
+			continue;
+		}
+		else
+		{
+			MYDBG("");
+			dump_data(resume_time_negotiation_data, IC_USB_LEN_RESUME_TIME_NEGOTIATION);
+			break;
+		}
+
+	}
+}
+void ic_usb_power_negotiation(struct usb_device *dev)
+{
+	int ret;
+	int retries = IC_USB_RETRIES_POWER_NEGOTIATION;
+	char get_power_negotiation_data[IC_USB_LEN_POWER_NEGOTIATION];
+	char set_power_negotiation_data[IC_USB_LEN_POWER_NEGOTIATION];
+	int power_negotiation_done = 0 ;
+	enum PHY_VOLTAGE_TYPE phy_volt; 
+
+	while(retries-- > 0)
+	{
+		MYDBG("");
+		power_negotiation_done = 0 ;
+		ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+				IC_USB_REQ_GET_INTERFACE_POWER,
+				IC_USB_REQ_TYPE_GET_INTERFACE_POWER,
+				IC_USB_WVALUE_POWER_NEGOTIATION,
+				IC_USB_WINDEX_POWER_NEGOTIATION,
+				get_power_negotiation_data,
+				IC_USB_LEN_POWER_NEGOTIATION,
+				USB_CTRL_GET_TIMEOUT);
+		if (ret < 0) {
+			MYDBG("ret : %d\n", ret);
+			continue;
+		}
+		else
+		{
+			MYDBG("");
+			dump_data(get_power_negotiation_data, IC_USB_LEN_POWER_NEGOTIATION);
+
+			/* copy the prefer bit from get interface power */
+			set_power_negotiation_data[0] = (get_power_negotiation_data[0] & IC_USB_PREFER_CLASSB_ENABLE_BIT);
+
+			/* set our current voltage */
+			phy_volt = get_usb11_phy_voltage();
+			if(phy_volt == VOL_33)
+			{
+				set_power_negotiation_data[0] |= (char)IC_USB_CLASSB;
+			}
+			else if(phy_volt == VOL_18)
+			{
+				set_power_negotiation_data[0] |= (char)IC_USB_CLASSC;
+			}
+			else
+			{
+				MYDBG("");
+			}
+
+			/* set current */
+			if(set_power_negotiation_data[1] > IC_USB_CURRENT)
+			{
+				MYDBG("");
+				set_power_negotiation_data[1] = IC_USB_CURRENT;
+			}else{
+				MYDBG("");
+				set_power_negotiation_data[1] = get_power_negotiation_data[1];
+			}
+			MYDBG("power_negotiation_data[0] : 0x%x , power_negotiation_data[1] : 0x%x, IC_USB_CURRENT :%d",set_power_negotiation_data[0], set_power_negotiation_data[1], IC_USB_CURRENT);
+
+			ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+					IC_USB_REQ_SET_INTERFACE_POWER,
+					IC_USB_REQ_TYPE_SET_INTERFACE_POWER,
+					IC_USB_WVALUE_POWER_NEGOTIATION,
+					IC_USB_WINDEX_POWER_NEGOTIATION,
+					set_power_negotiation_data,
+					IC_USB_LEN_POWER_NEGOTIATION,
+					USB_CTRL_SET_TIMEOUT);
+
+			if (ret < 0) {
+				MYDBG("ret : %d\n", ret);
+			}
+			else
+			{
+				MYDBG("");
+				power_negotiation_done = 1 ;
+				break;
+			}
+		//	break;
+		}
+	}
+
+	MYDBG("retries : %d\n", retries);
+	if(!power_negotiation_done){
+		set_usb11_phy_power_negotiation_fail();
+	}else{
+		set_usb11_data_of_interface_power_request(*((short *)get_power_negotiation_data));
+		set_usb11_phy_power_negotiation_ok();
+	}
+}
+
+#endif
+
+
 static void cancel_async_set_config(struct usb_device *udev);
 
 struct api_context {
@@ -319,10 +463,6 @@ static void sg_complete(struct urb *urb)
 		spin_lock(&io->lock);
 	}
 
-	//ALPS00445134, add more debug message for CR debugging
-	dev_vdbg(&io->dev->dev, "%s, line %d: io->bytes = %d, urb->actual_length = %d, io->entries, = %d, io->count= %d\n", __func__,__LINE__, io->bytes, urb->actual_length, io->entries, io->count);
-	//ALPS00445134, add more debug message for CR debugging
-
 	/* on the last completion, signal usb_sg_wait() */
 	io->bytes += urb->actual_length;
 	io->count--;
@@ -412,10 +552,6 @@ int usb_sg_init(struct usb_sg_request *io, struct usb_device *dev,
 		urb->context = io;
 		urb->sg = sg;
 
-		//ALPS00445134, add more debug message for CR debugging
-		dev_vdbg(&dev->dev, "%s, line %d: use_sg = %d, io->entries = %d, length= %d\n", __func__,__LINE__, use_sg, io->entries, length);
-		//ALPS00445134, add more debug message for CR debugging
-
 		if (use_sg) {
 			/* There is no single transfer buffer */
 			urb->transfer_buffer = NULL;
@@ -449,11 +585,6 @@ int usb_sg_init(struct usb_sg_request *io, struct usb_device *dev,
 					io->entries = i + 1;
 			}
 		}
-
-		//ALPS00445134, add more debug message for CR debugging
-		dev_vdbg(&dev->dev, "%s, line %d: use_sg = %d, io->entries = %d, length= %d, len= %d\n", __func__,__LINE__, use_sg, io->entries, length, len);
-		//ALPS00445134, add more debug message for CR debugging
-
 		urb->transfer_buffer_length = len;
 	}
 	io->urbs[--i]->transfer_flags &= ~URB_NO_INTERRUPT;
@@ -1155,9 +1286,6 @@ void usb_disable_device(struct usb_device *dev, int skip_ep0)
 	int i;
 	struct usb_hcd *hcd = bus_to_hcd(dev->bus);
 
-	//ALPS00445134, add more debug message for CR debugging
-	printk(KERN_DEBUG "%s, line %d: dev->actconfig = %p, dev->actconfig->desc.bNumInterfaces = %d\n", __func__, __LINE__, dev->actconfig, dev->actconfig->desc.bNumInterfaces);
-	//ALPS00445134, add more debug message for CR debugging
 	/* getting rid of interfaces will disconnect
 	 * any drivers bound to them (a key side effect)
 	 */
@@ -1785,29 +1913,20 @@ free_interfaces:
 		usb_autosuspend_device(dev);
 		goto free_interfaces;
 	}
-
-	ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-			      USB_REQ_SET_CONFIGURATION, 0, configuration, 0,
-			      NULL, 0, USB_CTRL_SET_TIMEOUT);
-	if (ret < 0) {
-		/* All the old state is gone, so what else can we do?
-		 * The device is probably useless now anyway.
-		 */
-		cp = NULL;
+#ifdef MTK_ICUSB_SUPPORT
+	if(power_resume_time_neogo_attr.value)
+	{
+		ic_usb_power_negotiation(dev);
+		ic_usb_resume_time_negotiation(dev);
 	}
-
-	dev->actconfig = cp;
-	if (!cp) {
-		usb_set_device_state(dev, USB_STATE_ADDRESS);
-		usb_hcd_alloc_bandwidth(dev, NULL, NULL, NULL);
-		mutex_unlock(hcd->bandwidth_mutex);
-		usb_autosuspend_device(dev);
-		goto free_interfaces;
+	else
+	{
+		set_usb11_phy_power_negotiation_ok() ;
 	}
-	mutex_unlock(hcd->bandwidth_mutex);
-	usb_set_device_state(dev, USB_STATE_CONFIGURED);
+#endif
 
-	/* Initialize the new interface structures and the
+	/*
+	 * Initialize the new interface structures and the
 	 * hc/hcd/usbcore interface/endpoint state.
 	 */
 	for (i = 0; i < nintf; ++i) {
@@ -1819,7 +1938,6 @@ free_interfaces:
 		intfc = cp->intf_cache[i];
 		intf->altsetting = intfc->altsetting;
 		intf->num_altsetting = intfc->num_altsetting;
-		intf->intf_assoc = find_iad(dev, cp, i);
 		kref_get(&intfc->ref);
 
 		alt = usb_altnum_to_altsetting(intf, 0);
@@ -1832,6 +1950,8 @@ free_interfaces:
 		if (!alt)
 			alt = &intf->altsetting[0];
 
+		intf->intf_assoc =
+			find_iad(dev, cp, alt->desc.bInterfaceNumber);
 		intf->cur_altsetting = alt;
 		usb_enable_interface(dev, intf, true);
 		intf->dev.parent = &dev->dev;
@@ -1850,6 +1970,35 @@ free_interfaces:
 	}
 	kfree(new_interfaces);
 
+	ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+			      USB_REQ_SET_CONFIGURATION, 0, configuration, 0,
+			      NULL, 0, USB_CTRL_SET_TIMEOUT);
+	if (ret < 0 && cp) {
+		/*
+		 * All the old state is gone, so what else can we do?
+		 * The device is probably useless now anyway.
+		 */
+		usb_hcd_alloc_bandwidth(dev, NULL, NULL, NULL);
+		for (i = 0; i < nintf; ++i) {
+			usb_disable_interface(dev, cp->interface[i], true);
+			put_device(&cp->interface[i]->dev);
+			cp->interface[i] = NULL;
+		}
+		cp = NULL;
+	}
+
+	dev->actconfig = cp;
+	mutex_unlock(hcd->bandwidth_mutex);
+
+	if (!cp) {
+		usb_set_device_state(dev, USB_STATE_ADDRESS);
+
+		/* Leave LPM disabled while the device is unconfigured. */
+		usb_autosuspend_device(dev);
+		return ret;
+	}
+	usb_set_device_state(dev, USB_STATE_CONFIGURED);
+
 	if (cp->string == NULL &&
 			!(dev->quirks & USB_QUIRK_CONFIG_INTF_STRINGS))
 		cp->string = usb_cache_string(dev, cp->desc.iConfiguration);
@@ -1862,6 +2011,11 @@ free_interfaces:
 	 */
 	for (i = 0; i < nintf; ++i) {
 		struct usb_interface *intf = cp->interface[i];
+
+#ifdef MTK_ICUSB_SUPPORT
+		MYDBG("nintf : %d, intf : %x\n", nintf, (unsigned int)intf);
+		stor_intf = intf;
+#endif
 
 		dev_dbg(&dev->dev,
 			"adding %s (config #%d, interface %d)\n",

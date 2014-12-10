@@ -103,6 +103,7 @@ static ssize_t iio_event_chrdev_read(struct file *filep,
 	//spin_lock(&ev_int->wait.lock);
 	if (mutex_lock_interruptible(&ev_int->read_lock))
 		return -ERESTARTSYS;
+
 	if (kfifo_is_empty(&ev_int->det_events)) {
 		if (filep->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;

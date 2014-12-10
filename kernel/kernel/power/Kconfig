@@ -26,6 +26,11 @@ config HAS_EARLYSUSPEND
 	bool
 	default y
 
+config HAS_SBSUSPEND
+	bool
+	depends on HAS_EARLYSUSPEND
+	default y
+
 config WAKELOCK
 	bool
 	default y
@@ -364,7 +369,7 @@ config TOI_EXPORTS
 	default y
 
 config TOI_ZRAM_SUPPORT
-	def_bool y
+	def_bool n
 	depends on TOI && ZRAM!=n
 
 config PM_SLEEP

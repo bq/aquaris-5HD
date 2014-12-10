@@ -36,6 +36,7 @@
 #define __MUSB_GADGET_H
 
 #include <linux/list.h>
+
 enum buffer_map_state {
 	UN_MAPPED = 0,
 	PRE_MAPPED,
@@ -49,9 +50,7 @@ struct musb_request {
 	struct musb		*musb;
 	u8 tx;			/* endpoint direction */
 	u8 epnum;
-	//u8 mapped;
 	enum buffer_map_state map_state;
-	u8 queue;
 };
 
 static inline struct musb_request *to_musb_request(struct usb_request *req)
@@ -91,14 +90,11 @@ struct musb_ep {
 
 	/* true if lock must be dropped but req_list may not be advanced */
 	u8				busy;
-	bool            dma_configed;
 
 	u8				hb_mult;
 
-//Added Modification for ALPS00255822, bug from WHQL test
-    u8              dmaRelease;
-    u8              nextUnderRun;
-//Added Modification for ALPS00255822, bug from WHQL test
+	/* true if packet is received in fifo and req_list is empty */
+	u8				rx_pending;
 };
 
 static inline struct musb_ep *to_musb_ep(struct usb_ep *ep)

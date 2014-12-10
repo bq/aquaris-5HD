@@ -65,6 +65,7 @@ static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int tpd_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
+#if 0
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
@@ -72,7 +73,7 @@ extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
 extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
                                      kal_bool auto_umask);
-
+#endif
 #ifdef CREATE_WR_NODE
 extern s32 init_wr_node(struct i2c_client*);
 extern void uninit_wr_node(void);
@@ -117,17 +118,7 @@ int esd_checked_time = 0;
 //#define TPD_X_RES 480
 //#define TPD_Y_RES 800
 
-
-
-#ifdef MT6573
-#define CHR_CON0        (0xF7000000+0x2FA00)
-#endif
-#ifdef MT6575
 extern kal_bool upmu_is_chr_det(void);
-#endif
-#ifdef MT6577
-extern kal_bool upmu_is_chr_det(void);
-#endif
  
 #define MAX_I2C_TRANSFER_SIZE (MAX_TRANSACTION_LENGTH - I2C_DEVICE_ADDRESS_LEN)
 
@@ -337,17 +328,7 @@ static int gt818_config_read_proc(char *page, char **start, off_t off, int count
 
 static int gt818_config_write_proc(struct file *file, const char *buffer, unsigned long count, void *data)
 {
-    #ifdef MT6573
-    u32 temp = *(volatile u32 *)CHR_CON0;
-        
-    temp &= (1<<13);
-    #endif   
-    #ifdef MT6575
     kal_bool temp = upmu_is_chr_det();
-    #endif 
-	#ifdef MT6577
-    kal_bool temp = upmu_is_chr_det();
-	#endif 
 
     TPD_DEBUG("write count %ld\n", count );
 
@@ -675,16 +656,16 @@ void tpd_reset_fuc(struct i2c_client *client)
 
     msleep(50);
 
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    //mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
     //mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
     if(int_type)
     {
-    		mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_POLARITY_HIGH, tpd_eint_interrupt_handler, 1);
+        mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, EINTF_TRIGGER_RISING, tpd_eint_interrupt_handler, 1);
     }
     else
     {
-    		mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_POLARITY_LOW, tpd_eint_interrupt_handler, 1);	
+        mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, EINTF_TRIGGER_FALLING, tpd_eint_interrupt_handler, 1);
     }
 	
 	TPD_DMESG("[mtk-tpd] tpd_reset_fuc: done\n");
@@ -908,18 +889,18 @@ reset_proc:
 
     msleep(50);
 
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    //mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
     //mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
 	if(int_type)
 	{
-    		mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_POLARITY_HIGH, tpd_eint_interrupt_handler, 1);
+        mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, EINTF_TRIGGER_RISING, tpd_eint_interrupt_handler, 1);
     	}
 	else
 	{
-    		mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_POLARITY_LOW, tpd_eint_interrupt_handler, 1);	
+        mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, EINTF_TRIGGER_FALLING, tpd_eint_interrupt_handler, 1);
 	}
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 
 #ifndef TPD_RESET_ISSUE_WORKAROUND
     mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
@@ -965,15 +946,6 @@ static force_reset_guitar()
 {
 	int i;
 	
-#ifdef MT6575
-//Power off TP
-	hwPowerDown(MT65XX_POWER_LDO_VGP2, "TP");
-	msleep(30);
-//Power on TP
-	hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
-	msleep(30);
-#endif
-
 	for ( i = 0; i < 5; i++)
 	{ 
 	//Reset Guitar
@@ -1089,7 +1061,7 @@ static void tpd_esd_check_func(struct work_struct *work)
 
 	if(tpd_halt)
 	{
-		mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+		mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 	}
 	else	
 	{
@@ -1547,20 +1519,7 @@ static void tpd_suspend( struct early_suspend *h )
     i2c_write_dummy( i2c_client, TPD_HANDSHAKING_START_REG );
     i2c_write_bytes( i2c_client, TPD_POWER_MODE_REG, &mode, 1 );
     i2c_write_dummy( i2c_client, TPD_HANDSHAKING_END_REG );    
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
-#if 0//#ifdef MT6575, using PMIC Power off leakage 0.3mA, sleep mode: 0.1mA    
-    hwPowerDown(MT65XX_POWER_LDO_VGP2, "TP");
-    hwPowerDown(MT65XX_POWER_LDO_VGP, "TP");
-    /* Pull down EINT PIN and RST PIN */    
-    mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
-    mt_set_gpio_pull_enable(GPIO_CTP_EINT_PIN, GPIO_PULL_DISABLE);
-    mt_set_gpio_pull_select(GPIO_CTP_EINT_PIN, GPIO_PULL_DOWN);  
-    mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_EINT_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_IN);
-    mt_set_gpio_pull_enable(GPIO_CTP_RST_PIN, GPIO_PULL_DISABLE);
-    mt_set_gpio_pull_select(GPIO_CTP_RST_PIN, GPIO_PULL_DOWN);      
-#endif    
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
     //mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ZERO);
     //return 0;
     mutex_unlock(&esd_check);
@@ -1577,13 +1536,9 @@ static void tpd_resume( struct early_suspend *h )
 		
 #endif
     TPD_DMESG(TPD_DEVICE " tpd_resume start \n"); 	
-#if 0 //#ifdef MT6575, using PMIC Power off leakage 0.3mA, sleep mode: 0.1mA   
-    hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
-    hwPowerOn(MT65XX_POWER_LDO_VGP, VOL_1800, "TP"); 
-#endif    
 #ifdef TPD_RESET_ISSUE_WORKAROUND
     
-#if 1 //#ifdef MT6573, using PMIC Power off leakage 0.3mA, sleep mode: 0.1mA      
+#if 1       
     // use raising edge of INT to wakeup
     mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_GPIO);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_OUT);
@@ -1596,7 +1551,7 @@ static void tpd_resume( struct early_suspend *h )
     mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_EINT);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
  #endif
-#if 0 //#ifdef MT6575, using PMIC Power off leakage 0.3mA, sleep mode: 0.1mA 
+#if 0  
      // set INT mode
     mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_GPIO);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
@@ -1619,7 +1574,7 @@ static void tpd_resume( struct early_suspend *h )
 #endif   
 #endif
 
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
     //mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
 
 #ifdef TPD_RESET_ISSUE_WORKAROUND

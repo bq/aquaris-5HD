@@ -1903,10 +1903,20 @@ static ssize_t store_cpsopmode_value(struct device_driver *ddri, const char *buf
 	long op_mode = 0;
 	
 	err = strict_strtoul(buf, 10, &op_mode);
+	/*
 	if (((unsigned char)op_mode > 3) || (op_mode == obj->op_mode))
 	{
 		return -EINVAL;
+	}*/
+	if((unsigned char)op_mode > 3)
+	{
+		return -EINVAL;
 	}
+	if(op_mode == obj->op_mode)
+	{
+		return count;
+	}
+
 
 	if (BMC050_FORCED_MODE == op_mode) 
 	{

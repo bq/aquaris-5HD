@@ -2,29 +2,22 @@
 use strict;
 use File::Basename;
 use File::stat;
+use Data::Dumper;
 
+my $LOCAL_PATH;
+BEGIN
+{
+  $LOCAL_PATH = dirname($0);
+}
+use lib "$LOCAL_PATH/YAML/lib";
+use YAML qw(LoadFile DumpFile Load Dump);
 usage() if ($#ARGV < 2);
-
 my $DEBUG = 0;
-
 my ($scatFile, $project, @images) = @ARGV;
-
 # Data structure
 my $imgSize = [];
-
-# $imgSize = 
-#[
-#  {
-#    NAME => string,
-#    STARTADDR => hex,
-#    QUOTA => dec,
-#    SIZE  => dec
-#  },
-#...
-#]
-
-# There are following blocks defined in scatter file now
-# PRELOADER,DSP_BL,UBOOT,BOOTIMG,RECOVERY,SEC_RO,ANDROID,LOGO,USRDATA
+my $imgdata=[];
+my $part_num=0;
 my $imgTbl = 
 {
   PRELOADER => "preloader_$project.bin",
@@ -37,12 +30,14 @@ my $imgTbl =
   LOGO      => "logo.bin",
   USRDATA   => "userdata.img"
 };
-
+if($ENV{MTK_YAML_SCATTER_FILE_SUPPORT} eq "yes"){
+check_new();
+}else{
 $imgSize = parseScatter($scatFile, $imgSize);
 $imgSize = calcImgSizeQuota($imgSize);
 $imgSize = getImgSize(\@images, $imgTbl, $imgSize);
-
 chkExpiredImg($imgSize, $imgTbl);
+}
 print "Checking memory usage DONE!\n";
 exit 0;
 
@@ -67,6 +62,58 @@ sub parseScatter
   return $arrRef;
 }
 
+sub check_new
+{
+	my $Idx = 0;
+	my $errCnt = 0;
+	my $yaml=LoadFile($scatFile);
+	#print Dumper($yaml);
+	$part_num=@{$yaml}-1;
+	for($Idx=0;$Idx<$part_num;$Idx++){
+		#if($yaml->[$Idx+1]->{is_download} eq "true"){
+			$imgdata->[$Idx]->{partition_name}=$yaml->[$Idx+1]->{partition_name};
+			$imgdata->[$Idx]->{partition_size}=$yaml->[$Idx+1]->{partition_size};
+			$imgdata->[$Idx]->{file_name}=$yaml->[$Idx+1]->{file_name};
+		#}
+	}	
+	foreach my $img (@images)
+	{
+
+		die "$img does NOT exist!\n" if (!-e $img);
+		for ($Idx=0; $Idx<$part_num; $Idx++)
+		{
+			if (exists($imgdata->[$Idx]->{file_name}) && (basename($img) eq $imgdata->[$Idx]->{file_name}))
+			{
+			$imgdata->[$Idx]->{img_size} = stat($img)->size; 
+			#print "img=$img size=$imgdata->[$Idx]->{img_size}\n";
+			last;
+			}
+		}
+		if(($Idx< $part_num) && (hex($imgdata->[$Idx]->{partition_size})!=0)){
+			if ($imgdata->[$Idx]->{img_size} > hex($imgdata->[$Idx]->{partition_size}))
+			{
+				$errCnt++;
+				warn "[MEM SIZE EXPIRED] $imgdata->[$Idx]->{partition_name}\n";
+				print "[MEM SIZE EXPIRED] Partition Size:\t",hex($imgdata->[$Idx]->{partition_size})," byte(s)\n";
+				print "[MEM SIZE EXPIRED] Image Size:\t $imgdata->[$Idx]->{img_size} byte(s)\n";
+				print "[MEM SIZE EXPIRED] Shortage:\t",($imgdata->[$Idx]->{img_size} - hex($imgdata->[$Idx]->{partition_size}))," byte(s)\n";
+			}
+			elsif ($imgdata->[$Idx]->{img_size} > hex($imgdata->[$Idx]->{partition_size})*0.9)
+			{
+				warn  "[MEM SIZE ALERT] $imgdata->[$Idx]->{partition_name}\n";
+				print "[MEM SIZE ALERT] Partition Size:\t",hex($imgdata->[$Idx]->{partition_size})," byte(s)\n";
+				print "[MEM SIZE ALERT] Image Size:\t $imgdata->[$Idx]->{img_size} byte(s)\n";
+				print "[MEM SIZE ALERT] Remaining:\t",(hex($imgdata->[$Idx]->{partition_size}) - $imgdata->[$Idx]->{img_size})," byte(s)\n";
+			}
+			
+			printf("[PARTITION_CHECK_RESULT] %s have used %%%.2f QUOTA\n",$imgdata->[$Idx]->{partition_name},($imgdata->[$Idx]->{img_size}/hex($imgdata->[$Idx]->{partition_size})) *100);
+		}
+	}
+	if ($errCnt)
+	{
+		exit 1;
+	}
+}
 # Calculate the quota of each image
 sub calcImgSizeQuota
 {

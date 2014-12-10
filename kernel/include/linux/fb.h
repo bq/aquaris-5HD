@@ -40,10 +40,6 @@
 #define FBIOGET_DISPINFO        0x4618
 #define FBIO_WAITFORVSYNC	_IOW('F', 0x20, __u32)
 
-#define FBIOLOCK_FB             0x4630
-#define FBIOUNLOCK_FB           0x4631
-#define FBIOLOCKED_IOCTL        0x4632
-
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
 #define FB_TYPE_PLANES			1	/* Non interleaved planes */
 #define FB_TYPE_INTERLEAVED_PLANES	2	/* Interleaved planes	*/

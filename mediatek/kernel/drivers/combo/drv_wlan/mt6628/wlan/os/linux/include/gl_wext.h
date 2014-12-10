@@ -365,6 +365,15 @@ wextSrchDesiredWPSIE (
     );
 #endif
 
+#if CFG_SUPPORT_WAPI
+BOOLEAN
+wextSrchDesiredWAPIIE (
+    IN  PUINT_8         pucIEStart,
+    IN  INT_32          i4TotalIeLen,
+    OUT PUINT_8         *ppucDesiredIE
+    );
+#endif
+
 /*******************************************************************************
 *                              F U N C T I O N S
 ********************************************************************************

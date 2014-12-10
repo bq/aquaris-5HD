@@ -130,6 +130,7 @@ static bool limit_w2m_speed = false;
 static bool limit_w2tvr_speed = false;
 extern OVL_CONFIG_STRUCT cached_layer_config[DDP_OVL_LAYER_MUN];
 extern OVL_CONFIG_STRUCT* realtime_layer_config;
+extern LCM_DRIVER  *lcm_drv;
 // ---------------------------------------------------------------------------
 //  Local Functions
 // ---------------------------------------------------------------------------
@@ -1420,10 +1421,6 @@ LCD_STATUS LCD_Dynamic_Change_FB_Layer(unsigned int isAEEEnabled)
     
     if(isAEEEnabled==1)
     {
-        // change ui layer from DISP_DEFAULT_UI_LAYER_ID to DISP_CHANGED_UI_LAYER_ID
-        memcpy((void*)(&cached_layer_config[DISP_CHANGED_UI_LAYER_ID]), 
-               (void*)(&cached_layer_config[DISP_DEFAULT_UI_LAYER_ID]), 
-               sizeof(OVL_CONFIG_STRUCT));
         ui_layer_tdshp = cached_layer_config[DISP_DEFAULT_UI_LAYER_ID].isTdshp;
         cached_layer_config[DISP_DEFAULT_UI_LAYER_ID].isTdshp = 0;
         disp_path_change_tdshp_status(DISP_DEFAULT_UI_LAYER_ID, 0); // change global variable value, else error-check will find layer 2, 3 enable tdshp together
@@ -1431,19 +1428,9 @@ LCD_STATUS LCD_Dynamic_Change_FB_Layer(unsigned int isAEEEnabled)
     }
     else
     {
-        memcpy((void*)(&cached_layer_config[DISP_DEFAULT_UI_LAYER_ID]), 
-               (void*)(&cached_layer_config[DISP_CHANGED_UI_LAYER_ID]), 
-               sizeof(OVL_CONFIG_STRUCT));
         cached_layer_config[DISP_DEFAULT_UI_LAYER_ID].isTdshp = ui_layer_tdshp;
         FB_LAYER = DISP_DEFAULT_UI_LAYER_ID;
-        memset((void*)(&cached_layer_config[DISP_CHANGED_UI_LAYER_ID]), 0, sizeof(OVL_CONFIG_STRUCT));
     }
-
-    // no matter memcpy or memset, layer ID should not be changed
-    cached_layer_config[DISP_DEFAULT_UI_LAYER_ID].layer = DISP_DEFAULT_UI_LAYER_ID;
-    cached_layer_config[DISP_CHANGED_UI_LAYER_ID].layer = DISP_CHANGED_UI_LAYER_ID;
-    cached_layer_config[DISP_DEFAULT_UI_LAYER_ID].isDirty = 1;
-    cached_layer_config[DISP_CHANGED_UI_LAYER_ID].isDirty = 1;
 
     printk("after dynamic change: \n");
     LCD_Dump_Layer_Info();
@@ -2337,6 +2324,39 @@ LCD_STATUS LCD_SetGMCThrottle()
 	LCD_OUTREG32(&LCD_REG->GMC_CON, (throttle_cnt << 16) | (1 << 4) | 0x4);
 #endif	
 	return LCD_STATUS_OK;
+}
+
+LCD_STATUS LCD_read_lcm_fb(unsigned char *buffer)
+{
+   unsigned int array[2];
+
+   LCD_WaitForNotBusy();
+
+	// if read_fb not impl, should return info
+	if(lcm_drv->ata_check)
+		lcm_drv->ata_check(buffer);
+
+   return LCD_STATUS_OK;
+}
+
+unsigned int LCD_Check_LCM(UINT32 color)
+{
+  unsigned int ret = 1;
+	unsigned char buffer[60];
+	unsigned int i=0;
+	
+	LCD_read_lcm_fb(buffer);
+	for(i=0;i<60;i++)
+		printk("%d\n",buffer[i]);	
+
+	for(i=0;i<60;i+=3){
+		printk("read pixel = 0x%x,",(buffer[i]<<16)|(buffer[i+1]<<8)|(buffer[i+2]));
+		if(((buffer[i]<<16)|(buffer[i+1]<<8)|(buffer[i+2])) != (color&0xFFFFFF)){
+			ret = 0;
+			break;
+		}
+	}
+	return ret;
 }
 
 // called by "esd_recovery_kthread"

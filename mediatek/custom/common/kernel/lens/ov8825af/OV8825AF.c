@@ -1,5 +1,4 @@
 /*
- * MD218A voice coil motor driver
  *
  *
  */
@@ -56,9 +55,9 @@ static unsigned long g_u4CurrPosition   = 0;
 
 static int g_sr = 3;
 
-extern s32 mt_set_gpio_mode(u32 u4Pin, u32 u4Mode);
-extern s32 mt_set_gpio_out(u32 u4Pin, u32 u4PinOut);
-extern s32 mt_set_gpio_dir(u32 u4Pin, u32 u4Dir);
+//extern s32 mt_set_gpio_mode(u32 u4Pin, u32 u4Mode);
+//extern s32 mt_set_gpio_out(u32 u4Pin, u32 u4PinOut);
+//extern s32 mt_set_gpio_dir(u32 u4Pin, u32 u4Dir);
 
 
 static int s4OV8825AF_ReadReg(unsigned short * a_pu2Result)
@@ -122,17 +121,23 @@ inline static int moveOV8825AF(unsigned long a_u4Position)
     {
         unsigned short InitPos;
         ret = s4OV8825AF_ReadReg(&InitPos);
+
 	    
-        spin_lock(&g_OV8825AF_SpinLock);
         if(ret == 0)
         {
             OV8825AFDB("[OV8825AF] Init Pos %6d \n", InitPos);
+			
+			spin_lock(&g_OV8825AF_SpinLock);
             g_u4CurrPosition = (unsigned long)InitPos;
+			spin_unlock(&g_OV8825AF_SpinLock);
         }
         else
         {		
+			spin_lock(&g_OV8825AF_SpinLock);
             g_u4CurrPosition = 0;
+			spin_unlock(&g_OV8825AF_SpinLock);
         }
+		spin_lock(&g_OV8825AF_SpinLock);
         g_s4OV8825AF_Opened = 2;
         spin_unlock(&g_OV8825AF_SpinLock);
     }
@@ -238,17 +243,15 @@ unsigned long a_u4Param)
 //CAM_RESET
 static int OV8825AF_Open(struct inode * a_pstInode, struct file * a_pstFile)
 {
-    spin_lock(&g_OV8825AF_SpinLock);
 
     if(g_s4OV8825AF_Opened)
     {
-        spin_unlock(&g_OV8825AF_SpinLock);
         OV8825AFDB("[OV8825AF] the device is opened \n");
         return -EBUSY;
     }
 
+    spin_lock(&g_OV8825AF_SpinLock);
     g_s4OV8825AF_Opened = 1;
-		
     spin_unlock(&g_OV8825AF_SpinLock);
 
     return 0;

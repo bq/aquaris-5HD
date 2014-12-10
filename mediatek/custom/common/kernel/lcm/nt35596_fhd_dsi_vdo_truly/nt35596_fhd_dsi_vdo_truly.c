@@ -1,10 +1,12 @@
 #ifndef BUILD_LK
 #include <linux/string.h>
+#include <linux/kernel.h>
 #endif
 #include "lcm_drv.h"
 
 #ifdef BUILD_LK
 	#include <platform/mt_gpio.h>
+	#include <string.h>
 #elif defined(BUILD_UBOOT)
 	#include <asm/arch/mt_gpio.h>
 #else
@@ -45,7 +47,7 @@ static LCM_UTIL_FUNCS lcm_util = {0};
 #define dsi_lcm_set_gpio_out(pin, out)										lcm_util.set_gpio_out(pin, out)
 #define dsi_lcm_set_gpio_mode(pin, mode)									lcm_util.set_gpio_mode(pin, mode)
 #define dsi_lcm_set_gpio_dir(pin, dir)										lcm_util.set_gpio_dir(pin, dir)
-#define dsi_lcm_set_gpio_pull_enable(pin, en)								lcm_util.set_gpio_pull_enable(pin, en)
+#define dsi_lcm_set_gpio_pull_enable(pin, en)								lcm_util.set_gpio_pull_enable)(pin, en)
 
 #define   LCM_DSI_CMD_MODE							0
 
@@ -879,7 +881,7 @@ static void lcm_init(void)
 	dsi_lcm_set_gpio_mode(GPIO139, GPIO_MODE_GPIO);
 	dsi_lcm_set_gpio_dir(GPIO139, GPIO_DIR_OUT);
 	dsi_lcm_set_gpio_out(GPIO139, GPIO_OUT_ONE);
-	
+
 	SET_RESET_PIN(1);
 	SET_RESET_PIN(0);
 	MDELAY(10);
@@ -920,7 +922,7 @@ static void lcm_suspend(void)
 
 static void lcm_resume(void)
 {
-//	unsigned int data_array[16];
+	//unsigned int data_array[16];
 	//unsigned char buffer[2];
 	if(!lcm_is_init)
 		lcm_init();
@@ -933,10 +935,10 @@ static void lcm_resume(void)
 	printk("%s, kernel nt35596 horse debug: nt35596 id = 0x%08x\n", __func__, buffer[0]);
 #endif
 
-//	TC358768_DCS_write_1A_0P(0x11); // Sleep Out
-//	MDELAY(150);
+	//TC358768_DCS_write_1A_0P(0x11); // Sleep Out
+	//MDELAY(150);
 
-//	TC358768_DCS_write_1A_0P(0x29); // Display On
+	//TC358768_DCS_write_1A_0P(0x29); // Display On
 
 }
          

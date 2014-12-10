@@ -171,6 +171,10 @@ static ssize_t ptp_od_show(struct device_driver *driver, char *buf)
 
     clc_temp_p = (volatile u32 *)PTP_INIT_01_API();
 
+    if(clc_temp_p == NULL) {
+        return snprintf(buf, PAGE_SIZE, "PTP is not supported\n");
+    }
+
     /* only need bit 31 ~ bit 16 of the read data*/
     val = clc_temp_p[0];
     val >>= 16;

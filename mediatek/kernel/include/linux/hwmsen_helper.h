@@ -1,4 +1,4 @@
-/* alps/ALPS_SW/TRUNK/MAIN/alps/kernel/drivers/hwmon/mt6516/hwmsen_helper.h
+/* alps
  *
  * (C) Copyright 2009 
  * MediaTek <www.MediaTek.com>

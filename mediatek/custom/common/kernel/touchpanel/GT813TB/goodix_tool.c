@@ -469,6 +469,7 @@ s32 init_wr_node(struct i2c_client *client)
 
     register_i2c_func();
 
+#if 0 //linux-3.10 procfs API changed
     goodix_proc_entry = create_proc_entry(GOODIX_ENTRY_NAME, 0666, NULL);
     if (goodix_proc_entry == NULL)
     {
@@ -482,7 +483,7 @@ s32 init_wr_node(struct i2c_client *client)
         goodix_proc_entry->read_proc = goodix_tool_read;
         //goodix_proc_entry->owner =THIS_MODULE;
     }
-
+#endif
     return success;
 }
 
@@ -572,10 +573,16 @@ static u8 comfirm(void)
 
 static s32 goodix_tool_write(struct file *filp, const char __user *buff, unsigned long len, void *data)
 {
+    u64 ret = 0;
     DEBUG_ARRAY((u8*)buff, len);
     
-    copy_from_user(&cmd_head, buff, CMD_HEAD_LENGTH);
-
+    ret = copy_from_user(&cmd_head, buff, CMD_HEAD_LENGTH);
+    
+    if (ret)
+    {
+        WARNING("copy_from_user failed.");
+    }
+    
     DEBUG("wr  :0x%02x\n", cmd_head.wr);
     DEBUG("flag:0x%02x\n", cmd_head.flag);
     DEBUG("flag addr:0x%02x%02x\n", cmd_head.flag_addr[0], cmd_head.flag_addr[1]);
@@ -594,7 +601,13 @@ static s32 goodix_tool_write(struct file *filp, const char __user *buff, unsigne
     if (1 == cmd_head.wr)
     {
       //  copy_from_user(&cmd_head.data[cmd_head.addr_len], &buff[CMD_HEAD_LENGTH], cmd_head.data_len);
-        copy_from_user(&cmd_head.data[ADDR_MAX_LENGTH], &buff[CMD_HEAD_LENGTH], cmd_head.data_len);
+        ret = copy_from_user(&cmd_head.data[ADDR_MAX_LENGTH], &buff[CMD_HEAD_LENGTH], cmd_head.data_len);
+        
+        if (ret)
+        {
+            WARNING("copy_from_user failed.");
+        }       
+        
         memcpy(&cmd_head.data[ADDR_MAX_LENGTH - cmd_head.addr_len], cmd_head.addr, cmd_head.addr_len);
 
         DEBUG_ARRAY(cmd_head.data, cmd_head.data_len + cmd_head.addr_len);

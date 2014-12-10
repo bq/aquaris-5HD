@@ -46,14 +46,14 @@ static inline u16 musbfsh_readw(const void __iomem *addr, unsigned offset)
 {
 	u16 rc = 0;
 	if(musbfsh_power)
-		rc =  __raw_readw(addr + offset);
+		rc = readw(addr + offset);
 	else
 	{
     	unsigned long flags = 0;
     	spin_lock_irqsave(&musbfs_io_lock, flags);
 		mt65xx_usb11_clock_enable(true);
 		//DBG(0,"[MUSB]:access %s function when usb clock is off 0x%X\n",__func__, offset);
-		rc =  __raw_readw(addr + offset);
+		rc = readw(addr + offset);
 		mt65xx_usb11_clock_enable(false);
     	spin_unlock_irqrestore(&musbfs_io_lock, flags);
 	}
@@ -63,14 +63,14 @@ static inline u32 musbfsh_readl(const void __iomem *addr, unsigned offset)
 {
 	u32 rc = 0;
 	if(musbfsh_power)
-		rc =  __raw_readl(addr + offset);
+		rc = readl(addr + offset);
 	else
 	{
     	unsigned long flags = 0;
     	spin_lock_irqsave(&musbfs_io_lock, flags);
 		mt65xx_usb11_clock_enable(true);
 		//DBG(0,"[MUSB]:access %s function when usb clock is off 0x%X\n",__func__, offset);
-		rc =  __raw_readl(addr + offset);
+		rc = readl(addr + offset);
 		mt65xx_usb11_clock_enable(false);
     	spin_unlock_irqrestore(&musbfs_io_lock, flags);
 	}
@@ -81,14 +81,14 @@ static inline u32 musbfsh_readl(const void __iomem *addr, unsigned offset)
 static inline void musbfsh_writew(void __iomem *addr, unsigned offset, u16 data)
 {
 	if(musbfsh_power)
-		__raw_writew(data, addr + offset);
+		writew(data, addr + offset);
 	else
 	{
     	unsigned long flags = 0;
     	spin_lock_irqsave(&musbfs_io_lock, flags);
 		mt65xx_usb11_clock_enable(true);
 		//DBG(0,"[MUSB]:access %s function when usb clock is off 0x%X\n",__func__, offset);
-		__raw_writew(data, addr + offset);
+		writew(data, addr + offset);
 		mt65xx_usb11_clock_enable(false);
     	spin_unlock_irqrestore(&musbfs_io_lock, flags);
 	}
@@ -97,14 +97,14 @@ static inline void musbfsh_writew(void __iomem *addr, unsigned offset, u16 data)
 static inline void musbfsh_writel(void __iomem *addr, unsigned offset, u32 data)
 {
 	if(musbfsh_power)
-		__raw_writel(data, addr + offset);
+		writel(data, addr + offset);
 	else
 	{
     	unsigned long flags = 0;
     	spin_lock_irqsave(&musbfs_io_lock, flags);
 		mt65xx_usb11_clock_enable(true);
 		//DBG(0,"[MUSBfsh]:access %s function when usb clock is off 0x%X\n",__func__, offset);
-		__raw_writel(data, addr + offset);
+		writel(data, addr + offset);
 		mt65xx_usb11_clock_enable(false);
     	spin_unlock_irqrestore(&musbfs_io_lock, flags);
 	}
@@ -114,14 +114,14 @@ static inline u8 musbfsh_readb(const void __iomem *addr, unsigned offset)
 {
 	u8 rc = 0;
 	if(musbfsh_power)
-		rc =  __raw_readb(addr + offset);
+		rc = readb(addr + offset);
 	else
 	{
     	unsigned long flags = 0;
     	spin_lock_irqsave(&musbfs_io_lock, flags);
 		mt65xx_usb11_clock_enable(true);
 		//DBG(0,"[MUSBfsh]:access %s function when usb clock is off 0x%X\n",__func__, offset);
-		rc =  __raw_readb(addr + offset);
+		rc = readb(addr + offset);
 		mt65xx_usb11_clock_enable(false);
     	spin_unlock_irqrestore(&musbfs_io_lock, flags);
 	}
@@ -131,14 +131,14 @@ static inline u8 musbfsh_readb(const void __iomem *addr, unsigned offset)
 static inline void musbfsh_writeb(void __iomem *addr, unsigned offset, u8 data)
 {
 	if(musbfsh_power)
-		__raw_writeb(data, addr + offset);
+		writeb(data, addr + offset);
 	else
 	{
     	unsigned long flags = 0;
     	spin_lock_irqsave(&musbfs_io_lock, flags);
 		mt65xx_usb11_clock_enable(true);
 		//DBG(0,"[MUSBfsh]:access %s function when usb clock is off 0x%X\n",__func__, offset);
-		__raw_writeb(data, addr + offset);
+		writeb(data, addr + offset);
 		mt65xx_usb11_clock_enable(false);
     	spin_unlock_irqrestore(&musbfs_io_lock, flags);
 	}
@@ -148,22 +148,22 @@ static inline void musbfsh_writeb(void __iomem *addr, unsigned offset, u8 data)
 
 #if 0
 static inline u16 musbfsh_readw(const void __iomem *addr, unsigned offset)
-	{ return __raw_readw(addr + offset); }
+	{ return readw(addr + offset); }
 
 static inline u32 musbfsh_readl(const void __iomem *addr, unsigned offset)
-	{ return __raw_readl(addr + offset); }
+	{ return readl(addr + offset); }
 
 static inline void musbfsh_writew(void __iomem *addr, unsigned offset, u16 data)
-	{ __raw_writew(data, addr + offset); }
+	{ writew(data, addr + offset); }
 
 static inline void musbfsh_writel(void __iomem *addr, unsigned offset, u32 data)
-	{ __raw_writel(data, addr + offset); }
+	{ writel(data, addr + offset); }
 
 static inline u8 musbfsh_readb(const void __iomem *addr, unsigned offset)
-	{ return __raw_readb(addr + offset); }
+	{ return readb(addr + offset); }
 
 static inline void musbfsh_writeb(void __iomem *addr, unsigned offset, u8 data)
-	{ __raw_writeb(data, addr + offset); }
+	{ writeb(data, addr + offset); }
 #endif
 
 

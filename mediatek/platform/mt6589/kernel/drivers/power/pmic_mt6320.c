@@ -188,6 +188,7 @@ void pmic_thermal_dump_reg(void)
 // PMIC-AUXADC 
 //==============================================================================
 extern int Enable_BATDRV_LOG;
+int can_check_battery_flag=1;
 
 int PMIC_IMM_GetOneChannelValue(int dwChannel, int deCount, int trimd)
 {
@@ -224,6 +225,7 @@ int PMIC_IMM_GetOneChannelValue(int dwChannel, int deCount, int trimd)
     {
         upmu_set_rg_buf_pwd_on(1);
         upmu_set_rg_buf_pwd_b(1);
+        can_check_battery_flag = 0;
         upmu_set_baton_tdet_en(1);
         msleep(20);
     }
@@ -240,7 +242,11 @@ int PMIC_IMM_GetOneChannelValue(int dwChannel, int deCount, int trimd)
             trimd=1;
         }
         else
-        {            
+        {
+            can_check_battery_flag = 0;    
+#ifdef ENABLE_PULL_UP_TBAT    
+            upmu_set_baton_tdet_en(1);    
+#endif            
             upmu_set_rg_vbuf_calen(1); /* For T_BAT*/
         }
 
@@ -468,7 +474,8 @@ int PMIC_IMM_GetOneChannelValue(int dwChannel, int deCount, int trimd)
 
     if(dwChannel==3)
     {
-        upmu_set_baton_tdet_en(0);     
+        upmu_set_baton_tdet_en(0);
+        can_check_battery_flag = 1;        
         upmu_set_rg_buf_pwd_b(0);
         upmu_set_rg_buf_pwd_on(0);
     }
@@ -477,6 +484,10 @@ int PMIC_IMM_GetOneChannelValue(int dwChannel, int deCount, int trimd)
     {
         //upmu_set_rg_vbuf_en(0);
         //upmu_set_rg_vbuf_byp(0);
+#ifdef ENABLE_PULL_UP_TBAT        
+        upmu_set_baton_tdet_en(0);
+#endif        
+        can_check_battery_flag = 1;   
         upmu_set_rg_vbuf_calen(0);
     }
 
@@ -842,7 +853,7 @@ void cust_pmic_interrupt_en_setting(void)
     upmu_set_rg_int_en_vproc(0);
     upmu_set_rg_int_en_rtc(1);
     upmu_set_rg_int_en_audio(0);
-    upmu_set_rg_int_en_accdet(1);
+    //upmu_set_rg_int_en_accdet(1);
     upmu_set_rg_int_en_homekey(1);
     upmu_set_rg_int_en_ldo(0);    
 }
@@ -4319,9 +4330,15 @@ static int pmic_mt6320_probe(struct platform_device *dev)
         //keep VAST setting
         xlog_printk(ANDROID_LOG_INFO, "Power/PMIC", "[PMIC] keep VAST due to MTK_MT8193_SUPPORT\n");
         #else
-        ret_val=pmic_config_interface(DIGLDO_CON20, 0x0, PMIC_RG_VAST_EN_MASK, PMIC_RG_VAST_EN_SHIFT);
-        xlog_printk(ANDROID_LOG_INFO, "Power/PMIC", "[CONFIG_FORCE_OFF_VAST] Reg[0x%x]=%x\n", 
+            //#ifdef __USING_MD2_3G__
+            #if defined(MTK_ENABLE_MD2) && defined(__USING_MD2_3G__)
+            //keep VAST setting
+            xlog_printk(ANDROID_LOG_INFO, "Power/PMIC", "[PMIC] keep VAST due to MTK_ENABLE_MD2 && __USING_MD2_3G__\n");
+            #else
+            ret_val=pmic_config_interface(DIGLDO_CON20, 0x0, PMIC_RG_VAST_EN_MASK, PMIC_RG_VAST_EN_SHIFT);
+            xlog_printk(ANDROID_LOG_INFO, "Power/PMIC", "[CONFIG_FORCE_OFF_VAST] Reg[0x%x]=%x\n", 
                 DIGLDO_CON20, upmu_get_reg_value(DIGLDO_CON20));
+            #endif
         #endif
     #endif
 

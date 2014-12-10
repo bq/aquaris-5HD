@@ -21,7 +21,6 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/vmalloc.h>
-
 #include "ccmni_pfp.h"
 /* Compile option for pfp kernel debug */
 #undef __PFP_KERNEL_DEBUG__ 

@@ -210,7 +210,7 @@ int toi_start_anything(int hibernate_or_resume)
 		goto early_init_err;
 
 	if (!toiActiveAllocator) {
-        hib_log("hibernate_or_resume(0x%08x), toiActiveAllocator is null.\n", hibernate_or_resume);
+        hib_log("hibernate_or_resume(0x%08x), resume_file=\"%s\"\n", hibernate_or_resume, resume_file);
         toi_attempt_to_parse_resume_device(!hibernate_or_resume);
     }
 
@@ -546,6 +546,11 @@ static int toi_init(int restarting)
 {
 	int result, i, j;
 
+    // - MTK jonathan.jmchen
+    if (test_result_state(TOI_ABORTED))
+        return 1;
+    //
+
 	toi_result = 0;
 
 	printk(KERN_INFO "Initiating a hibernation cycle.\n");
@@ -573,8 +578,9 @@ static int toi_init(int restarting)
 	set_toi_state(TOI_NOTIFIERS_PREPARE);
 
 	if (!restarting) {
-		printk(KERN_ERR "Starting other threads.");
-		toi_start_other_threads();
+        int num_threaded;
+		num_threaded = toi_start_other_threads();
+		printk(KERN_ERR "Starting other threads (%d).", num_threaded);
 	}
 
 	result = usermodehelper_disable();
@@ -652,11 +658,6 @@ static int do_post_image_write(void)
 	/* If switching images fails, do normal powerdown */
 	if (alt_resume_param[0])
 		do_toi_step(STEP_RESUME_ALT_IMAGE);
-
-#ifdef CONFIG_MTK_HIBERNATION
-    // for lk
-    set_env("hibboot", "1");
-#endif
 
 	toi_power_down();
 
@@ -1029,6 +1030,8 @@ EXPORT_SYMBOL_GPL(do_toi_step);
  **/
 void toi_try_resume(void)
 {
+    int num_threaded;
+
     hib_log("entering...\n");
 	set_toi_state(TOI_TRYING_TO_RESUME);
 	resume_attempted = 1;
@@ -1036,7 +1039,8 @@ void toi_try_resume(void)
 	current->flags |= PF_MEMALLOC;
 
     get_online_cpus(); // to protect against hotplug interference
-	toi_start_other_threads();
+	num_threaded = toi_start_other_threads();
+    printk(KERN_ERR "[resume] Starting other threads (%d).", num_threaded);
 
 	if (do_toi_step(STEP_RESUME_CAN_RESUME) &&
         !do_toi_step(STEP_RESUME_LOAD_PS1)) {
@@ -1168,6 +1172,13 @@ out:
 	if (sys_power_disk)
 		toi_finish_anything(SYSFS_HIBERNATING);
 
+#ifdef CONFIG_MTK_HIBERNATION
+    // enhanced error handling
+    if (test_result_state(TOI_ARCH_PREPARE_FAILED)) {
+        result = 0xdead; // magic code here
+    }
+#endif
+
     return result;
 }
 
@@ -1247,6 +1258,19 @@ int toi_launch_userspace_program(char *command, int channel_no,
 
 	return retval;
 }
+
+#ifdef CONFIG_MTK_HIBERNATION
+int toi_abort_hibernate(void)
+{
+	if (test_result_state(TOI_ABORTED))
+		return 0;
+
+	set_result_state(TOI_ABORTED);
+
+    return 0;
+}
+EXPORT_SYMBOL_GPL(toi_abort_hibernate);
+#endif
 
 /*
  * This array contains entries that are automatically registered at

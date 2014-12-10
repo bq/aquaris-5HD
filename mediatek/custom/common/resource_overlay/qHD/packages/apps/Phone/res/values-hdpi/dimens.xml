@@ -11,5 +11,5 @@
     <dimen name="vt_incall_screen_button_height">84px</dimen>
     <dimen name="vt_incall_screen_low_video_height">263px</dimen>
     <dimen name="vt_incall_screen_low_video_width">321px</dimen>
-    <dimen name="vt_incall_screen_low_video_margin_top">45px</dimen>
+    <dimen name="vt_incall_screen_button_margin_out">6px</dimen>
 </resources>

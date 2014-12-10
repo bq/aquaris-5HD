@@ -12,9 +12,12 @@ on post-fs
     mkdir /data/nvram/md  0770 root nvram
     mkdir /data/nvram/md2 0770 root nvram
 
-    insmod /system/lib/modules/ccci_plat.ko
-    insmod /system/lib/modules/ccci.ko
-    chown ccci ccci /sys/class/BOOT/BOOT/boot/md
+#  Build-in Modified - S
+#   insmod /system/lib/modules/ccci_plat.ko
+#   insmod /system/lib/modules/ccci.ko
+#  Build-in Modified - E
+#   chown ccci ccci /sys/class/BOOT/BOOT/boot/md
+    chown ccci ccci /sys/kernel/ccci/boot
 	
 service ccci_fsd /system/bin/ccci_fsd 0
     user ccci

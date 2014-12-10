@@ -11,6 +11,7 @@ namespace NSCamCustom
 		
 	}	eFlickerDetectSpeed;
 
-
+#define FLKSPEED eFLKSpeed_Slow
+#define FLK_DEFAULT_FREQ 50
 };  //NSCamCustom
 

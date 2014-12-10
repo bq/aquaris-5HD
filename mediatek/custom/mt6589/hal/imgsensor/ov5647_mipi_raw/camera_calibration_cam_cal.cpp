@@ -1046,7 +1046,7 @@ UINT32 CAM_CALGetCalData(UINT32* pGetSensorCalData)
     PCAM_CAL_DATA_STRUCT pCamCalData = (PCAM_CAL_DATA_STRUCT)pGetSensorCalData;    
 //    CAM_CAL_LOG_IF(dumpEnable,"CAM_CALGetCalData(0x%8x)----\n",(unsigned int)pGetSensorCalData);
     //====== Get Property ======
-    char value[32] = {'\0'};    
+    char value[PROPERTY_VALUE_MAX] = {'\0'};    
     property_get("camcalcamcal.log", value, "0");
     dumpEnable = atoi(value);
     //====== Get Property ======

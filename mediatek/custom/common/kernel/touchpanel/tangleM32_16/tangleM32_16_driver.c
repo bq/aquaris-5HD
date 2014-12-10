@@ -27,14 +27,7 @@
 #include <linux/jiffies.h>
 #include "tpd_custom_tangleM32_16.h"
 #include "tpd_calibrate.h"
-
-#ifdef MT6575
-#include <mach/mt6575_pm_ldo.h>
-#endif
-
-#ifdef MT6577
 #include <mach/mt_pm_ldo.h>
-#endif
 
 #ifndef TPD_NO_GPIO 
 #include "cust_gpio_usage.h"
@@ -71,6 +64,7 @@ static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 //static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
+#if 0
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
@@ -78,7 +72,7 @@ extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
 extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
                                      kal_bool auto_umask);
-
+#endif
 
 //static int i2c_write_dummy( struct i2c_client *client, u16 addr );
 
@@ -339,10 +333,10 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
 
    // msleep(100);
 	
-	mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+	//mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 	 msleep(100);
   
 	device_init_wakeup(&client->dev, 1);
@@ -557,7 +551,7 @@ void tpd_suspend(struct early_suspend *h)
 		TPD_DMESG("[mtk-tpd] %s\n", __FUNCTION__); 
 	}
     tpd_halt = 1;
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 
     #ifdef TPD_HAVE_POWER_ON_OFF
     mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
@@ -586,7 +580,7 @@ void tpd_resume(struct early_suspend *h)
     msleep(100);
     #endif
 
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
     tpd_halt = 0;
 }
 

@@ -24,6 +24,12 @@
  * $Modtime:$
  * $Log:$
  *
+ * 04 22 2013 kh.hung
+ * [ALPS00580843] [MT6572tdv1_phone[lca]][music][Symbio][Free test] 音?播放器播放音?的?音?大?小，不?定
+ * Use default DRC setting.
+ * 
+ * Review: http://mtksap20:8080/go?page=NewReview&reviewid=59367
+ *
  *
  *
  *
@@ -200,9 +206,9 @@
     #define BES_LOUDNESS_FILTER_FIRST  0
            
     #define BES_LOUDNESS_GAIN_MAP_IN \
-    -45, -40, -19, -18,  0
+    0, 0, 0, 0,  0
               
     #define BES_LOUDNESS_GAIN_MAP_OUT \            
-    0, 12, 12, 12, 0   
+    0, 0, 0, 0, 0   
 #endif
 #endif

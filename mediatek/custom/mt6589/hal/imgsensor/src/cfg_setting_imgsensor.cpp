@@ -126,6 +126,23 @@ getSensorFacingDirection(EDevId const eDevId)
     }
     return  -1;
 }
+/*******************************************************************************
+* Image Sensor Module FOV
+*******************************************************************************/
+SensorViewAngle_T const&
+getSensorViewAngle()
+{
+    static SensorViewAngle_T const inst = {
+        MainSensorHorFOV  : 63,   
+        MainSensorVerFOV  : 49,    
+        SubSensorHorFOV  : 60,   
+        SubSensorVerFOV  : 40,
+        Main2SensorHorFOV  : 0,   //not support
+        Main2SensorVerFOV  : 0,
+    };
+    return inst;
+
+}
 };
 
 //#endif //  _CFG_SETTING_IMGSENSOR_H_

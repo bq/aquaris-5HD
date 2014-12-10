@@ -2129,8 +2129,8 @@ static struct platform_driver yamaha_sensor_driver = {
 /*----------------------------------------------------------------------------*/
 static int __init yamaha530_init(void)
 {
-	MSE_FUN();
 	struct mag_hw *hw = get_cust_mag_hw();
+	MSE_FUN();
 	MSE_LOG("%s: i2c_number=%d\n", __func__,hw->i2c_num); 
 	i2c_register_board_info(hw->i2c_num, &i2c_YAMAHA530, 1);
 	if(platform_driver_register(&yamaha_sensor_driver))

@@ -26,6 +26,8 @@ ccflags-y += -I$(src)/../driver/mhl_tx_drv
 ccflags-y += -I$(src)/../driver/sii8338_drv
 ccflags-y += -I$(src)/linux_kernel/kernel_module
 
+ccflags-y += -I$(MTK_PATH_PLATFORM)/drivers/hdmitx/
+
 ccflags-y += -DMAKE_8338_DRIVER
 
 ccflags-y += -DRGB_BOARD #
@@ -61,8 +63,11 @@ $(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/si_drv_mhl_tx_edid.o
 #$(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/si_drv_mhl_rgb.o
 #$(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/si_drv_ext.o
 $(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/si_drv_mhl_tx.o
+$(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/smartbook.o
 $(DRIVER_NAME)-objs  += hdmi_drv.o
-
+#----------------- MDT          --------------------------------
+$(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/si_drv_mdt_tx.o
+$(DRIVER_NAME)-objs  += ../driver/mhl_tx_drv/si_mdt_inputdev.o
 ifeq ($(AMF_SRC),yes)	
 #----------------- AMF RGB  board Control layer ---------------------------------
 $(DRIVER_NAME)-objs  += platform/amf/AMF_LIB_Src/amf_timers.o

@@ -70,8 +70,10 @@
 #include <mach/pmic_mt6320_sw.h>
 #include <mach/upmu_common.h>
 #include <mach/upmu_hw.h>
+#include <mach/mt_boot.h>
 
 #include "bq24196.h"
+#define SWCHR_POWER_PATH
 
 #if defined(CONFIG_POWER_VERIFY)
 
@@ -310,7 +312,7 @@ kal_int32 gFG_BATT_CAPACITY_aging = 3600;
 int volt_mode_update_timer=0;
 int volt_mode_update_time_out=6; //1mins
 
-#define AGING_TUNING_VALUE 103
+#define AGING_TUNING_VALUE 100
 
 kal_int32 chip_diff_trim_value_4_0=0;
 kal_int32 chip_diff_trim_value=0; // unit = 0.1
@@ -1145,6 +1147,55 @@ void fgauge_read_avg_I_V(void)
     }
 }
 
+kal_int32 fgauge_find_voltage_by_capacity(BATTERY_PROFILE_STRUC_P profile, kal_int32 bat_capacity)
+{
+    int i = 0, saddles = 0;
+    BATTERY_PROFILE_STRUC_P profile_p = profile;
+    kal_int32 ret_volt = 0;
+
+    if (profile_p == NULL)
+    {
+        xlog_printk(ANDROID_LOG_WARN, "Power/Battery", "[fgauge_read_v_by_capacity] fgauge get ZCV profile : fail !\r\n");
+        return 3700;
+    }
+
+    saddles = fgauge_get_saddles();
+
+    if (bat_capacity < (profile_p+0)->percentage)
+    {        
+        return 3700;         
+    }    
+    if (bat_capacity > (profile_p+saddles-1)->percentage)
+    {        
+        return 3700;
+    }
+
+    for (i = 0; i < saddles - 1; i++)
+    {
+        if ((bat_capacity >= (profile_p+i)->percentage) && (bat_capacity <= (profile_p+i+1)->percentage))
+        {
+            ret_volt = (profile_p+i)->voltage -
+                (
+                    (
+                        ( bat_capacity - ((profile_p+i)->percentage) ) * 
+                        ( ((profile_p+i)->voltage) - ((profile_p+i+1)->voltage) ) 
+                    ) /
+                    ( ((profile_p+i+1)->percentage) - ((profile_p+i)->percentage) )
+                );         
+
+            xlog_printk(ANDROID_LOG_DEBUG, "Power/Battery", "[fgauge_read_v_by_capacity] ret_volt=%d\r\n", ret_volt);
+            xlog_printk(ANDROID_LOG_DEBUG, "Power/Battery", "[fgauge_read_v_by_capacity] (profile_p+i)->percentag=%d\r\n", (profile_p+i)->percentage);
+            xlog_printk(ANDROID_LOG_DEBUG, "Power/Battery", "[fgauge_read_v_by_capacity] ((profile_p+i+1)->percentage)=%d\r\n", ((profile_p+i+1)->percentage));
+            xlog_printk(ANDROID_LOG_DEBUG, "Power/Battery", "[fgauge_read_v_by_capacity] ((profile_p+i)->voltage)=%d\r\n", ((profile_p+i)->voltage));
+            xlog_printk(ANDROID_LOG_DEBUG, "Power/Battery", "[fgauge_read_v_by_capacity] ((profile_p+i+1)->voltage) =%d\r\n", ((profile_p+i+1)->voltage));
+            
+            break;
+        }        
+    }    
+
+    return ret_volt;
+}
+
 /*******************************************************************************
 * FUNCTION
 *  fgauge_construct_battery_profile
@@ -1165,7 +1216,7 @@ void fgauge_construct_battery_profile(kal_int32 temperature, BATTERY_PROFILE_STR
     BATTERY_PROFILE_STRUC_P low_profile_p, high_profile_p;
     kal_int32 low_temperature, high_temperature;
     int i, saddles;
-    kal_int32 temp_v_1 = 0, temp_v_2 = 0;
+    kal_int32 temp_v, temp_v_1 = 0, temp_v_2 = 0;
 
     if (temperature <= TEMPERATURE_T1)
     {
@@ -1208,10 +1259,13 @@ void fgauge_construct_battery_profile(kal_int32 temperature, BATTERY_PROFILE_STR
 
     for (i = 0; i < saddles; i++)
     {
-        if( ((high_profile_p + i)->voltage) > ((low_profile_p + i)->voltage) )
+        temp_v = fgauge_find_voltage_by_capacity(low_profile_p, (high_profile_p + i)->percentage);
+        //if( ((high_profile_p + i)->voltage) > ((low_profile_p + i)->voltage) )
+        if( ((high_profile_p + i)->voltage) > temp_v )
         {
             temp_v_1 = (high_profile_p + i)->voltage;
-            temp_v_2 = (low_profile_p + i)->voltage;    
+            //temp_v_2 = (low_profile_p + i)->voltage;
+            temp_v_2 = temp_v;
 
             (temp_profile_p + i)->voltage = temp_v_2 +
             (
@@ -1224,7 +1278,8 @@ void fgauge_construct_battery_profile(kal_int32 temperature, BATTERY_PROFILE_STR
         }
         else
         {
-            temp_v_1 = (low_profile_p + i)->voltage;
+            //temp_v_1 = (low_profile_p + i)->voltage;
+            temp_v_1 = temp_v;
             temp_v_2 = (high_profile_p + i)->voltage;
 
             (temp_profile_p + i)->voltage = temp_v_2 +
@@ -2282,6 +2337,9 @@ extern int get_rtc_spare_fg_value(void);
 void fgauge_Normal_Mode_Work(void)
 {
     int i=0;
+#ifdef MTK_BATTERY_ENABLE_HWOCV
+    kal_int32 vol_adc=0;
+#endif
    
 //1. Get Raw Data  
     gFG_current = fgauge_read_current();
@@ -2373,9 +2431,14 @@ void fgauge_Normal_Mode_Work(void)
 
         if(g_ocv_lookup_done == 0)
         {      
-#if 0        
+#ifdef MTK_BATTERY_ENABLE_HWOCV
             //use get_hw_ocv-----------------------------------------------------------------
-            gFG_voltage = get_hw_ocv();        
+            if(g_boot_charging == 0)
+            {
+                vol_adc = gFG_voltage;
+                gFG_voltage = get_hw_ocv(); //use HW OCV
+                xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[fgauge_read_avg_I_V] HW OCV[%d], SW OCV[%d]\r\n", gFG_voltage, vol_adc);
+            }              
             gFG_capacity_by_v = fgauge_read_capacity_by_v();
             xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[FGADC] get_hw_ocv=%d, SOC=%d\n", 
             gFG_voltage, gFG_capacity_by_v);
@@ -2384,9 +2447,12 @@ void fgauge_Normal_Mode_Work(void)
             g_rtc_fg_soc = get_rtc_spare_fg_value();
 			if(g_rtc_fg_soc >= gFG_capacity_by_v)
 			{
-				if( ( g_rtc_fg_soc != 0 					) &&					
+				if( (( g_rtc_fg_soc != 0 					) &&					
 					( (g_rtc_fg_soc-gFG_capacity_by_v) < 20 ) &&
-					( gFG_capacity_by_v > 5 )							  
+					( gFG_capacity_by_v > 5 ))
+                    ||
+                    ( (g_rtc_fg_soc != 0) && 
+                     (g_boot_reason == BR_WDT_BY_PASS_PWK || g_boot_reason == BR_WDT || g_boot_mode == RECOVERY_BOOT))
 					)
 				{
 					gFG_capacity_by_v = g_rtc_fg_soc;			 
@@ -2397,9 +2463,12 @@ void fgauge_Normal_Mode_Work(void)
 			}
 			else
 			{
-				if( ( g_rtc_fg_soc != 0 					) &&					
+				if( (( g_rtc_fg_soc != 0 					) &&					
 					( (gFG_capacity_by_v-g_rtc_fg_soc) < 20 ) &&
-					( gFG_capacity_by_v > 5 )							  
+					( gFG_capacity_by_v > 5 ))
+                    ||
+                    ( (g_rtc_fg_soc != 0) && 
+                     (g_boot_reason == BR_WDT_BY_PASS_PWK || g_boot_reason == BR_WDT || g_boot_mode == RECOVERY_BOOT))
 					)
 				{
 					gFG_capacity_by_v = g_rtc_fg_soc;			 

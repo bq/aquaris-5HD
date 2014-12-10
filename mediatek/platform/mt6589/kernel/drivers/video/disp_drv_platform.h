@@ -61,5 +61,6 @@
 #define MTKFB_NO_M4U
 #define MT65XX_NEW_DISP
 //#define MTK_LCD_HW_3D_SUPPORT
-
+#define MTK_FB_SYNC_SUPPORT
+//#define MTK_OVL_DECOUPLE_SUPPORT
 #endif //__DISP_DRV_PLATFORM_H__

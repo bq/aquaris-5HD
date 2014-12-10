@@ -108,6 +108,7 @@ void led_trigger_set(struct led_classdev *led_cdev, struct led_trigger *trigger)
 
 	name = trigger ? trigger->name : "none";
 	event = kasprintf(GFP_KERNEL, "TRIGGER=%s", name);
+
 	/* Remove any existing trigger */
 	if (led_cdev->trigger) {
 		write_lock_irqsave(&led_cdev->trigger->leddev_list_lock, flags);

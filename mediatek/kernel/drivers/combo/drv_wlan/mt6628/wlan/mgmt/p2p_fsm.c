@@ -863,6 +863,16 @@ static PUINT_8 apucDebugP2pState[P2P_STATE_NUM] = {
     (PUINT_8)DISP_STRING("P2P_STATE_GC_JOIN")
 };
 /*lint -restore */
+#else
+static UINT_8 apucDebugP2pState[P2P_STATE_NUM] = {
+    P2P_STATE_IDLE,
+    P2P_STATE_SCAN,
+    P2P_STATE_AP_CHANNEL_DETECT,
+    P2P_STATE_REQING_CHANNEL,
+    P2P_STATE_CHNL_ON_HAND,
+    P2P_STATE_GC_JOIN
+};
+
 #endif /* DBG */
 
 
@@ -1070,9 +1080,15 @@ p2pFsmStateTransition (
         fgIsTransOut = fgIsTransOut?FALSE:TRUE;
 
         if (!fgIsTransOut) {
+            #if DBG
             DBGLOG(P2P, STATE, ("TRANSITION: [%s] -> [%s]\n",
                                 apucDebugP2pState[prP2pFsmInfo->eCurrentState],
                                 apucDebugP2pState[eNextState]));
+            #else
+            DBGLOG(P2P, STATE, ("[%d] TRANSITION: [%d] -> [%d]\n", 
+                                DBG_P2P_IDX, apucDebugP2pState[prP2pFsmInfo->eCurrentState], 
+                                apucDebugP2pState[eNextState]));
+            #endif
 
             /* Transition into current state. */
             prP2pFsmInfo->ePreviousState = prP2pFsmInfo->eCurrentState;
@@ -2405,6 +2421,7 @@ p2pFsmRunEventDeauthTxDone (
         eOriMediaStatus = prP2pBssInfo->eConnectionState;
 
 
+		bssRemoveStaRecFromClientList(prAdapter, prP2pBssInfo, prStaRec);
 
         /**/
         cnmStaRecFree(prAdapter, prStaRec, TRUE);
@@ -3229,8 +3246,11 @@ p2pRunEventAAAComplete (
         prP2pBssInfo = &(prAdapter->rWifiVar.arBssInfo[NETWORK_TYPE_P2P_INDEX]);
 
         eOriMediaState = prP2pBssInfo->eConnectionState;
-
-        bssRemoveStaRecFromClientList(prAdapter, prP2pBssInfo, prStaRec);
+		if(prStaRec != NULL){
+        	bssRemoveStaRecFromClientList(prAdapter, prP2pBssInfo, prStaRec);
+		} else {
+			break;
+		}
 
         if (prP2pBssInfo->rStaRecOfClientList.u4NumElem > P2P_MAXIMUM_CLIENT_COUNT ||
             kalP2PMaxClients(prAdapter->prGlueInfo, prP2pBssInfo->rStaRecOfClientList.u4NumElem)) {

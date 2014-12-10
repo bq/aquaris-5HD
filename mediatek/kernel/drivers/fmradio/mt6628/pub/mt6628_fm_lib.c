@@ -46,12 +46,6 @@ static struct fm_hw_info mt6628_hw_info = {
     .reserve = 0x00000000,
 };
 
-static struct fm_i2s_info mt6628_i2s_inf = {
-    .status = 0,    //i2s off
-    .mode = 0,      //slave mode
-    .rate = 48000,  //48000 sample rate
-};
-
 #define PATCH_SEG_LEN 512
 
 static fm_u8 *cmd_buf = NULL;
@@ -521,10 +515,12 @@ static fm_s32 mt6628_PowerUp(fm_u16 *chip_id, fm_u16 *device_id)
         return ret;
     }
 
-#ifdef FM_DIGITAL_INPUT
-    mt6628_I2s_Setting(MT6628_I2S_ON, MT6628_I2S_SLAVE, MT6628_I2S_44K);
-    mt_combo_audio_ctrl(COMBO_AUDIO_STATE_2);
-#endif
+    if ((mt6628_fm_config.aud_cfg.aud_path == FM_AUD_MRGIF)||(mt6628_fm_config.aud_cfg.aud_path == FM_AUD_I2S))
+    {
+        mt6628_I2s_Setting(FM_I2S_ON, mt6628_fm_config.aud_cfg.i2s_info.mode, mt6628_fm_config.aud_cfg.i2s_info.rate);
+        //mt_combo_audio_ctrl(COMBO_AUDIO_STATE_2);
+        mtk_wcn_cmb_stub_audio_ctrl((CMB_STUB_AIF_X)CMB_STUB_AIF_2);
+    }
 
     //Wholechip FM Power Up: step 2, read HW version
     mt6628_read(0x62, &tmp_reg);
@@ -622,10 +618,10 @@ static fm_s32 mt6628_PowerDown(void)
         mt6628_write(FM_MAIN_INTR, dataRead);//clear status flag
     }
 
-    mt6628_RampDown();
+    //mt6628_RampDown(); //remove because of wholechip reset fail issue
 
 #ifdef FM_DIGITAL_INPUT
-    mt6628_I2s_Setting(MT6628_I2S_OFF, MT6628_I2S_SLAVE, MT6628_I2S_44K);
+    mt6628_I2s_Setting(FM_I2S_OFF, FM_I2S_SLAVE, FM_I2S_44K);
 #endif
 
     if (FM_LOCK(cmd_buf_lock)) return (-FM_ELOCK);
@@ -640,8 +636,8 @@ static fm_s32 mt6628_PowerDown(void)
 
     //FIX_ME, disable ext interrupt
     mt6628_write(FM_MAIN_EXTINTRMASK, 0x00);
-
-//    rssi_th_set = fm_false;
+    //ALPS0080963MCU won't sleep if MCU desense was enabled
+    mtk_wcn_wmt_dsns_ctrl(WMTDSNS_FM_DISABLE);
     return ret;
 }
 
@@ -1281,39 +1277,39 @@ static fm_s32 mt6628_I2s_Setting(fm_s32 onoff, fm_s32 mode, fm_s32 sample)
     fm_u16 tmp_sample = 0;
     fm_s32 ret = 0;
 
-    if (onoff == MT6628_I2S_ON) {
+    if (onoff == FM_I2S_ON) {
         tmp_state = 0x0080; //I2S Frequency tracking on, 0x61 D7=1
-        mt6628_i2s_inf.status = 1;
-    } else if (onoff == MT6628_I2S_OFF) {
+        mt6628_fm_config.aud_cfg.i2s_info.status = FM_I2S_ON;
+    } else if (onoff == FM_I2S_OFF) {
         tmp_state = 0x0000; //I2S Frequency tracking off, 0x61 D7=0
-        mt6628_i2s_inf.status = 0;
+         mt6628_fm_config.aud_cfg.i2s_info.status = FM_I2S_OFF;
     } else {
         WCN_DBG(FM_ERR | CHIP, "%s():[onoff=%d]\n", __func__, onoff);
         ret = -FM_EPARA;
         goto out;
     }
 
-    if (mode == MT6628_I2S_MASTER) {
+    if (mode == FM_I2S_MASTER) {
         tmp_mode = 0x0000; //6620 as I2S master, set 0x9B D3=0
-        mt6628_i2s_inf.mode = 1;
-    } else if (mode == MT6628_I2S_SLAVE) {
+         mt6628_fm_config.aud_cfg.i2s_info.mode = FM_I2S_MASTER;
+    } else if (mode == FM_I2S_SLAVE) {
         tmp_mode = 0x0008; //6620 as I2S slave, set 0x9B D3=1
-        mt6628_i2s_inf.mode = 0;
+         mt6628_fm_config.aud_cfg.i2s_info.mode = FM_I2S_SLAVE;
     } else {
         WCN_DBG(FM_ERR | CHIP, "%s():[mode=%d]\n", __func__, mode);
         ret = -FM_EPARA;
         goto out;
     }
 
-    if (sample == MT6628_I2S_32K) {
+    if (sample == FM_I2S_32K) {
         tmp_sample = 0x0000; //6620 I2S 32KHz sample rate, 0x5F D11~12
-        mt6628_i2s_inf.rate = 32000;
-    } else if (sample == MT6628_I2S_44K) {
+        mt6628_fm_config.aud_cfg.i2s_info.rate = FM_I2S_32K;
+    } else if (sample == FM_I2S_44K) {
         tmp_sample = 0x0800; //6620 I2S 44.1KHz sample rate
-        mt6628_i2s_inf.rate = 44100;
-    } else if (sample == MT6628_I2S_48K) {
+        mt6628_fm_config.aud_cfg.i2s_info.rate = FM_I2S_44K;
+    } else if (sample == FM_I2S_48K) {
         tmp_sample = 0x1000; //6620 I2S 48KHz sample rate
-        mt6628_i2s_inf.rate = 48000;
+        mt6628_fm_config.aud_cfg.i2s_info.rate = FM_I2S_48K;
     } else {
         WCN_DBG(FM_ERR | CHIP, "%s():[sample=%d]\n", __func__, sample);
         ret = -FM_EPARA;
@@ -1330,14 +1326,18 @@ static fm_s32 mt6628_I2s_Setting(fm_s32 onoff, fm_s32 mode, fm_s32 sample)
         goto out;
 
     WCN_DBG(FM_NTC | CHIP, "[onoff=%s][mode=%s][sample=%d](0)33KHz,(1)44.1KHz,(2)48KHz\n",
-            (onoff == MT6628_I2S_ON) ? "On" : "Off",
-            (mode == MT6628_I2S_MASTER) ? "Master" : "Slave",
+            (onoff == FM_I2S_ON) ? "On" : "Off",
+            (mode == FM_I2S_MASTER) ? "Master" : "Slave",
             sample);
 out:
     return ret;
 }
 
-
+static fm_s32 mt6628fm_get_audio_info(fm_audio_info_t *data)
+{
+    memcpy(data,&mt6628_fm_config.aud_cfg,sizeof(fm_audio_info_t));
+    return 0;
+}
 
 static fm_s32 mt6628_i2s_info_get(fm_s32 *ponoff, fm_s32 *pmode, fm_s32 *psample)
 {
@@ -1345,9 +1345,9 @@ static fm_s32 mt6628_i2s_info_get(fm_s32 *ponoff, fm_s32 *pmode, fm_s32 *psample
     FMR_ASSERT(pmode);
     FMR_ASSERT(psample);
 
-    *ponoff = mt6628_i2s_inf.status;
-    *pmode = mt6628_i2s_inf.mode;
-    *psample = mt6628_i2s_inf.rate;
+    *ponoff = mt6628_fm_config.aud_cfg.i2s_info.status;
+    *pmode = mt6628_fm_config.aud_cfg.i2s_info.mode;
+    *psample = mt6628_fm_config.aud_cfg.i2s_info.rate;
 
     return 0;
 }
@@ -1362,6 +1362,20 @@ static fm_s32 mt6628_hw_info_get(struct fm_hw_info *req)
     req->patch_ver = mt6628_hw_info.patch_ver;
     req->rom_ver = mt6628_hw_info.rom_ver;
 
+    return 0;
+}
+static fm_s32 mt6628_pre_search(void)
+{
+    mt6628_RampDown();
+    //mt6628_Mute(fm_true); //remove because app will do mute/unmute when start/stop scan
+
+    FM_LOG_NTC(FM_NTC | CHIP, "search threshold: RSSI=%d,de-RSSI=%d,smg=%d %d\n", mt6628_fm_config.rx_cfg.long_ana_rssi_th,mt6628_fm_config.rx_cfg.desene_rssi_th,mt6628_fm_config.rx_cfg.smg_th);
+    return 0;
+}
+static fm_s32 mt6628_restore_search(void)
+{
+    mt6628_RampDown();
+    //mt6628_Mute(fm_false);
     return 0;
 }
 
@@ -1414,7 +1428,7 @@ static fm_s32 mt6628_soft_mute_tune(fm_u16 freq,fm_s32 *rssi,fm_bool *valid)
 		 && (ATDC <= mt6628_fm_config.rx_cfg.atdc_th)
 		 && (MR >= mt6628_fm_config.rx_cfg.mr_th)
 		 && (PRX >= mt6628_fm_config.rx_cfg.prx_th)
-		 && (ATDEV >= mt6628_fm_config.rx_cfg.atdev_th)
+		 && (ATDEV >= ATDC)
 		 && (softmuteGainLvl >= mt6628_fm_config.rx_cfg.smg_th))
 		{	 
 			*valid = fm_true;
@@ -1456,6 +1470,39 @@ static fm_bool mt6628_em_test(fm_u16 group_idx, fm_u16 item_idx, fm_u32 item_val
 
 static fm_s32 MT6628fm_low_power_wa_default(fm_s32 fmon)
 {
+    return 0;
+}
+
+/*
+parm: 
+	parm.th_type: 0, RSSI. 1,desense RSSI. 2,SMG.
+    parm.th_val: threshold value
+*/
+static fm_s32 mt6628_set_search_th(fm_s32 idx,fm_s32 val,fm_s32 reserve)
+{
+    switch (idx)
+    {
+        case 0:
+        {
+            mt6628_fm_config.rx_cfg.long_ana_rssi_th = val;
+            WCN_DBG(FM_NTC | CHIP, "set rssi th =%d\n",val);
+            break;
+        }
+        case 1:
+        {
+            mt6628_fm_config.rx_cfg.desene_rssi_th = val;
+            WCN_DBG(FM_NTC | CHIP, "set desense rssi th =%d\n",val);
+            break;
+        }
+        case 2:
+        {
+            mt6628_fm_config.rx_cfg.smg_th = val;
+            WCN_DBG(FM_NTC | CHIP, "set smg th =%d\n",val);
+            break;
+        }
+        default:
+            break;
+    }
     return 0;
 }
 
@@ -1510,6 +1557,10 @@ fm_s32 MT6628fm_low_ops_register(struct fm_lowlevel_ops *ops)
 	ops->bi.softmute_tune = mt6628_soft_mute_tune;
 	ops->bi.desense_check = mt6628_desense_check;
 	ops->bi.cqi_log = mt6628_full_cqi_get;
+    ops->bi.set_search_th = mt6628_set_search_th;
+    ops->bi.pre_search = mt6628_pre_search;
+    ops->bi.restore_search = mt6628_restore_search;
+    ops->bi.get_aud_info = mt6628fm_get_audio_info;
 
     cmd_buf_lock = fm_lock_create("28_cmd");
     ret = fm_lock_get(cmd_buf_lock);

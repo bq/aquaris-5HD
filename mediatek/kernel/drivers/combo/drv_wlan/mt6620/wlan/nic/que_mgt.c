@@ -2598,6 +2598,7 @@ qmHandleRxPackets(
     P_HIF_RX_HEADER_T   prHifRxHdr;
     QUE_T               rReturnedQue;
     PUINT_8             pucEthDestAddr;
+    BOOLEAN             fgIsBMC;
 
     //DbgPrint("QM: Enter qmHandleRxPackets()\n");
 
@@ -2633,6 +2634,7 @@ qmHandleRxPackets(
         }
 #endif
 
+        fgIsBMC = FALSE;
         if (!HIF_RX_HDR_GET_80211_FLAG(prHifRxHdr)){
 
             UINT_8 ucNetTypeIdx;
@@ -2644,6 +2646,10 @@ qmHandleRxPackets(
             prBssInfo = &(prAdapter->rWifiVar.arBssInfo[ucNetTypeIdx]);
             //DBGLOG_MEM8(QM, TRACE,prCurrSwRfb->pvHeader, 16);
             //
+
+            if (IS_BMCAST_MAC_ADDR(pucEthDestAddr) && (OP_MODE_ACCESS_POINT != prBssInfo->eCurrentOPMode)) {
+                fgIsBMC = TRUE;
+            }
 
             if( prAdapter->rRxCtrl.rFreeSwRfbList.u4NumElem
                     > (CFG_RX_MAX_PKT_NUM - CFG_NUM_OF_QM_RX_PKT_NUM)  ) {
@@ -2684,7 +2690,7 @@ qmHandleRxPackets(
             qmProcessBarFrame(prAdapter, prCurrSwRfb, &rReturnedQue);
         }
         /* Reordering is not required for this packet, return it without buffering */
-        else if(!HIF_RX_HDR_GET_REORDER_FLAG(prHifRxHdr)){
+        else if(!HIF_RX_HDR_GET_REORDER_FLAG(prHifRxHdr) || fgIsBMC){
 #if 0
             if (!HIF_RX_HDR_GET_80211_FLAG(prHifRxHdr)){
                 UINT_8 ucNetTypeIdx;

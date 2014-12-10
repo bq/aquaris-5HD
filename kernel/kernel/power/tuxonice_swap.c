@@ -345,8 +345,8 @@ static int toi_swap_print_debug_stats(char *buffer, int size)
 	si_swapinfo_no_compcache();
 
 	len += scnprintf(buffer+len, size-len,
-			"  Swap available for image: %lu pages.\n",
-			swapinfo.freeswap + swap_allocated);
+			"  Swap available for image: %lu+%lu pages.\n",
+                     swapinfo.freeswap, swap_allocated);
 
 	return len;
 }

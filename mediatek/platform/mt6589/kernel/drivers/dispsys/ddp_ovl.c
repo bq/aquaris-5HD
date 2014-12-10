@@ -26,6 +26,7 @@
 #include <asm/io.h>
 #include <mach/mt_typedefs.h>
 
+#include "ddp_debug.h"
 #include "ddp_reg.h"
 #include "ddp_ovl.h"
 #include "ddp_matrix_para.h"
@@ -202,7 +203,23 @@ int OVLLayerConfig(unsigned int layer,
     unsigned mode = 0xdeaddead;                     // yuv to rgb conversion required
     unsigned int rgb_swap = 0;
 
-    ASSERT((dst_w <= OVL_MAX_WIDTH) && (dst_h <= OVL_MAX_HEIGHT));
+    if((source == OVL_LAYER_SOURCE_MEM && addr == 0))
+    {
+        printk("[DDP] error: source from memory, but addr is 0! layer=%d \n", layer);
+        ddp_aee_mmp_dump("layer=%d \n", layer);
+        //ASSERT(0);        
+        return 0;
+    }
+
+    if((dst_w > OVL_MAX_WIDTH) || (dst_h > OVL_MAX_HEIGHT))
+    {
+        printk("[DDP] error: dst_w=%d, dst_h=%d, max_w=%d, max_h=%d \n", 
+            dst_w, dst_h, OVL_MAX_WIDTH, OVL_MAX_HEIGHT);
+        ddp_aee_mmp_dump("layer=%d \n", layer);
+        //ASSERT(0);  
+        return 0;
+    }
+
 
     if(fmt==OVL_INPUT_FORMAT_ABGR8888  ||
        fmt==OVL_INPUT_FORMAT_PABGR8888 ||
@@ -242,12 +259,6 @@ int OVLLayerConfig(unsigned int layer,
     if((source == OVL_LAYER_SOURCE_SCL || source == OVL_LAYER_SOURCE_PQ) &&
        (fmt != OVL_INPUT_FORMAT_YUV444)) {
         printk("error: direct link to OVL only support YUV444! \n" );
-        ASSERT(0);                           // direct link support YUV444 only
-    }
-
-    if((source == OVL_LAYER_SOURCE_MEM && addr == 0))
-    {
-        printk("error: source from memory, but addr is 0! \n");
         ASSERT(0);                           // direct link support YUV444 only
     }
 

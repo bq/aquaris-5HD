@@ -113,6 +113,7 @@
 #include "musbfsh_dma.h"
 #include "musbfsh_hsdma.h"
 #include "musbfsh_mt65xx.h"
+#include "usb.h" 
 
 extern irqreturn_t musbfsh_dma_controller_irq(int irq, void *private_data);
 
@@ -133,7 +134,412 @@ MODULE_ALIAS("platform:" MUSBFSH_DRIVER_NAME);
 
 struct wake_lock musbfsh_suspend_lock;
 DEFINE_SPINLOCK(musbfs_io_lock);
+
+
+//#define ORG_SUSPEND_RESUME_TEST
+#ifdef ORG_SUSPEND_RESUME_TEST		
+#define USB_BASE                   0xF1200000
+void mt65xx_usb20_suspend_resume_test(void)
+{
+	u8	power;
+	u32 frame_number;	
+
+	MYDBG("begin\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER);
+	//		power &= ~MUSBFSH_POWER_RESUME;
+	power |= MUSBFSH_POWER_ENSUSPEND;
+	power |= MUSBFSH_POWER_SUSPENDM;
+	musbfsh_writeb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER, power);
+
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(12);
+	MYDBG("suspend done\n");
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(1000);
+	MYDBG("start resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_SUSPENDM;
+	power |= MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER, power);
+	MYDBG("");
+
+	mdelay(12);
+	MYDBG("stop resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER, power);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(3);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	MYDBG("end\n");
+
+}
+
+void mt65xx_usb11_suspend_resume_test(void)
+{
+	u8	power;
+	u32 frame_number;	
+
+	MYDBG("begin\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER);
+	//		power &= ~MUSBFSH_POWER_RESUME;
+	power |= MUSBFSH_POWER_ENSUSPEND;
+	power |= MUSBFSH_POWER_SUSPENDM;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER, power);
+
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(12);
+	MYDBG("suspend done\n");
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(1000);
+	MYDBG("start resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_SUSPENDM;
+	power |= MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER, power);
+	MYDBG("");
+
+	mdelay(12);
+	MYDBG("stop resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER, power);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(3);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	MYDBG("end\n");
+
+}
+
+#endif
+
+#ifdef MTK_ICUSB_SUPPORT 
+
+struct my_attr skip_session_req_attr = {
+	.attr.name = "skip_session_req",
+	.attr.mode = 0644,
+#ifdef MTK_ICUSB_SKIP_SESSION_REQ
+	.value = 1
+#else
+	.value = 0
+#endif
+};
+
+struct my_attr skip_enable_session_attr = {
+	.attr.name = "skip_enable_session",
+	.attr.mode = 0644,
+#ifdef MTK_ICUSB_SKIP_ENABLE_SESSION
+	.value = 1
+#else
+	.value = 0
+#endif
+};
+
+struct my_attr skip_mac_init_attr = {
+	.attr.name = "skip_mac_init",
+	.attr.mode = 0644,
+#ifdef MTK_ICUSB_SKIP_MAC_INIT
+	.value = 1
+#else
+	.value = 0
+#endif
+};
+
+struct my_attr hw_dbg_attr = {
+	.attr.name = "hw_dbg",
+	.attr.mode = 0644,
+#ifdef MTK_ICUSB_HW_DBG
+	.value = 1
+#else
+	.value = 0
+#endif
+};
+
+
+
+static int usb11_enabled = 0;
+struct musbfsh  *g_musbfsh;
+
+unsigned char g_usb_clk_reg_before, g_usb_clk_reg_after;
+unsigned char g_FS_EOF1_before, g_FS_EOF1_after;
+
+void mt65xx_usb11_disable_clk_pll_pw(void);
+void mt65xx_usb11_enable_clk_pll_pw(void);
+void mt65xx_usb11_phy_poweron(void);
+void set_usb_phy_voltage(enum PHY_VOLTAGE_TYPE phy_volt);
+void create_ic_usb_cmd_proc_entry(void);
+void mt65xx_usb11_mac_phy_babble_clear(struct musbfsh *musbfsh);
+void mt65xx_usb11_mac_phy_babble_recover(struct musbfsh *musbfsh);
+void mt65xx_usb11_mac_phy_dump(void);
+int mt65xx_check_usb11_clk_status(void);
+void mt65xx_usb11_mac_reset_and_phy_stress_set(void);			
+void set_usb11_sts_disconnecting(void);						
+void create_icusb_sysfs_attr(void);
+int check_usb11_sts_disconnect_done(void);
+void set_usb11_sts_connect(void);
+
+#define USB_BASE                   0xF1200000
+void mt65xx_usb20_suspend_resume_test(void)
+{
+	u8	power;
+	u32 frame_number;	
+
+	MYDBG("begin\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER);
+	//		power &= ~MUSBFSH_POWER_RESUME;
+	power |= MUSBFSH_POWER_ENSUSPEND;
+	power |= MUSBFSH_POWER_SUSPENDM;
+	musbfsh_writeb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER, power);
+
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(12);
+	MYDBG("suspend done\n");
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(1000);
+	MYDBG("start resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_SUSPENDM;
+	power |= MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER, power);
+	MYDBG("");
+
+	mdelay(12);
+	MYDBG("stop resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB_BASE, MUSBFSH_POWER, power);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(3);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	MYDBG("end\n");
+
+}
+
+void mt65xx_usb11_suspend_resume_test(void)
+{
+	u8	power;
+	u32 frame_number;	
+
+	MYDBG("begin\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER);
+	//		power &= ~MUSBFSH_POWER_RESUME;
+	power |= MUSBFSH_POWER_ENSUSPEND;
+	power |= MUSBFSH_POWER_SUSPENDM;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER, power);
+
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(12);
+	MYDBG("suspend done\n");
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(1000);
+	MYDBG("start resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_SUSPENDM;
+	power |= MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER, power);
+	MYDBG("");
+
+	mdelay(12);
+	MYDBG("stop resuming\n");
+
+	power = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER);
+	power &= ~MUSBFSH_POWER_RESUME;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_POWER, power);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	mdelay(3);
+	
+	frame_number = musbfsh_readw((unsigned char __iomem*)USB11_BASE,MUSBFSH_FRAME); 
+	MYDBG("frame_number : %d\n", frame_number);
+
+	MYDBG("end\n");
+
+}
+
+void musbfsh_root_disc_procedure(void)
+{
+	MYDBG("");
+	usb_hcd_resume_root_hub(musbfsh_to_hcd(g_musbfsh));
+	musbfsh_root_disconnect(g_musbfsh);
+}
+
+void ic_usb_clk_chg(void)
+{
+	// b01 for 69 MHZ, b10 for 41.6MHZ
+	g_usb_clk_reg_before = __raw_readb(0xF000014C);
+	g_usb_clk_reg_after = g_usb_clk_reg_before & (~0x1);  
+	g_usb_clk_reg_after = g_usb_clk_reg_after | 0x2;  
+	__raw_writeb(g_usb_clk_reg_after, 0xF000014C);
+}
+void musbfsh_start_session_pure(void )
+{
+	u8 devctl;
+
+	MYDBG("");
+
+	devctl = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_DEVCTL);
+	devctl |= MUSBFSH_DEVCTL_SESSION;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_DEVCTL, devctl);
+
+	MYDBG("[IC-USB]start session PURE\n");
+}
+void musbfsh_init_phy_by_voltage(enum PHY_VOLTAGE_TYPE phy_volt)
+{
+	MYDBG("");
+	if(!usb11_enabled)
+	{
+		usb11_enabled = 1;
+		mt65xx_usb11_enable_clk_pll_pw();		
+	}
+
+	set_usb_phy_voltage(phy_volt);
+	mt65xx_usb11_phy_poweron();
+
+}
+void musbfsh_start_session(void )
+{
+	u8 devctl; 
+
+	MYDBG("");
+
+	devctl = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_DEVCTL);
+	devctl |= MUSBFSH_DEVCTL_SESSION;
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_DEVCTL, devctl);
+
+#ifdef MTK_ICUSB_TAKE_WAKE_LOCK
+	MYDBG("[IC-USB]start session, wake_lock taken feature enalbed\n");
+#else
+	MYDBG("[IC-USB]start session, wake_lock taken feature disalbed\n");
+#endif
+}
+
+
+void musbfsh_stop_session(void )
+{
+	u8 devctl; 
+
+	MYDBG("");
+
+	devctl = musbfsh_readb((unsigned char __iomem*)USB11_BASE, MUSBFSH_DEVCTL);
+	devctl &= ~(MUSBFSH_DEVCTL_SESSION);
+	musbfsh_writeb((unsigned char __iomem*)USB11_BASE, MUSBFSH_DEVCTL, devctl);
+	
+	MYDBG("[IC_USB] stop session\n");
+}
+
+#if defined(MTK_ICUSB_BABBLE_RECOVER) || defined(MTK_SMARTBOOK_SUPPORT)
+static struct timer_list babble_recover_timer;
+static void babble_recover_func(unsigned long _musbfsh)
+{
+	int flags = 0;
+	u8 devctl = 0;
+	struct musbfsh *musbfsh = (struct musbfsh *) _musbfsh;
+
+	WARNING("execute babble_recover_func!\n");
+
+	/*
+	 * mdelay here for waiting hardware state machine,
+	 * jiffies controlled call-back might not be accurate.
+	 */
+	mdelay(20);
+
+	spin_lock_irqsave(&musbfsh->lock, flags);
+
+	mt65xx_usb11_mac_phy_babble_recover(musbfsh);
+
+	mdelay(1);
+	devctl |= MUSBFSH_DEVCTL_SESSION;
+	musbfsh_writeb(musbfsh->mregs, MUSBFSH_DEVCTL, devctl);
+
+	del_timer(&babble_recover_timer);
+
+	spin_unlock_irqrestore(&musbfsh->lock, flags);
+}
+#endif
+
+static int musbfsh_core_init1(struct musbfsh *musbfsh);
+static void musbfsh_generic_disable(struct musbfsh *musbfsh);
+void musbfsh_mac_init(void)
+{
+	struct timeval tv_begin, tv_end;
+	do_gettimeofday(&tv_begin);
+
+	MYDBG("");
+
+	musbfsh_generic_disable(g_musbfsh);
+
+	musbfsh_writeb(g_musbfsh->mregs,MUSBFSH_HSDMA_DMA_INTR_UNMASK_SET,0xff);
+
+	musbfsh_core_init1(g_musbfsh);
+
+	musbfsh_start(g_musbfsh);
+	
+	do_gettimeofday(&tv_end);
+	MYDBG("time spent, sec : %d, usec : %d\n", (int)(tv_end.tv_sec - tv_begin.tv_sec), (int)(tv_end.tv_usec - tv_begin.tv_usec));
+
+}
+
+int is_usb11_enabled(void)
+{
+	return usb11_enabled;
+}
+
+void set_usb11_enabled(void)
+{
+	usb11_enabled = 1;
+}
+#endif
+
+
 /*-------------------------------------------------------------------------*/
+#if 0 //IC_USB from SS5
 #ifdef IC_USB
 static ssize_t show_start(struct device *dev,struct device_attribute *attr, char *buf)
 {
@@ -165,6 +571,7 @@ static ssize_t store_start(struct device *dev,struct device_attribute *attr, con
 }
 
 static DEVICE_ATTR(start, 0666, show_start, store_start);
+#endif
 #endif
 
 /*-------------------------------------------------------------------------*/
@@ -304,6 +711,11 @@ void musbfsh_load_testpacket(struct musbfsh *musbfsh)
 static irqreturn_t musbfsh_stage0_irq(struct musbfsh *musbfsh, u8 int_usb,
 				u8 devctl, u8 power)
 {
+#if 0
+	u8 intusbe = musbfsh_readb(musbfsh->mregs, MUSBFSH_INTRUSBE);
+	MYDBG("devctl : %x, power : %x, int_usb : %x, intusbe : %x\n", devctl, power, int_usb, intusbe);
+#endif
+
 	irqreturn_t handled = IRQ_NONE;
 
 	/* in host mode, the peripheral may issue remote wakeup.
@@ -354,10 +766,26 @@ static irqreturn_t musbfsh_stage0_irq(struct musbfsh *musbfsh, u8 int_usb,
 		 *  - ... to A_WAIT_BCON.
 		 * a_wait_vrise_tmout triggers VBUS_ERROR transitions
 		 */
+
+#ifdef MTK_ICUSB_SUPPORT
+		if(skip_session_req_attr.value)
+		{
+			MYDBG("SESSION_REQUEST SKIPPED FOR IC USB\n");
+		}
+		else
+		{
+			devctl |= MUSBFSH_DEVCTL_SESSION;
+			musbfsh_writeb(mbase, MUSBFSH_DEVCTL, devctl);
+			musbfsh->ep0_stage = MUSBFSH_EP0_START;
+			musbfsh_set_vbus(musbfsh, 1);
+		}
+#else
 		devctl |= MUSBFSH_DEVCTL_SESSION;
 		musbfsh_writeb(mbase, MUSBFSH_DEVCTL, devctl);
 		musbfsh->ep0_stage = MUSBFSH_EP0_START;
 		musbfsh_set_vbus(musbfsh, 1);
+#endif
+
 
 		handled = IRQ_HANDLED;
 	}
@@ -419,8 +847,15 @@ static irqreturn_t musbfsh_stage0_irq(struct musbfsh *musbfsh, u8 int_usb,
 
 	if (int_usb & MUSBFSH_INTR_CONNECT) {
 		struct usb_hcd *hcd = musbfsh_to_hcd(musbfsh);
+
+#ifdef MTK_ICUSB_SUPPORT
+		set_usb11_sts_connect();
+#endif
+
+#ifndef MTK_ICUSB_SUPPORT
 #ifndef MTK_DT_SUPPORT
-		wake_lock(&musbfsh_suspend_lock);
+	wake_lock(&musbfsh_suspend_lock);			
+#endif
 #endif
 
 		handled = IRQ_HANDLED;
@@ -442,16 +877,53 @@ static irqreturn_t musbfsh_stage0_irq(struct musbfsh *musbfsh, u8 int_usb,
 		else
 			usb_hcd_resume_root_hub(hcd);
 
+
+#ifdef MTK_ICUSB_SUPPORT
+#define OPSTATE_MODE 0x04
+#define OSR_INTE 0x80
+#define OSR_START 0x01
+
+		if(hw_dbg_attr.value)
+		{
+			void __iomem *mbase = musbfsh->mregs;
+
+			/* start hw debugging */
+			u8 opr_csr = musbfsh_readb(mbase, 0x610);
+			opr_csr |= OPSTATE_MODE;
+			opr_csr |= OSR_INTE;
+			opr_csr |= OSR_START;
+			musbfsh_writeb(mbase, 0x610, opr_csr);
+		}
+		else
+		{
+			MYDBG("");
+		}
+#if 0
+		WARNING("CONNECT ! devctl 0x%02x, g_usb_clk_reg_before : %x, g_usb_clk_reg_after : %x, 0xF000014C : %x, g_FS_EOF1_before : %x, g_FS_EOF1_after :%x\n", 
+				devctl, g_usb_clk_reg_before, g_usb_clk_reg_after, __raw_readb(0xF000014C), g_FS_EOF1_before, g_FS_EOF1_after);
+#endif
+#endif
 		WARNING("CONNECT ! devctl 0x%02x\n", devctl);
+
 	}
 
 	if (int_usb & MUSBFSH_INTR_DISCONNECT) {
 		WARNING("DISCONNECT !devctl %02x\n", devctl);
+#ifdef MTK_ICUSB_SUPPORT
+		if(!check_usb11_sts_disconnect_done()){
+			set_usb11_sts_disconnecting();
+		}
+		mt65xx_usb11_mac_reset_and_phy_stress_set();			
+#endif
 		handled = IRQ_HANDLED;
 		usb_hcd_resume_root_hub(musbfsh_to_hcd(musbfsh));
 		musbfsh_root_disconnect(musbfsh);
+
+
+#ifndef MTK_ICUSB_SUPPORT
 #ifndef MTK_DT_SUPPORT
-		wake_unlock(&musbfsh_suspend_lock);
+		wake_unlock(&musbfsh_suspend_lock);		
+#endif
 #endif
 	}
 
@@ -467,13 +939,61 @@ static irqreturn_t musbfsh_stage0_irq(struct musbfsh *musbfsh, u8 int_usb,
 		* caused BABBLE. When HS BABBLE happens we can only
 		* stop the session.
 		*/
+		
+#ifdef MTK_ICUSB_SUPPORT
+#define OSR_START 0x01
+
+		if(hw_dbg_attr.value)
+		{
+			int dbg_register[] = {0x640, 0x644, 0x648, 0x64C, 0x650, 0x654, 0x658, 0x65C};
+			void __iomem *mbase = musbfsh->mregs;
+			int i;
+			u8 op_state; 
+
+			/* stop hw debugging */ 
+			u8 opr_csr = musbfsh_readb(mbase, 0x610);
+			opr_csr &= ~OSR_START;
+			musbfsh_writeb(mbase, 0x610, opr_csr);
+
+			udelay(100);
+
+			/* dump result */
+			WARNING("BABBLE!, dump dbg register\n"); 
+
+			for (i=0; i<sizeof(dbg_register)/sizeof(int); i++) {
+				printk("offset=%x, value=%x\n", dbg_register[i], musbfsh_readl(musbfsh->mregs, dbg_register[i]));
+			}
+
+			op_state = musbfsh_readb(mbase, 0x620);
+			WARNING("BABBLE!, op_state : %x\n", op_state);
+		}
+		else
+		{
+			MYDBG("");
+		}
+#endif
+#if defined(MTK_ICUSB_BABBLE_RECOVER) || defined(MTK_SMARTBOOK_SUPPORT)
+		/* call mt65xx_usb11_mac_phy_babble_clear at first */
+		mt65xx_usb11_mac_phy_babble_clear(musbfsh);
+
+		/* run babble_recover 20ms later */
+		//musbfsh->rh_timer = jiffies + msecs_to_jiffies(100);
+
+		WARNING("BABBLE! schedule babble_recover\n");
+
+		usb_hcd_resume_root_hub(musbfsh_to_hcd(musbfsh));
+		musbfsh_root_disconnect(musbfsh);
+
+		mod_timer(&babble_recover_timer, jiffies + msecs_to_jiffies(5000));
+#else
 		if (devctl & (MUSBFSH_DEVCTL_FSDEV | MUSBFSH_DEVCTL_LSDEV)) {
 			ERR("BABBLE devctl: %02x\n", devctl);
 			//musbfsh_writeb(musbfsh->mregs, MUSBFSH_INTRUSBE, 0xf3);
 		} else {
-			ERR("Stopping host session -- babble\n");
-			musbfsh_writeb(musbfsh->mregs, MUSBFSH_DEVCTL, 0);
+			ERR("Stopping host session -- babble, devctl : %x\n", devctl);
+			musbfsh_writeb(musbfsh->mregs, MUSBFSH_DEVCTL, 0);							
 		}			
+#endif
 	}
 	
 	return handled;
@@ -534,14 +1054,31 @@ void musbfsh_start(struct musbfsh *musbfsh)
 {
 	void __iomem	*regs = musbfsh->mregs;//base address of usb mac
 	u8		devctl = musbfsh_readb(regs, MUSBFSH_DEVCTL);
-    	u8		power = musbfsh_readb(regs, MUSBFSH_POWER);
-    	int int_level1 = 0;
+	u8		power = musbfsh_readb(regs, MUSBFSH_POWER);
+	int int_level1 = 0;
 	WARNING("<== devctl 0x%02x\n", devctl);
+
+#ifdef MTK_ICUSB_SUPPORT
+#if 0
+	//no automatically stop session when babble
+	unsigned char result = musbfsh_readb(regs, 0x74);
+	result &= ~(0x40);
+	musbfsh_writeb(regs, 0x74, result);
+
+	//macpual test from web , TI solution
+	g_FS_EOF1_before = musbfsh_readb(regs, 0x7D);
+	musbfsh_writeb(regs, 0x7D, 0xB4);
+	g_FS_EOF1_after = musbfsh_readb(regs, 0x7D);
+#endif
+#endif
+
 
 	/*  Set INT enable registers, enable interrupts */
 	musbfsh_writew(regs, MUSBFSH_INTRTXE, musbfsh->epmask);
 	musbfsh_writew(regs, MUSBFSH_INTRRXE, musbfsh->epmask & 0xfffe);
+
 	musbfsh_writeb(regs, MUSBFSH_INTRUSBE, 0xf7);
+
 	/* enable level 1 interrupts */
 	musbfsh_writew(regs, USB11_L1INTM, 0x000f);
 	int_level1 = musbfsh_readw(musbfsh->mregs, USB11_L1INTM);
@@ -563,8 +1100,27 @@ void musbfsh_start(struct musbfsh *musbfsh)
 	musbfsh_set_vbus(musbfsh, 1);
 #endif
 	musbfsh_platform_enable(musbfsh);
-	
+
+#if 0	// IC_USB from SS5
 #ifndef IC_USB
+	/* start session, assume ID pin is hard-wired to ground */
+	devctl |= MUSBFSH_DEVCTL_SESSION; // wx? why not wait until device connected
+	musbfsh_writeb(regs, MUSBFSH_DEVCTL, devctl);
+#endif
+#endif
+
+#ifdef MTK_ICUSB_SUPPORT
+	if(skip_enable_session_attr.value)
+	{
+		MYDBG("SESSION ENABLE SKIPPED FOR IC USB\n");
+	}
+	else
+	{
+		/* start session, assume ID pin is hard-wired to ground */
+		devctl |= MUSBFSH_DEVCTL_SESSION; // wx? why not wait until device connected
+		musbfsh_writeb(regs, MUSBFSH_DEVCTL, devctl);
+	}
+#else
 	/* start session, assume ID pin is hard-wired to ground */
 	devctl |= MUSBFSH_DEVCTL_SESSION; // wx? why not wait until device connected
 	musbfsh_writeb(regs, MUSBFSH_DEVCTL, devctl);
@@ -578,11 +1134,13 @@ void musbfsh_start(struct musbfsh *musbfsh)
 	    but it will be able to detect line state (remote wakeup/connect/disconnect) */
 	power |= MUSBFSH_POWER_ENSUSPEND;
 	musbfsh_writeb(regs, MUSBFSH_POWER, power);
-	
+
+#ifndef MTK_ICUSB_SUPPORT
 	devctl = musbfsh_readb(regs, MUSBFSH_DEVCTL);
 	power = musbfsh_readb(regs, MUSBFSH_POWER);
 	INFO(" musb ready. devctl=0x%x, power=0x%x\n", devctl, power);
 	mdelay(500); // wx?
+#endif
 
 #if defined(MTK_DT_SUPPORT) && !defined(EVDO_DT_SUPPORT)
 	mtk_musbfsh = musbfsh;
@@ -616,6 +1174,7 @@ static void musbfsh_generic_disable(struct musbfsh *musbfsh)
 	temp = musbfsh_readw(mbase, MUSBFSH_INTRTX);
 	temp = musbfsh_readw(mbase, MUSBFSH_INTRRX);
 }
+
 
 /*
  * Make the HDRC stop (disable interrupts, etc.);
@@ -686,8 +1245,98 @@ static struct musbfsh_fifo_cfg __initdata epx_cfg[] = {
 static struct musbfsh_fifo_cfg __initdata ep0_cfg = {
 	.style = FIFO_RXTX, .maxpacket = 64,
 };
+
+#ifdef MTK_ICUSB_SUPPORT
+static struct musbfsh_fifo_cfg ep0_cfg1 = {
+	.style = FIFO_RXTX, .maxpacket = 64,
+};
+static struct musbfsh_fifo_cfg epx_cfg1[] = {
+{ .hw_ep_num =  1, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  1, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  2, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  2, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  3, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  3, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  4, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  4, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  5, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =	5, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =  6, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =	6, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =	7, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
+{ .hw_ep_num =	7, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
+};
 /*-------------------------------------------------------------------------*/
 
+static int 
+fifo_setup1(struct musbfsh *musbfsh, struct musbfsh_hw_ep  *hw_ep,
+		const struct musbfsh_fifo_cfg *cfg, u16 offset)
+{
+	void __iomem	*mbase = musbfsh->mregs;
+	int	size = 0;
+	u16	maxpacket = cfg->maxpacket;
+	u16	c_off = offset >> 3;
+	u8	c_size;//will be written into the fifo register
+	INFO("musbfsh::fifo_setup++,hw_ep->epnum=%d,cfg->hw_ep_num=%d\r\n",hw_ep->epnum,cfg->hw_ep_num);
+	/* expect hw_ep has already been zero-initialized */
+
+	size = ffs(max(maxpacket, (u16) 8)) - 1;
+	maxpacket = 1 << size;
+
+	c_size = size - 3;
+	if (cfg->mode == BUF_DOUBLE) {
+		if ((offset + (maxpacket << 1)) >
+				MAXFIFOSIZE)
+			return -EMSGSIZE;
+		c_size |= MUSBFSH_FIFOSZ_DPB;
+	} else {
+		if ((offset + maxpacket) > MAXFIFOSIZE)
+			return -EMSGSIZE;
+	}
+
+	/* configure the FIFO */
+	musbfsh_writeb(mbase, MUSBFSH_INDEX, hw_ep->epnum);
+	/* EP0 reserved endpoint for control, bidirectional;
+	 * EP1 reserved for bulk, two unidirection halves.
+	 */
+	 if (hw_ep->epnum == 1)
+		musbfsh->bulk_ep = hw_ep;
+	/* REVISIT error check:  be sure ep0 can both rx and tx ... */
+	switch (cfg->style) {
+	case FIFO_TX:
+		musbfsh_write_txfifosz(mbase, c_size);
+		musbfsh_write_txfifoadd(mbase, c_off);
+		hw_ep->tx_double_buffered = !!(c_size & MUSBFSH_FIFOSZ_DPB);
+		hw_ep->max_packet_sz_tx = maxpacket;
+		break;
+	case FIFO_RX:
+		musbfsh_write_rxfifosz(mbase, c_size);
+		musbfsh_write_rxfifoadd(mbase, c_off);
+		hw_ep->rx_double_buffered = !!(c_size & MUSBFSH_FIFOSZ_DPB);
+		hw_ep->max_packet_sz_rx = maxpacket;
+		break;
+	case FIFO_RXTX:
+		musbfsh_write_txfifosz(mbase, c_size);
+		musbfsh_write_txfifoadd(mbase, c_off);
+		hw_ep->rx_double_buffered = !!(c_size & MUSBFSH_FIFOSZ_DPB);
+		hw_ep->max_packet_sz_rx = maxpacket;
+
+		musbfsh_write_rxfifosz(mbase, c_size);
+		musbfsh_write_rxfifoadd(mbase, c_off);
+		hw_ep->tx_double_buffered = hw_ep->rx_double_buffered;
+		hw_ep->max_packet_sz_tx = maxpacket;
+		hw_ep->is_shared_fifo = true;
+		break;
+	}
+
+	/* NOTE rx and tx endpoint irqs aren't managed separately,
+	 * which happens to be ok
+	 */
+	musbfsh->epmask |= (1 << hw_ep->epnum);
+
+	return offset + (maxpacket << ((c_size & MUSBFSH_FIFOSZ_DPB) ? 1 : 0));
+}
+#endif
 /*
  * configure a fifo; for non-shared endpoints, this may be called
  * once for a tx fifo and once for an rx fifo.
@@ -762,6 +1411,63 @@ fifo_setup(struct musbfsh *musbfsh, struct musbfsh_hw_ep  *hw_ep,
 
 	return offset + (maxpacket << ((c_size & MUSBFSH_FIFOSZ_DPB) ? 1 : 0));
 }
+#ifdef MTK_ICUSB_SUPPORT
+static int ep_config_from_table1(struct musbfsh *musbfsh)
+{
+	const struct musbfsh_fifo_cfg	*cfg = NULL;
+	unsigned		i = 0;
+	unsigned		n = 0;
+	int			offset;
+	struct musbfsh_hw_ep	*hw_ep = musbfsh->endpoints;
+	INFO("musbfsh::ep_config_from_table++\r\n");
+
+	/* modification from org */
+	musbfsh->config->fifo_cfg = epx_cfg1;
+	musbfsh->config->fifo_cfg_size = sizeof(epx_cfg1)/sizeof(struct musbfsh_fifo_cfg);
+
+	if (musbfsh->config->fifo_cfg) {
+		cfg = musbfsh->config->fifo_cfg;
+		n = musbfsh->config->fifo_cfg_size;
+		INFO("musbfsh:fifo_cfg, n=%d\n",n);
+		goto done;
+	}
+
+done:
+	offset = fifo_setup1(musbfsh, hw_ep, &ep0_cfg1, 0);
+	/* assert(offset > 0) */
+
+	/* NOTE:  for RTL versions >= 1.400 EPINFO and RAMINFO would
+	 * be better than static musbfsh->config->num_eps and DYN_FIFO_SIZE...
+	 */
+	
+	for (i = 0; i < n; i++) {
+        u8 epn = cfg->hw_ep_num;
+        
+		if (epn >= MUSBFSH_C_NUM_EPS) {
+			ERR("%s: invalid ep %d\n",musbfsh_driver_name, epn);
+			return -EINVAL;
+		}
+		offset = fifo_setup1(musbfsh, hw_ep + epn, cfg++, offset);
+		if (offset < 0) {
+			ERR("%s: mem overrun, ep %d\n",musbfsh_driver_name, epn);
+			return -EINVAL;
+		}
+        
+		epn++;//include ep0
+		musbfsh->nr_endpoints = max(epn, musbfsh->nr_endpoints);
+	}
+	INFO("%s: %d/%d max ep, %d/%d memory\n",
+			musbfsh_driver_name,
+			n + 1, musbfsh->config->num_eps * 2 - 1,
+			offset, MAXFIFOSIZE);
+	
+	if (!musbfsh->bulk_ep) {
+		ERR("%s: missing bulk\n", musbfsh_driver_name);
+		return -EINVAL;
+	}
+	return 0;
+}
+#endif
 
 static int __init ep_config_from_table(struct musbfsh *musbfsh)
 {
@@ -813,6 +1519,55 @@ done:
 	}
 	return 0;
 }
+#ifdef MTK_ICUSB_SUPPORT
+static int musbfsh_core_init1(struct musbfsh *musbfsh)
+{
+	void __iomem	*mbase = musbfsh->mregs;
+	int		status = 0;
+	int		i;
+    INFO("musbfsh_core_init\r\n");
+	/* configure ep0 */
+	musbfsh_configure_ep0(musbfsh);
+
+	/* discover endpoint configuration */
+	musbfsh->nr_endpoints = 1;//will update in func: ep_config_from_table
+	musbfsh->epmask = 1;
+	
+	status = ep_config_from_table1(musbfsh);
+	if (status < 0)
+		return status;
+
+	/* finish init, and print endpoint config */
+	for (i = 0; i < musbfsh->nr_endpoints; i++) {
+		struct musbfsh_hw_ep	*hw_ep = musbfsh->endpoints + i;
+
+		hw_ep->fifo = MUSBFSH_FIFO_OFFSET(i) + mbase;
+		hw_ep->regs = MUSBFSH_EP_OFFSET(i, 0) + mbase;
+		hw_ep->rx_reinit = 1;
+		hw_ep->tx_reinit = 1;
+
+		if (hw_ep->max_packet_sz_tx) {
+			INFO("%s: hw_ep %d%s, %smax %d,and hw_ep->epnum=%d\n",
+				musbfsh_driver_name, i,
+				hw_ep->is_shared_fifo ? "shared" : "tx",
+				hw_ep->tx_double_buffered
+					? "doublebuffer, " : "",
+				hw_ep->max_packet_sz_tx,hw_ep->epnum);
+		}
+		if (hw_ep->max_packet_sz_rx && !hw_ep->is_shared_fifo) {
+			INFO("%s: hw_ep %d%s, %smax %d,and hw_ep->epnum=%d\n",
+				musbfsh_driver_name, i,
+				"rx",
+				hw_ep->rx_double_buffered
+					? "doublebuffer, " : "",
+				hw_ep->max_packet_sz_rx,hw_ep->epnum);
+		}
+		if (!(hw_ep->max_packet_sz_tx || hw_ep->max_packet_sz_rx))
+			INFO("hw_ep %d not configured\n", i);
+	}
+	return 0;
+}
+#endif
 
 
 /* Initialize MUSB (M)HDRC part of the USB hardware subsystem;
@@ -889,6 +1644,15 @@ static irqreturn_t generic_interrupt(int irq, void *__hci)
 	struct musbfsh	*musbfsh = __hci;
 	u16 int_level1 = 0;
 	INFO("musbfsh:generic_interrupt++\r\n");
+#ifdef MTK_ICUSB_SUPPORT
+#if 0
+	if(mt65xx_check_usb11_clk_status())
+	{
+		dump_stack();
+		BUG();
+	}
+#endif	
+#endif	
 	spin_lock_irqsave(&musbfsh->lock, flags);
 
 	musbfsh_read_clear_generic_interrupt(musbfsh);	
@@ -927,8 +1691,10 @@ irqreturn_t musbfsh_interrupt(struct musbfsh *musbfsh)
 	 * a generic interrupt flowchart to follow
 	 */
 	if (musbfsh->int_usb)
+	{
 		retval |= musbfsh_stage0_irq(musbfsh, musbfsh->int_usb,
 				devctl, power);
+	}
 
 	/* "stage 1" is handling endpoint irqs */
 
@@ -1138,14 +1904,33 @@ musbfsh_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 
 	/* be sure interrupts are disabled before connecting ISR */
 	musbfsh_platform_disable(musbfsh);//wz,need implement in MT65xx, but not power off!
+	
+#ifdef MTK_ICUSB_SUPPORT
+	if(skip_mac_init_attr.value)
+	{
+		MYDBG("skip musbfsh_generic_disable() and musbfsh_core_init()\n");
+	}
+	else
+	{
+		musbfsh_generic_disable(musbfsh);//must power on the USB module
+
+		/* setup musb parts of the core (especially endpoints) */
+		status = musbfsh_core_init(musbfsh);
+		if (status < 0){
+			ERR("musbfsh_core_init fail!");
+			goto fail2;
+		}
+	}
+#else
 	musbfsh_generic_disable(musbfsh);//must power on the USB module
 
 	/* setup musb parts of the core (especially endpoints) */
 	status = musbfsh_core_init(musbfsh);
 	if (status < 0){
-        ERR("musbfsh_core_init fail!");
+		ERR("musbfsh_core_init fail!");
 		goto fail2;
-       }
+	}
+#endif
 
 	/* attach to the IRQ */
 	if (request_irq(nIrq, musbfsh->isr, IRQF_TRIGGER_LOW, dev_name(dev), musbfsh)) { //wx? usb_add_hcd will also try do request_irq, if hcd_driver.irq is set
@@ -1171,6 +1956,7 @@ musbfsh_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 	 * Otherwise, wait till the gadget driver hooks up.
 	 */
 	status = usb_add_hcd(musbfsh_to_hcd(musbfsh), -1, 0);//important!!
+
 	if (status < 0){
          ERR("musbfsh::usb_add_hcd fail!");
 		goto fail2;
@@ -1181,6 +1967,28 @@ musbfsh_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
 			(is_dma_capable() && musbfsh->dma_controller)
 			? "DMA" : "PIO",
 			musbfsh->nIrq);
+
+#if defined(MTK_ICUSB_BABBLE_RECOVER) || defined(MTK_SMARTBOOK_SUPPORT)
+	init_timer(&babble_recover_timer);
+	babble_recover_timer.function = babble_recover_func;
+	babble_recover_timer.data = (unsigned long) musbfsh;
+#endif
+
+#ifdef MTK_ICUSB_SUPPORT
+	mt65xx_usb11_disable_clk_pll_pw();
+	create_ic_usb_cmd_proc_entry();
+	g_musbfsh = musbfsh;
+	
+#ifdef MTK_ICUSB_TAKE_WAKE_LOCK
+	wake_lock(&musbfsh_suspend_lock);			
+#else
+	MYDBG("skip wake_lock(&musbfsh_suspend_lock)\n");
+#endif
+
+	MYDBG("end of %s(), build time : %s\n", __func__, __TIME__);
+
+#endif
+
 
 	return 0;
 
@@ -1217,6 +2025,12 @@ static int __init musbfsh_probe(struct platform_device *pdev)
 	int		status;
 	unsigned char __iomem	*base = (unsigned char __iomem*)USB11_BASE;
 	INFO("musbfsh_probe++\r\n");
+
+#ifdef MTK_ICUSB_SUPPORT
+	//test usb clk effect
+	//ic_usb_clk_chg();
+#endif
+
 #ifndef CONFIG_MUSBFSH_PIO_ONLY//using DMA
 	/* clobbered by use_dma=n */
 	orig_dma_mask = dev->dma_mask;
@@ -1225,9 +2039,11 @@ static int __init musbfsh_probe(struct platform_device *pdev)
 	if (status < 0)
 		ERR("musbfsh_probe failed with status %d\n", status);
 	INFO("musbfsh_probe--\r\n");
-#ifdef IC_USB	
+#if 0 //IC_USB from SS5
+#ifdef IC_USB
 	device_create_file(dev, &dev_attr_start);
 	WARNING("IC-USB is enabled\n");
+#endif
 #endif
 	return status;
 }
@@ -1365,44 +2181,88 @@ static void musbfsh_restore_context(struct musbfsh *musbfsh)
 }
 
 
+#ifdef MTK_ICUSB_SUPPORT
+void mt65xx_usb11_mac_phy_dump(void);
+void mt65xx_usb11_phy_recover(void);
+void mt65xx_usb11_phy_savecurrent(void);
+void mt65xx_usb11_enable_clk_pll_pw(void);
+void mt65xx_usb11_disable_clk_pll_pw(void);
+
+static int suspend_cnt = 0, resume_cnt = 0;
+#endif
+
 static int musbfsh_suspend(struct device *dev)
 {
-    //return 0;
+	
 	struct platform_device *pdev = to_platform_device(dev);
 	unsigned long	flags;
 	struct musbfsh	*musbfsh = dev_to_musbfsh(&pdev->dev);
     WARNING("musbfsh_suspend++\r\n");
-#if 1
+	MYDBG("");		
+
+#ifdef MTK_ICUSB_SUPPORT
+	if(!usb11_enabled)
+	{
+		MYDBG("usb11 is not enabled");
+		return 0;
+	}
+#endif
+
 	spin_lock_irqsave(&musbfsh->lock, flags);
-	//musbfsh_set_vbus(musbfsh,0);//disable VBUS
+#ifndef MTK_ICUSB_SUPPORT
+	musbfsh_set_vbus(musbfsh,0);//disable VBUS
+#endif
+
 #ifdef CONFIG_SMP
 	disable_irq(musbfsh->nIrq); // wx, clearn IRQ before closing clock. Prevent SMP issue: clock is disabled on CPU1, but ISR is running on CPU0 and failed to clear interrupt
 	musbfsh_save_context(musbfsh);
 	musbfsh_read_clear_generic_interrupt(musbfsh);	
 #endif
-	musbfsh_set_power(musbfsh, 0);
-	spin_unlock_irqrestore(&musbfsh->lock, flags);
+
+#ifdef MTK_ICUSB_SUPPORT
+	//mt65xx_usb11_mac_phy_dump();
+	mt65xx_usb11_phy_savecurrent();			
+	mt65xx_usb11_disable_clk_pll_pw();
+	suspend_cnt++;
+#else
+	musbfsh_set_power(musbfsh, 0);						
 #endif
+	spin_unlock_irqrestore(&musbfsh->lock, flags);
 	return 0;
 }
 
 static int musbfsh_resume(struct device *dev)
 {
-    //return 0;
 	struct platform_device *pdev = to_platform_device(dev);
 	unsigned long	flags;
 	struct musbfsh	*musbfsh = dev_to_musbfsh(&pdev->dev);
     WARNING("musbfsh_resume_noirq++\r\n");
-#if 1
+
+#ifdef MTK_ICUSB_SUPPORT
+	MYDBG("suspend_cnt : %d, resume_cnt :%d\n", suspend_cnt, resume_cnt);															
+	if(!usb11_enabled)
+	{
+		MYDBG("usb11 is not enabled");
+		return 0;
+	}
+#endif
 	spin_lock_irqsave(&musbfsh->lock, flags);
-	//musbfsh_set_vbus(musbfsh,1);//enable VBUS
-	musbfsh_set_power(musbfsh, 1);
+#ifdef MTK_ICUSB_SUPPORT
+	resume_cnt++;
+	mt65xx_usb11_enable_clk_pll_pw();
+	mt65xx_usb11_phy_recover();							
+	//mt65xx_usb11_mac_phy_dump();
+#else
+	musbfsh_set_vbus(musbfsh,1);//enable VBUS
+	musbfsh_set_power(musbfsh, 1);						
+#endif
+
+
 #ifdef CONFIG_SMP
-        musbfsh_restore_context(musbfsh);
+	musbfsh_restore_context(musbfsh);
 	enable_irq(musbfsh->nIrq);
 #endif
 	spin_unlock_irqrestore(&musbfsh->lock, flags);
-#endif
 	return 0;
 }
 

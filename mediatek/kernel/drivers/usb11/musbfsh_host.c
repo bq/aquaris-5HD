@@ -45,11 +45,18 @@
 #include "musbfsh_core.h"
 #include "musbfsh_host.h"
 #include "musbfsh_dma.h"
+#include "usb.h"
 
-#if defined(MTK_DT_SUPPORT) && !defined(EVDO_DT_SUPPORT)
+#ifdef MTK_USB_RUNTIME_SUPPORT
 #include <cust_eint.h>
-extern void mt65xx_eint_unmask(unsigned int line);
-extern void mt65xx_eint_mask(unsigned int line);
+extern void mt_eint_unmask(unsigned int line);
+extern void mt_eint_mask(unsigned int line);
+#endif
+#ifdef MTK_ICUSB_SUPPORT
+char *get_root_hub_udev(void);
+char *get_usb_sim_udev(void);
+extern struct usb_interface *stor_intf;		
+
 #endif
 
 /* MUSB HOST status 22-mar-2006
@@ -221,6 +228,7 @@ musbfsh_start_urb(struct musbfsh *musbfsh, int is_in, struct musbfsh_qh *qh)
 	int			epnum = hw_ep->epnum;
 	
 	INFO("musbfsh_start_urb++, address=%d,hw_ep->epnum=%d,urb_ep_addr:0x%x\r\n",address,epnum,urb->ep->desc.bEndpointAddress);
+	//MYDBG("urb:%x, blen:%d, alen:%d, hep:%x, ep:%x\n", urb, urb->transfer_buffer_length, urb->actual_length, epnum, urb->ep->desc.bEndpointAddress);	
 
 	/* initialize software qh state */
 	qh->offset = 0; // indicate the buffer pointer now.
@@ -275,6 +283,31 @@ __acquires(musbfsh->lock)
 			usb_pipein(urb->pipe) ? "in" : "out",
 			urb->actual_length, urb->transfer_buffer_length
 			);
+	
+	//MYDBG("urb:%x, blen:%d, alen:%d, ep:%x\n", urb, urb->transfer_buffer_length, urb->actual_length, urb->ep->desc.bEndpointAddress);	
+
+
+#ifdef MTK_ICUSB_SUPPORT
+//	MYDBG("urb->dev :%x, get_usb_sim_udev() : %x\n", urb->dev, get_usb_sim_udev());
+#if 0
+	if((char *)(urb->dev) == get_usb_sim_udev())
+	{		
+		MYDBG("stor_intf->pm_usage_cnt : %d, urb->dev->dev.power.usage_count : %d, stor_intf->dev.parent : %x, &(urb->dev.dev) : %x\n",
+				stor_intf->pm_usage_cnt, 
+				urb->dev->dev.power.usage_count, 
+				stor_intf->dev.parent, 
+				&((urb->dev)->dev)); 	
+
+		MYDBG("musbfsh_giveback++,complete %p %pF (%d), dev%d ep%d%s, %d/%d\n",
+				urb, urb->complete, status,
+				usb_pipedevice(urb->pipe),
+				usb_pipeendpoint(urb->pipe),
+				usb_pipein(urb->pipe) ? "in" : "out",
+				urb->actual_length, urb->transfer_buffer_length
+			 );
+	}
+#endif
+#endif
 
 	usb_hcd_unlink_urb_from_ep(musbfsh_to_hcd(musbfsh), urb);
 	spin_unlock(&musbfsh->lock);
@@ -365,6 +398,11 @@ static void musbfsh_advance_schedule(struct musbfsh *musbfsh, struct urb *urb,
 	/* reclaim resources (and bandwidth) ASAP; deschedule it, and
 	 * invalidate qh as soon as list_empty(&hep->urb_list)
 	 */
+	 if(&qh->hep->urb_list<0xc0000000)
+	 	{
+		 printk(KERN_ERR"hank:%s(%d)urb=0x%x,qh=0x%x,qh->hep=0x%x,&qh->hep->urb_list=0x%x\n",__FUNCTION__,__LINE__,urb,qh,qh->hep,&qh->hep->urb_list);
+		 return ;
+	 	}
 	if (list_empty(&qh->hep->urb_list)) { // if the urb list is empty, the next qh will be excute.
 		struct list_head	*head;
 
@@ -553,7 +591,7 @@ musbfsh_rx_reinit(struct musbfsh *musbfsh, struct musbfsh_qh *qh, struct musbfsh
 	musbfsh_writeb(ep->regs, MUSBFSH_RXTYPE, qh->type_reg);
 	musbfsh_writeb(ep->regs, MUSBFSH_RXINTERVAL, qh->intv_reg);
     
-	musbfsh_writew(ep->regs, MUSBFSH_RXMAXP, ep->max_packet_sz_rx);
+	musbfsh_writew(ep->regs, MUSBFSH_RXMAXP, qh->maxpacket);
 
 	ep->rx_reinit = 0;
 }
@@ -719,7 +757,7 @@ static void musbfsh_ep_program(struct musbfsh *musbfsh, u8 epnum,//the index num
 		/* protocol/endpoint/interval/NAKlimit */
 		if (epnum) {
 			musbfsh_writeb(epio, MUSBFSH_TXTYPE, qh->type_reg);//set the transfer type and endpoint number
-			musbfsh_writew(epio, MUSBFSH_TXMAXP, hw_ep->max_packet_sz_tx);
+			musbfsh_writew(epio, MUSBFSH_TXMAXP, qh->maxpacket);
 			musbfsh_writeb(epio, MUSBFSH_TXINTERVAL, qh->intv_reg);
 		} else {//ep0
 			musbfsh_writeb(epio, MUSBFSH_NAKLIMIT0, qh->intv_reg);
@@ -881,7 +919,7 @@ irqreturn_t musbfsh_h_ep0_irq(struct musbfsh *musbfsh)
 			? musbfsh_readb(epio, MUSBFSH_COUNT0)
 			: 0;
 
-	INFO( "<== csr0 %04x, qh %p, count %d, urb %p, stage %d\n",
+	WARNING( "<== csr0 %04x, qh %p, count %d, urb %p, stage %d\n",
 		csr, qh, len, urb, musbfsh->ep0_stage);
 
 	/* if we just did status stage, we are done */
@@ -976,7 +1014,10 @@ irqreturn_t musbfsh_h_ep0_irq(struct musbfsh *musbfsh)
 
 	/* call completion handler if done */
 	if (complete)
+	{
+		//MYDBG("");
 		musbfsh_advance_schedule(musbfsh, urb, hw_ep, 1);
+	}
 done:
 	return retval;
 }
@@ -1296,6 +1337,7 @@ static void musbfsh_bulk_rx_nak_timeout(struct musbfsh *musbfsh, struct musbfsh_
 
 		/* set rx_reinit and schedule the next qh */
 		ep->rx_reinit = 1;
+		//MYDBG("musbfsh_start_urb go\n");
 		musbfsh_start_urb(musbfsh, 1, next_qh);
 	}
 }
@@ -1658,7 +1700,10 @@ success:
 	qh->hw_ep = hw_ep;
 	qh->hep->hcpriv = qh;
 	if (idle)//the new urb added is the first urb now, excute it!
+	{
+		//MYDBG("musbfsh_start_urb go\n");
 		musbfsh_start_urb(musbfsh, is_in, qh);
+	}
 	return 0;
 }
 
@@ -1678,6 +1723,8 @@ static int musbfsh_urb_enqueue(
 	
 	INFO("musbfsh_urb_enqueue++:urb addr=0x%p\r\n",urb);
 
+
+	//MYDBG("urb:%x, blen:%d, alen:%d, ep:%x\n", urb, urb->transfer_buffer_length, urb->actual_length, epd->bEndpointAddress);	
 #if 1 //workaround for DMA issue, to make usb core jump over unmap_urb_for_dma in usb_hcd_giveback_urb for control message
 	if(usb_endpoint_num(epd)==0)
 		urb->transfer_flags &= ~URB_DMA_MAP_SINGLE;
@@ -1807,8 +1854,11 @@ static int musbfsh_urb_enqueue(
 		qh = NULL;
 		ret = 0;
 	} else
+	{
 		ret = musbfsh_schedule(musbfsh, qh,
 				epd->bEndpointAddress & USB_ENDPOINT_DIR_MASK);
+		//MYDBG("after musbfsh_schedule, urb:%x, ret:%d, ep:%x\n", urb, ret, epd->bEndpointAddress);		
+	}
 
 	if (ret == 0) {
 		urb->hcpriv = qh;
@@ -1971,7 +2021,11 @@ musbfsh_h_disable(struct usb_hcd *hcd, struct usb_host_endpoint *hep)
 	qh->is_ready = 0;
 	if (musbfsh_ep_get_qh(qh->hw_ep, is_in) == qh) {
 		urb = next_urb(qh);
-
+    if(urb < 0xc0000000 )
+    	{
+    		printk(KERN_ERR"joson musbfsh_h_disable urb=0x%x",urb);
+    		goto exit;
+    	}
 		/* make software (then hardware) stop ASAP */
 		if (!urb->unlinked)
 			urb->status = -ESHUTDOWN;
@@ -2037,11 +2091,11 @@ static int musbfsh_bus_suspend(struct usb_hcd *hcd)
     unsigned char power = musbfsh_readb(musbfsh->mregs,MUSBFSH_POWER);
 	
     WARNING("musbfsh_bus_suspend++,power=0x%x\r\n",power);
-#if defined(MTK_DT_SUPPORT) && !defined(EVDO_DT_SUPPORT)
+#ifdef MTK_USB_RUNTIME_SUPPORT
 	// Edge triggered EINT interrupt will be hold after masked (only one), and reported after unmasked
-	mt65xx_eint_unmask(CUST_EINT_DT_EXT_MD_WK_UP_USB_NUM);
+	mt_eint_unmask(CUST_EINT_MT6280_USB_WAKEUP_NUM);
 #endif
-#if 0 //wx, let child port do the job
+#if 0 //wx, let child port do the job;joson,runtime suspend not ready now,set suspend signal here
     power |= MUSBFSH_POWER_SUSPENDM|MUSBFSH_POWER_ENSUSPEND;
     musbfsh_writeb(musbfsh->mregs,MUSBFSH_POWER,power);
     mdelay(15);
@@ -2057,7 +2111,10 @@ static int musbfsh_bus_resume(struct usb_hcd *hcd)
     unsigned char power = musbfsh_readb(musbfsh->mregs,MUSBFSH_POWER);
 	
     WARNING("musbfsh_bus_resume++,power=0x%x\r\n",power);
-#if 0 //wx, let child port do the job
+	#ifdef MTK_USB_RUNTIME_SUPPORT
+	mt_eint_mask(CUST_EINT_MT6280_USB_WAKEUP_NUM);
+#endif
+#if 0 //wx, let child port do the job;joson,runtime suspend not ready now,set resume signal here
     power |= MUSBFSH_POWER_RESUME;
     power &= ~MUSBFSH_POWER_SUSPENDM;
     musbfsh_writeb(musbfsh->mregs,MUSBFSH_POWER,power);
@@ -2068,15 +2125,11 @@ static int musbfsh_bus_resume(struct usb_hcd *hcd)
 	return 0;
 }
 
-const struct hc_driver musbfsh_hc_driver = {
+struct hc_driver musbfsh_hc_driver = {
 	.description		= "musbfsh-hcd",
 	.product_desc		= "MUSBFSH HDRC host driver",
 	.hcd_priv_size		= sizeof(struct musbfsh),
-#ifdef CONFIG_ARCH_MT6589
 	.flags			= HCD_USB2 | HCD_MEMORY,
-#else
-	.flags			= HCD_USB11 | HCD_MEMORY,
-#endif
 
 	/* not using irq handler or reset hooks from usbcore, since
 	 * those must be shared with peripheral code for OTG configs

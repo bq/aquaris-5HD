@@ -8,13 +8,13 @@
 *
 ***************************************************/
 
-#ifndef TRUE 
+#ifndef TRUE
  #define TRUE 1
 #elif TRUE != 1
  #error TRUE is not equal to 1
 #endif
 
-#ifndef FALSE 
+#ifndef FALSE
  #define FALSE 0
 #elif FALSE != 0
  #error FALSE is not equal to 0
@@ -29,58 +29,58 @@ typedef void * HANDLE;
         typedef unsigned long long  UINT64;
 #endif
 
-typedef enum  
+typedef enum
 {
 	VCODEC_DECODER,
 	VCODEC_ENCODER,
 	NUM_OF_CODEC_TYPE
 }VCODEC_CODEC_TYPE_T;
-typedef struct 
+typedef struct
 {
     unsigned int MaxSupportWidthForYUV420;
     unsigned int MaxSupportHeightForYUV420;
 	unsigned int eFlag;                   //VCODEC_DEC_INPUT_FLAG_T
 	unsigned int ExternalMEMSize;
-	unsigned int PrivateData[4];	 
-} VCODEC_OPEN_SETTING_T; 
+	unsigned int PrivateData[4];
+} VCODEC_OPEN_SETTING_T;
 
 
-typedef struct 
+typedef struct
 {
     unsigned int MaxSupportWidthForYUV420;
     unsigned int MaxSupportHeightForYUV420;
     unsigned int ExternalMEMSize;
-} RV9_DEC_CUSTOM_SETTING_T; 
+} RV9_DEC_CUSTOM_SETTING_T;
 
 
-typedef struct 
+typedef struct
 {
     unsigned int MaxSupportWidthForYUV420_BP;
     unsigned int MaxSupportHeightForYUV420_BP;
     unsigned int MaxSupportWidthForYUV420_MPHP;
-    unsigned int MaxSupportHeightForYUV420_MPHP;    
+    unsigned int MaxSupportHeightForYUV420_MPHP;
     unsigned int ExternalMEMSize;
     unsigned int DPBSize;
-} H264_DEC_CUSTOM_SETTING_T; 
+} H264_DEC_CUSTOM_SETTING_T;
 
 typedef struct
 {
     unsigned int MaxSupportWidthForYUV420_MPHP;
-    unsigned int MaxSupportHeightForYUV420_MPHP;    
+    unsigned int MaxSupportHeightForYUV420_MPHP;
     unsigned int NormalMaxWidthForYUV420_MPHP;
     unsigned int NormalMaxHeightForYUV420_MPHP;
     unsigned int u4dpbSizes;
     unsigned int reserved[4];
 } H264_DECODER_PRIVATE_PARAM_T;
 
-typedef struct 
+typedef struct
 {
     unsigned int MaxSupportWidthForYUV420_SP;
     unsigned int MaxSupportHeightForYUV420_SP;
     unsigned int MaxSupportWidthForYUV420_ASP;
     unsigned int MaxSupportHeightForYUV420_ASP;
     unsigned int ExternalMEMSize;
-} MPEG4_DEC_CUSTOM_SETTING_T; 
+} MPEG4_DEC_CUSTOM_SETTING_T;
 
 typedef struct
 {
@@ -88,8 +88,8 @@ typedef struct
     unsigned int MaxSupportHeightForYUV420;
 	unsigned int eFlag;                   //VCODEC_DEC_INPUT_FLAG_T
 	unsigned int ExternalMEMSize;
-	unsigned int PrivateData[4];	 
-} VC1_DEC_CUSTOM_SETTING_T; 
+	unsigned int PrivateData[4];
+} VC1_DEC_CUSTOM_SETTING_T;
 
 typedef struct
 {
@@ -98,19 +98,26 @@ typedef struct
     unsigned int ExternalMEMSize;
 } VP8_DEC_CUSTOM_SETTING_T;
 
+typedef struct
+{
+    unsigned int MaxSupportWidthForYUV420;
+    unsigned int MaxSupportHeightForYUV420;
+    unsigned int ExternalMEMSize;
+} VP9_DEC_CUSTOM_SETTING_T;
+
 typedef enum
 {
 	VCODEC_FRAMETYPE_I,
     VCODEC_FRAMETYPE_NS_I, // non-seek I, non-IDR frame
 	VCODEC_FRAMETYPE_P,
-	VCODEC_FRAMETYPE_B,    
+	VCODEC_FRAMETYPE_B,
 	VCODEC_HEADER,
 	VCODEC_FRM_DROPPED,
 	VCODEC_UNKNOWN_TYPE,
 	NUM_OF_FRAME_TYPE
 } VCODEC_FRAME_TYPE_T;
 
-typedef enum 
+typedef enum
 {
   VCODEC_COLOR_FORMAT_YUV420,
   VCODEC_COLOR_FORMAT_YV12,
@@ -146,7 +153,7 @@ typedef enum
 	VCODEC_DEC_ERROR_NONE,
 	VCODEC_DEC_ERROR_DECODE_ERROR,
 	VCODEC_DEC_ERROR_ASSERT_FAIL,
-	VCODEC_DEC_ERROR_FATAL_ERROR,	
+	VCODEC_DEC_ERROR_FATAL_ERROR,
 	VCODEC_DEC_ERROR_NOT_SUPPORT,
 	VCODEC_DEC_ERROR_NOT_ENOUGH_MEM,
 	VCODEC_DEC_ERROR_PAYLOAD_DATA_ERROR,
@@ -156,7 +163,7 @@ typedef enum
 
 typedef enum
 {
-	CUSTOM_SETTING, //custom setting 
+	CUSTOM_SETTING, //custom setting
 	BEST_QUALITY,    //standard mode
 	FAVOR_QUALITY,   //adaptive control decode mode , quality first
 	FAVOR_FLUENCY,   //adaptive control decode mode , fluency first
@@ -182,8 +189,8 @@ typedef enum
 	VCODEC_DEC_PARAM_BUFFERING,
 	VCODEC_DEC_PARAM_BITRATE,
 	VCODEC_DEC_PARAM_FRAMERATE,
-	VCODEC_DEC_PARAM_EXCLUDE_BUF_NUM,	
-	VCODEC_DEC_PARAM_NO_OUTPUT_REORDERING,	
+	VCODEC_DEC_PARAM_EXCLUDE_BUF_NUM,
+	VCODEC_DEC_PARAM_NO_OUTPUT_REORDERING,
 	VCODEC_DEC_PARAM_FLUSH_BUFFER,
 	VCODEC_DEC_PARAM_SET_DECRYPTION_MODE,
 	VCODEC_DEC_PARAM_SET_DECODE_MODE,
@@ -192,9 +199,9 @@ typedef enum
 	VCODEC_DEC_PARAM_GET_SBSFLAG,
     VCODEC_DEC_PARAM_CONCEAL_LEVEL,
 	VCODEC_DEC_PARAM_NUM_OF_HW_CTRL_THID,
-	VCODEC_DEC_PARAM_GET_REG_HW_CTRL_THID, //Get registered HW control thread id , output structure : VCODEC_REG_HW_CTRL_THID_T    
+	VCODEC_DEC_PARAM_GET_REG_HW_CTRL_THID, //Get registered HW control thread id , output structure : VCODEC_REG_HW_CTRL_THID_T
 	VCODEC_DEC_PARAM_SET_COLOR_FORMAT,
-	VCODEC_DEC_PARAM_SET_STRIDE_ALIGNMENT,	
+	VCODEC_DEC_PARAM_SET_STRIDE_ALIGNMENT,
 	VCODEC_DEC_PARAM_SET_AVAILABLE_CPU_NUM,
 	VCODEC_DEC_PARAM_SET_MCI,                             //enable or disable MCI mechanism
 	NUM_OF_DEC_PARAM_TYPE,
@@ -204,6 +211,7 @@ typedef enum
 {
 	VCODEC_DEC_DISPLAY_CONCEALED_FRAME_DURING_PLAYBACK  = 0x01,
 	VCODEC_DEC_DISPLAY_CONCEALED_FRAME_BEFORE_FIRST_I   = 0X02,
+	VCODEC_DEC_DISPLAY_CONCEALED_FRAME_AFTER_FIRST_I   = 0X04,
 	NUM_OF_DEC_CONCEAL_LEVEL_TYPE,
 } VCODEC_DEC_CONCEAL_LEVEL_TYPE_T;
 typedef enum
@@ -213,8 +221,8 @@ typedef enum
   VCODEC_DEC_QUERY_INFO_AVAILABLE_DISPLAY_FRAME,		//Total available display frame(without frame repeat)
   VCODEC_DEC_QUERY_INFO_REAL_AVAILABLE_DISPLAY_FRAME,	//Total real available display frame(including frame repeat)
   VCODEC_DEC_QUERY_INFO_OAL_FUNCTION,	              //Query OAL Function pointer
-  VCODEC_DEC_QUERY_INFO_CURRENT_TIME,                 //Current play time  
-  VCODEC_DEC_QUERY_INFO_LAST_VIDEO_TIME,                 // Last delivered frame time  
+  VCODEC_DEC_QUERY_INFO_CURRENT_TIME,                 //Current play time
+  VCODEC_DEC_QUERY_INFO_LAST_VIDEO_TIME,                 // Last delivered frame time
   VCODEC_DEC_QUERY_INFO_OAL_FUNCTION_SMP,	              //Query OAL Function pointer
   NUM_OF_QUERY_INFO_TYPE
 } VCODEC_DEC_QUERY_INFO_TYPE_T;
@@ -264,8 +272,8 @@ typedef enum
 
 typedef struct
 {
-	int                      i4AspectRatioWidth;  //width aspect ratio 
-	int                      i4AspectRatioHeight; //height aspect ratio 
+	int                      i4AspectRatioWidth;  //width aspect ratio
+	int                      i4AspectRatioHeight; //height aspect ratio
 	//unsigned int				          u4IntraMBNum;
 	//unsigned int				          u4InterFMBNum;
 	//unsigned int				          u4InterBMBNum;
@@ -277,7 +285,7 @@ typedef struct
 {
 	UINT64                              u8TimeStamp;    //for B frame
 	int                                 fgUpdateTime;   //for B frame
-	                                    
+
 	unsigned short                      u2FrameWidth;  //Full Frame Size
 	unsigned short                      u2FrameHeight; //Full Frame Size
 	unsigned short                      u2ClipTop;
@@ -285,38 +293,38 @@ typedef struct
 	unsigned short                      u2ClipLeft;
 	unsigned short                      u2ClipRight;
 	VCODEC_FRAME_TYPE_T                  eFrameType;
-	VCODEC_BUFFER_T                      rYUVStartAddr; /*YUV buffer start address, include padding up and left*/    
-	unsigned int                        u4UStartOffset;  
-	unsigned int                        u4VStartOffset;      
+	VCODEC_BUFFER_T                      rYUVStartAddr; /*YUV buffer start address, include padding up and left*/
+	unsigned int                        u4UStartOffset;
+	unsigned int                        u4VStartOffset;
 	VCODEC_DEC_DISPLAY_FRAME_STATUS       eDisplayFrameStatus;
-	void                               *prExtra; 
+	void                               *prExtra;
 } VCODEC_DEC_PRIVATE_OUTPUT_T;
 
 
 
 typedef void VCODEC_DEC_INPUT_DATA_T;
 
-typedef enum   
-{    	 
-	INPUT_FLAG_STREAM_DATA_TYPE		=  0x01, /* Bit 0 = 1: Slice base data(non-frame base) ; 0: Frame base data*/ 	 
+typedef enum
+{
+	INPUT_FLAG_STREAM_DATA_TYPE		=  0x01, /* Bit 0 = 1: Slice base data(non-frame base) ; 0: Frame base data*/
 	INPUT_FLAG_STARTTIME			=  0x02, /* seek start time at end of seek */
-	INPUT_FLAG_DECODEONLY			=  0x04, /* seek */       
-	INPUT_FLAG_PARAMETERSET			=  0x08, /* H.264 for SPS,PPS issue(VE),send first frame bitstream for set parameter */       
+	INPUT_FLAG_DECODEONLY			=  0x04, /* seek */
+	INPUT_FLAG_PARAMETERSET			=  0x08, /* H.264 for SPS,PPS issue(VE),send first frame bitstream for set parameter */
 	INPUT_FLAG_CUSTOM_SETTING		=  0x10, /* Get max external memory size(VE)*/
 	INPUT_FLAG_DECODE_INTRA_ONLY	=  0x20, /* Only Decode Intra Frame */
 	INPUT_FLAG_OPENAPI          	=  0x40, /* OPENAPI */
 	INPUT_FLAG_DECODE_MODE        	=  0x80, /* Decode Mode */
-	INPUT_FLAG_MAX_DEC              
+	INPUT_FLAG_MAX_DEC
 } VCODEC_DEC_INPUT_FLAG_T;
 
 typedef struct
-{ 
+{
 	UINT64                      u8TimeStamp;
 	unsigned int                eFlags;          //VCODEC_DEC_INPUT_FLAG_T
 	VCODEC_DEC_INPUT_DATA_T      *prInputData;     // MPEG4_DECODER_PAYLOAD_INFO_T, H264_DECODER_INPUT_PARAM_T, RM_DECODER_INPUT_PARAM_T, RM_DECODER_INIT_PARAM_T
 	VCODEC_BUFFER_T             *prBuffer;       //Input data address
-	unsigned int                u4BuffSize;      //Input buffer total size    
-	void                       *prExtra; 
+	unsigned int                u4BuffSize;      //Input buffer total size
+	void                       *prExtra;
 } VCODEC_DEC_INPUT_T;
 
 
@@ -328,7 +336,7 @@ typedef struct
 	unsigned int   u4Height;          //Full size 16 byte align
 	unsigned int   u4Offset;          //Offset of YUV buffer start address
 	unsigned int   u4ReduceLength;    //Padding size(End of YUV buffer pool)
-	unsigned char  u1Alignment;       //YUV buffer address alignment 
+	unsigned char  u1Alignment;       //YUV buffer address alignment
 	VCODEC_MEMORY_TYPE_T rYUVBUfferMemType; //YUV buffer memory type
 } VCODEC_DEC_YUV_BUFFER_PARAM_T;
 
@@ -342,7 +350,7 @@ typedef struct
 	unsigned short  u2ClipRight;
 	unsigned int   u4Offset;          //Offset of YUV buffer start address
 	unsigned int   u4ReduceLength;    //Padding size(End of YUV buffer pool)
-	unsigned char  u1Alignment;       //YUV buffer address alignment 
+	unsigned char  u1Alignment;       //YUV buffer address alignment
 	VCODEC_MEMORY_TYPE_T rYUVBUfferMemType; //YUV buffer memory type
 	void           *prExtra;
 } VCODEC_DEC_YUV_BUFFER_PARAM_EXTEND_T;
@@ -350,25 +358,22 @@ typedef struct
 typedef struct
 {
 	VCODEC_MEMORY_TYPE_T rBitStreamBufferMemType; //YUV buffer memory type
-	unsigned int PrivateData[4];	
+	unsigned int PrivateData[4];
 } VCODEC_DEC_BITSTREAM_PARAM_T;
 
 
 
 
 // non-callback
-#define MAX_BITSTREAM_BUFFER_INFO_NUM 4
+#define MAX_BITSTREAM_BUFFER_INFO_NUM 10
 #define MAX_REF_FREE_YUV_BUFFER_NUM 18
 typedef struct
 {
-#if 1
-    VCODEC_BUFFER_T       *prRetBitsBuf;
-#else
+    VCODEC_BUFFER_T       *prRetBitsBuf;	// for mt6575, mt6577
     unsigned int          u4ReturnInputCnt;
-    VCODEC_DEC_INPUT_T   *parReturnInput[MAX_BITSTREAM_BUFFER_INFO_NUM]; 
-#endif
+    VCODEC_BUFFER_T       rReturnInput[MAX_BITSTREAM_BUFFER_INFO_NUM];
     unsigned int          u4RefFreeYUVBufCnt;
-    VCODEC_BUFFER_T        parRefFreeYUVBuf[MAX_REF_FREE_YUV_BUFFER_NUM]; 
+    VCODEC_BUFFER_T        parRefFreeYUVBuf[MAX_REF_FREE_YUV_BUFFER_NUM];
 } VCODEC_DEC_OUTPUT_PARAM_T;
 // ~non-callback
 
@@ -384,55 +389,55 @@ typedef struct
 
 typedef struct
 {
-    void         (*pfnMalloc)                        (IN HANDLE                             /* hDrv */, 
-                                                    IN unsigned int                       /* u4Size */, 
+    void         (*pfnMalloc)                        (IN HANDLE                             /* hDrv */,
+                                                    IN unsigned int                       /* u4Size */,
 													      IN unsigned int                       /*u4AlignSize*/,
-                                                    IN VCODEC_MEMORY_TYPE_T                     /* fgCacheable */, 														  
-                                                    OUT VCODEC_BUFFER_T *                  /* prBuf */	
-                                                      );  /* buffer address must cache line align */      
+                                                    IN VCODEC_MEMORY_TYPE_T                     /* fgCacheable */,
+                                                    OUT VCODEC_BUFFER_T *                  /* prBuf */
+                                                      );  /* buffer address must cache line align */
 
-    void         (*pfnIntMalloc)                      (IN HANDLE                             /* hDrv */, 
-                                                     IN unsigned int                       /* u4Size */,                                                      
+    void         (*pfnIntMalloc)                      (IN HANDLE                             /* hDrv */,
+                                                     IN unsigned int                       /* u4Size */,
 													       IN unsigned int                       /*u4AlignSize*/,
-														   OUT VCODEC_BUFFER_T *                 /* pBuffer_adr */	
-                                                      );        
+														   OUT VCODEC_BUFFER_T *                 /* pBuffer_adr */
+                                                      );
 
-    void         (*pfnFree)                          (IN HANDLE                             /* hDrv */, 
+    void         (*pfnFree)                          (IN HANDLE                             /* hDrv */,
                                                       IN VCODEC_BUFFER_T *                   /* prBuf */
-                                                      );  /* same memory type with malloc */  
+                                                      );  /* same memory type with malloc */
 
-    void         (*pfnIntFree)                          (IN HANDLE                             /* hDrv */,                                                       
-															 IN VCODEC_BUFFER_T *                 /* pBuffer_adr */	
-                                                      );  
-                                                      
-    VCODEC_DEC_ERROR_T         (*pfnSetYUVBuffer)   (IN HANDLE                              /* hDrv */, 
+    void         (*pfnIntFree)                          (IN HANDLE                             /* hDrv */,
+															 IN VCODEC_BUFFER_T *                 /* pBuffer_adr */
+                                                      );
+
+    VCODEC_DEC_ERROR_T         (*pfnSetYUVBuffer)   (IN HANDLE                              /* hDrv */,
                                                       IN VCODEC_DEC_YUV_BUFFER_PARAM_T *  /* prYUVParam */
                                                       );
-                                                      
-    VCODEC_DEC_ERROR_T         (*pfnGetYUVBuffer)   (IN  HANDLE                             /* hDrv */,                                                       
+
+    VCODEC_DEC_ERROR_T         (*pfnGetYUVBuffer)   (IN  HANDLE                             /* hDrv */,
                                                       OUT VCODEC_BUFFER_T *                  /* prYUVBuf */
                                                       );
-                                                      
-    void          (*pfnRefFreeYUVBuffer)              (IN HANDLE                             /* hDrv */, 
+
+    void          (*pfnRefFreeYUVBuffer)              (IN HANDLE                             /* hDrv */,
                                                       IN VCODEC_BUFFER_T *                   /* prYUVBuf */
                                                       );
-                                                      
+
     VCODEC_DEC_ERROR_T  (*pfnQueryInfo)                (IN HANDLE                              /* hDrv */,
                                                      IN VCODEC_DEC_QUERY_INFO_TYPE_T        /* query id*/,
 															OUT void *                           /* pvParamData*/ /* */
                                                       );
-                           
-    void         (*pfnReturnBitstream)               (IN HANDLE                             /* hDrv */,                                                       
+
+    void         (*pfnReturnBitstream)               (IN HANDLE                             /* hDrv */,
                                                       IN VCODEC_BUFFER_T  *                  /* prBuffer */  /* Input buffer address */,
                                                       IN unsigned int                          /* u4BuffSize */ /* Input buffer total size */
                                                       );
-                                                    
-} VCODEC_DEC_CALLBACK_T; 
+
+} VCODEC_DEC_CALLBACK_T;
 
 
 // non-callback
 typedef struct
-{	
+{
     VCODEC_DEC_INPUT_T          *prInputData;
     VCODEC_BUFFER_T              *prYUVBufAddr;   // prYUVBuf
 } VIDEO_DECODER_INPUT_NC_T;
@@ -443,7 +448,7 @@ typedef struct
 {
 
     VCODEC_DEC_ERROR_T (*pfnGetMemoryRequired)   (IN    VCODEC_DEC_INPUT_T*             /* prInput */,
-                                                  OUT   VCODEC_MEMORY_SIZE_T *          /* prMemSize */, 
+                                                  OUT   VCODEC_MEMORY_SIZE_T *          /* prMemSize */,
                                                   OUT   VCODEC_DEC_YUV_BUFFER_PARAM_T * /* prBufferParameter*/,
                                                   OUT   VCODEC_MEMORY_TYPE_T *          /*prBitStreamBufferMemType */
                                                  );
@@ -501,62 +506,62 @@ typedef struct
                                                   OUT VCODEC_DEC_PRIVATE_OUTPUT_T*      /* prPrivOutput */
                                                  );
     VCODEC_DEC_ERROR_T (*pfnGetMemoryRequiredExtend)(IN    VCODEC_DEC_INPUT_T *                     /* prInput */ ,
-                                                     OUT   VCODEC_MEMORY_SIZE_T *                   /* prMemSize */, 
+                                                     OUT   VCODEC_MEMORY_SIZE_T *                   /* prMemSize */,
                                                      OUT   VCODEC_DEC_YUV_BUFFER_PARAM_EXTEND_T *   /* prBufferParameter*/,
                                                      OUT   VCODEC_DEC_BITSTREAM_PARAM_T *           /*prBitStreamParameter */,
 													 INOUT void *         						    /* reserve */
                                                     );
 } VIDEO_DEC_API_T;
 // ~non-callback
-    
-    
-    
+
+
+
 
 typedef struct
 {
-  
+
    VCODEC_DEC_ERROR_T (*pfnGetMemoryRequired)     (IN    VCODEC_DEC_INPUT_T *              /* prInput */ ,
-                                                      OUT   VCODEC_MEMORY_SIZE_T *             /* prMemSize */, 
+                                                      OUT   VCODEC_MEMORY_SIZE_T *             /* prMemSize */,
                                                       OUT   VCODEC_DEC_YUV_BUFFER_PARAM_T *   /* prBufferParameter*/,
                                                       OUT   VCODEC_MEMORY_TYPE_T *                     /*prBitStreamBufferMemType */
                                                       );
-  
-  
-    VCODEC_DEC_ERROR_T (*pfnOpen)                 (IN HANDLE                             /* hDrv */, 
-                                                   IN VCODEC_DEC_CALLBACK_T *         /* pfnCallback */, 
+
+
+    VCODEC_DEC_ERROR_T (*pfnOpen)                 (IN HANDLE                             /* hDrv */,
+                                                   IN VCODEC_DEC_CALLBACK_T *         /* pfnCallback */,
                                                    IN void *                             /* prOpenSetting */,
-                                                   OUT HANDLE *                          /* hCodec */                                                      
+                                                   OUT HANDLE *                          /* hCodec */
                                                       );
-                                                      
+
     VCODEC_DEC_ERROR_T (*pfnClose)                (IN HANDLE                             /* hCodec */
                                                       );
-    
+
     VCODEC_DEC_ERROR_T (*pfnInit)                 (IN HANDLE                             /* hCodec */
                                                       );
-                                                      
+
     VCODEC_DEC_ERROR_T (*pfnDeInit)               (IN HANDLE                             /* hCodec */
                                                       );
-    
-    VCODEC_DEC_ERROR_T (*pfnGetParameter)         (IN HANDLE                             /* hCodec */, 
-                                                      IN VCODEC_DEC_PARAM_TYPE_T         /* eParamType */, 
+
+    VCODEC_DEC_ERROR_T (*pfnGetParameter)         (IN HANDLE                             /* hCodec */,
+                                                      IN VCODEC_DEC_PARAM_TYPE_T         /* eParamType */,
                                                       INOUT void *                          /* pvParamData */
                                                       );
-                                                      
-    VCODEC_DEC_ERROR_T (*pfnSetParameter)         (IN HANDLE                             /* hCodec */, 
-                                                      IN VCODEC_DEC_PARAM_TYPE_T         /* eParamType */, 
+
+    VCODEC_DEC_ERROR_T (*pfnSetParameter)         (IN HANDLE                             /* hCodec */,
+                                                      IN VCODEC_DEC_PARAM_TYPE_T         /* eParamType */,
                                                       IN void *                             /* pvParamData */
                                                       );
-    
-    VCODEC_DEC_ERROR_T (*pfnDecodeOneUnit)        (IN HANDLE                             /* hCodec */, 
+
+    VCODEC_DEC_ERROR_T (*pfnDecodeOneUnit)        (IN HANDLE                             /* hCodec */,
                                                       IN VCODEC_DEC_INPUT_T *            /* prInput */
-                                                      );  
-                                                      
-    VCODEC_DEC_ERROR_T (*pfnGetNextDisplay)       (IN HANDLE                             /* hCodec */,                                                       
+                                                      );
+
+    VCODEC_DEC_ERROR_T (*pfnGetNextDisplay)       (IN HANDLE                             /* hCodec */,
                                                       OUT VCODEC_DEC_PRIVATE_OUTPUT_T *  /* prPrivOutput */
                                                       );
 
 	VCODEC_DEC_ERROR_T (*pfnGetMemoryRequiredExtend)(IN    VCODEC_DEC_INPUT_T *              /* prInput */ ,
-                                                OUT   VCODEC_MEMORY_SIZE_T *             /* prMemSize */, 
+                                                OUT   VCODEC_MEMORY_SIZE_T *             /* prMemSize */,
                                                 OUT   VCODEC_DEC_YUV_BUFFER_PARAM_EXTEND_T *   /* prBufferParameter*/,
                                                 OUT   VCODEC_DEC_BITSTREAM_PARAM_T *          /*prBitStreamParameter */,
 													  INOUT void *         						/* reserve */
@@ -626,7 +631,7 @@ typedef struct
     VCODEC_FRAME_TYPE_T 		 eFrameType;
     VCODEC_BUFFER_T           	 rBitstreamAddr;          // added to merge remained individual parameters in the phototype
     unsigned int             	 u4BitstreamLength;
-    int                          fgEndOfFrame;    
+    int                          fgEndOfFrame;
     void                         *prChassis;
     VCODEC_ENC_CODEC_TYPE_T      eCodecType;
     UINT64                       u8TimeStamp;
@@ -636,27 +641,27 @@ typedef struct
 {
   	VCODEC_BUFFER_T rStartAddr;
     VCODEC_BUFFER_T rEndAddr;
-    VCODEC_BUFFER_T rWriteAddr; 
+    VCODEC_BUFFER_T rWriteAddr;
     VCODEC_BUFFER_T rReadAddr;
     unsigned int    u4BufferLength;
 } VCODEC_ENC_BUFFER_INFO_T;
 
 
-typedef enum  
+typedef enum
 {
-    INPUT_FLAG_YUVBUFFER     = 0x01,    
+    INPUT_FLAG_YUVBUFFER     = 0x01,
     INPUT_FLAG_NO_INPUT      = 0x02,
     INPUT_FLAG_NO_MORE_INPUT = 0x03,
     INPUT_FLAG_MAX_ENC
 } VCODEC_ENC_INPUT_FLAG_T;
 
-typedef struct 
+typedef struct
 {
     VCODEC_BUFFER_T rYUVBuffer;
     unsigned int u4Length;
 } VCODEC_ENC_INPUT_INFO_T;
 
-typedef struct 
+typedef struct
 {
 	VCODEC_BUFFER_T rYBuffer;
 	VCODEC_BUFFER_T rUBuffer;
@@ -669,7 +674,7 @@ typedef struct
 {
     UINT64                   u8TimeStamp;
     VCODEC_ENC_INPUT_FLAG_T  eFlags;
-    VCODEC_ENC_INPUT_INFO_T  rInput;  
+    VCODEC_ENC_INPUT_INFO_T  rInput;
 } VCODEC_ENC_INPUT_PARAM_T;
 
 typedef struct
@@ -707,7 +712,7 @@ typedef enum
 	VCODEC_ENC_PARAM_IS_BLOCKBASED_YUV,
     VCODEC_ENC_PARAM_DECODER_CONFIGURATION_RECORD,
 
-	VCODEC_ENC_PARAM_IF_ADAPTOR_MODIFY_TIMESTAMP,		
+	VCODEC_ENC_PARAM_IF_ADAPTOR_MODIFY_TIMESTAMP,
 	VCODEC_ENC_PARAM_WIDTH,
 	VCODEC_ENC_PARAM_HEIGHT,
 	VCODEC_ENC_PARAM_BITRATE,
@@ -731,10 +736,16 @@ typedef enum
 	VCODEC_ENC_PARAM_SET_NO_MORE_INPUT,
 	VCODEC_ENC_PARAM_NUM_OF_HW_CTRL_THID,
 	VCODEC_ENC_PARAM_GET_REG_HW_CTRL_THID, //Get registered HW control thread id , output structure : VCODEC_REG_HW_CTRL_THID_T
-	VCODEC_ENC_PARAM_SET_COLOR_FORMAT,	
-	VCODEC_ENC_PARAM_SET_YUV_STRIDE_ALIGNMENT,	
+	VCODEC_ENC_PARAM_SET_COLOR_FORMAT,
+	VCODEC_ENC_PARAM_SET_YUV_STRIDE_ALIGNMENT,
 	VCODEC_ENC_PARAM_SET_AVAILABLE_CPU_NUM,
 	VCODEC_ENC_PARAM_SET_MCI,            //enable or disable MCI mechanism
+	VCODEC_ENC_PARAM_WPP,
+    VCODEC_ENC_PARAM_CONSTQ,
+    VCODEC_ENC_PARAM_RC_VERSION,
+    VCODEC_ENC_PARAM_INIT_QP,
+    VCODEC_ENC_PARAM_MAX_QP,
+    VCODEC_ENC_PARAM_MIN_QP,
 	NUM_OF_ENC_PARAM_TYPE
 } VCODEC_ENC_PARAM_TYPE_T;
 
@@ -744,7 +755,7 @@ typedef enum
   VCODEC_ENC_QUERY_INFO_FRAMES_QUEUED,           // Number of frames waited to encoder
   VCODEC_ENC_QUERY_INFO_VTBUFFER_FULLNESS_DENOM, // Denominator of VT buffer fullness
   VCODEC_ENC_QUERY_INFO_VTBUFFER_FULLNESS_NUM,   // Numerator of VT buffer fullness
-  
+
   VCODEC_ENC_QUERY_INFO_INIT_Q,                  // Used by codec
   VCODEC_ENC_QUERY_INFO_MIN_QP,                  // Used by codec
   VCODEC_ENC_QUERY_INFO_MAX_QP,                  // Used by codec
@@ -803,52 +814,52 @@ typedef enum
 
 typedef struct
 {
-                                               
-    void         (*pfnMalloc)                        (IN HANDLE                             /* hDrv */, 
-                                                    IN unsigned int                       /* u4Size */, 
+
+    void         (*pfnMalloc)                        (IN HANDLE                             /* hDrv */,
+                                                    IN unsigned int                       /* u4Size */,
 													      IN unsigned int                       /*u4AlignSize*/,
-                                                      IN VCODEC_MEMORY_TYPE_T                     /* fgCacheable */, 
+                                                      IN VCODEC_MEMORY_TYPE_T                     /* fgCacheable */,
                                                       OUT VCODEC_BUFFER_T *                  /* prBuf */
-                                                      );   /*buffer address must cache line align */ 
+                                                      );   /*buffer address must cache line align */
 
-    void         (*pfnIntMalloc)                      (IN HANDLE                             /* hDrv */, 
-                                                     IN unsigned int                       /* u4Size */, 
+    void         (*pfnIntMalloc)                      (IN HANDLE                             /* hDrv */,
+                                                     IN unsigned int                       /* u4Size */,
 													       IN unsigned int                       /*u4AlignSize*/,
-                                                      OUT VCODEC_BUFFER_T*                       /* prBuffer_adr */	
-                                                      );   
+                                                      OUT VCODEC_BUFFER_T*                       /* prBuffer_adr */
+                                                      );
 
 
-    void         (*pfnFree)                          (IN HANDLE                             /* hDrv */, 
+    void         (*pfnFree)                          (IN HANDLE                             /* hDrv */,
                                                       IN VCODEC_BUFFER_T *                   /* prBuf */
-                                                      );  /* same memory type with malloc */  
-                                                      
+                                                      );  /* same memory type with malloc */
 
-    void         (*pfnIntFree)                          (IN HANDLE                             /* hDrv */, 
+
+    void         (*pfnIntFree)                          (IN HANDLE                             /* hDrv */,
                                                       IN VCODEC_BUFFER_T *                   /* prBuffer_adr */
-                                                      );  
-	
-	void         (*pfnReleaseYUV)                    (IN HANDLE                             /* hDrv */, 
+                                                      );
+
+	void         (*pfnReleaseYUV)                    (IN HANDLE                             /* hDrv */,
                                                       IN VCODEC_BUFFER_T *                   /* prYUVBuf */
                                                       );
-                                                      
+
     void         (*pfnPaused)                        (IN HANDLE                              /* hDrv */,
                                                       IN VCODEC_BUFFER_T *                    /* prBitstreamBuf */
                                                       );
-                                                      
+
     void         (*pfnAllocateBitstreamBuffer)       (IN HANDLE                              /* hDrv */,
                                                       OUT VCODEC_ENC_BUFFER_INFO_T *      /* prBitstreamBuf */
                                                       );
-                                                      
+
     void         (*pfnUpdateBitstreamWP)             (IN HANDLE                               /* hDrv */,
                                                       IN VCODEC_ENC_UPDATE_WP_INTO_T *     /* prUpdateWritePointer */
-                                                      ); 
+                                                      );
     VCODEC_ENC_ERROR_T	(*pfnQueryInfo)                      (IN HANDLE                              /* hDrv */,
                                                      IN VCODEC_ENC_QUERY_INFO_TYPE_T        /* query id*/,
 															OUT void *                           /* pvParamData*/
-                                                      ); 
+                                                      );
 
-                                                         
-} VCODEC_ENC_CALLBACK_T; 
+
+} VCODEC_ENC_CALLBACK_T;
 
 // non-callback
 typedef struct
@@ -859,7 +870,7 @@ typedef struct
     VCODEC_ENC_BUFFER_INFO_T     pBuffInfo;
     VCODEC_COLOR_FORMAT_T	     eVEncFormat;
     unsigned int                 u4Width;
-    unsigned int                 u4Height;    
+    unsigned int                 u4Height;
 } VIDEO_ENCODER_INPUT_PARAM_NC_T;
 
 typedef struct
@@ -926,38 +937,38 @@ typedef struct
     VCODEC_ENC_ERROR_T (*pfnGetMemoryRequired)(IN VCODEC_ENC_SETTING_T     *,     /*prInput*/
                                                 OUT VCODEC_MEMORY_SIZE_T *          /*prExternalSize*/
                                                 );
-                                                 
+
     VCODEC_ENC_ERROR_T (*pfnOpen)             (IN HANDLE                            /*  hDrv  */,
                                                   IN VCODEC_ENC_CALLBACK_T *        /* pfnCallback */,
                                                   OUT HANDLE *                          /* hCodec */
-                                                  );                                    
-                                                                                        
+                                                  );
+
     VCODEC_ENC_ERROR_T (*pfnInit)             (IN HANDLE                            /* hCodec */
-                                                  );                                    
-                                                                                        
+                                                  );
+
     VCODEC_ENC_ERROR_T (*pfnGetParameter)     (IN HANDLE                            /* hCodec */,
                                                   IN VCODEC_ENC_PARAM_TYPE_T       /*VIDEO_ENC_MEMORY_T,*/,
                                                   OUT void *                           /* pvParamData */
-                                                  );                                    
-                                                                                        
+                                                  );
+
     VCODEC_ENC_ERROR_T (*pfnSetParameter)     (IN HANDLE                            /* hCodec */,
                                                   IN VCODEC_ENC_PARAM_TYPE_T        /* rEncodeParam*/, /*VCODEC_ENC_QUALITY_T,VCODEC_ENC_CODEC_T,VIDEO_CODEC_ROTATE_ANGLE_T,*/
-                                                  IN void *                            /* pvParamData */   
-                                                  );                                    
-                                                                                        
+                                                  IN void *                            /* pvParamData */
+                                                  );
+
     VCODEC_ENC_ERROR_T (*pfnGenerateHeader)   (IN HANDLE                             /* hCodec */
-                                                 );                                     
-                                                
+                                                 );
+
     VCODEC_ENC_ERROR_T (*pfnEncodeOneUnit)    (IN HANDLE                             /* hCodec */,
                                                   IN void *                          /*prInput*/  /*VCODEC_ENC_QUALITY_T,VCODEC_ENC_CODEC_T,VIDEO_CODEC_ROTATE_ANGLE_T,*/
-                                                  );                                    
+                                                  );
     VCODEC_ENC_ERROR_T (*pfnDeInit)           (IN HANDLE                             /* hCodec */
-                                                  );                                    
-                                                                                        
+                                                  );
+
     VCODEC_ENC_ERROR_T (*pfnClose)            (IN HANDLE                             /* hCodec */
                                                   );
-    
-    VCODEC_ENC_ERROR_T (*pfnGetNextBitstream) (IN HANDLE                             /* hCodec */,   
+
+    VCODEC_ENC_ERROR_T (*pfnGetNextBitstream) (IN HANDLE                             /* hCodec */,
                                                   OUT VCODEC_ENC_GENERAL_OUTPUT_T*   /* prPrivOutput*/
                                                   );
 } VCODEC_ENC_API_T;
@@ -983,7 +994,7 @@ typedef struct
 VCODEC_ENC_ERROR_T MPEG4EncoderGenerateVTHeader(
                             IN    MPEG4_VT_ENCODER_GEN_VT_HEADER_INPUT_T *prInput,
                             OUT   unsigned int                        *pu4EncodedSize
-                                                 );                                                  
+                                                 );
 
 
 

@@ -34,6 +34,7 @@
 
 #define WMT_IC_NAME_MT6620 "MT6620"
 #define WMT_IC_NAME_MT6628 "MT6628"
+#define WMT_IC_NAME_MT6630 "MT6630"
 
 
 #define WMT_IC_VER_E1 "E1"
@@ -42,6 +43,7 @@
 #define WMT_IC_VER_E4 "E4"
 #define WMT_IC_VER_E5 "E5"
 #define WMT_IC_VER_E6 "E6"
+#define WMT_IC_VER_E7 "E7"
 
 #define WMT_IC_PATCH_DUMMY_EXT "_ex"
 #define WMT_IC_PATCH_NO_EXT ""

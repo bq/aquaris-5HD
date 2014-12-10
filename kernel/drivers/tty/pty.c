@@ -21,7 +21,6 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/init.h>
-#include <linux/sysctl.h>
 #include <linux/device.h>
 #include <linux/uaccess.h>
 #include <linux/bitops.h>
@@ -50,7 +49,6 @@ static void pty_close(struct tty_struct *tty, struct file *filp)
         tty->peer_stops = 0;    
 	if (!tty->link)
 		return;
-	tty->link->packet = 0;
         tty->link->peer_stops = 0;
 	set_bit(TTY_OTHER_CLOSED, &tty->link->flags);
 	wake_up_interruptible(&tty->link->read_wait);
@@ -444,13 +442,7 @@ static inline void legacy_pty_init(void) { }
 
 /* Unix98 devices */
 #ifdef CONFIG_UNIX98_PTYS
-/*
- * sysctl support for setting limits on the number of Unix98 ptys allocated.
- * Otherwise one can eat up all kernel memory by opening /dev/ptmx repeatedly.
- */
-int pty_limit = NR_UNIX98_PTY_DEFAULT;
-static int pty_limit_min;
-static int pty_limit_max = NR_UNIX98_PTY_MAX;
+
 static int tty_count;
 static int pty_count;
 
@@ -465,43 +457,6 @@ static inline void pty_dec_count(void)
 }
 
 static struct cdev ptmx_cdev;
-
-static struct ctl_table pty_table[] = {
-	{
-		.procname	= "max",
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.data		= &pty_limit,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &pty_limit_min,
-		.extra2		= &pty_limit_max,
-	}, {
-		.procname	= "nr",
-		.maxlen		= sizeof(int),
-		.mode		= 0444,
-		.data		= &pty_count,
-		.proc_handler	= proc_dointvec,
-	}, 
-	{}
-};
-
-static struct ctl_table pty_kern_table[] = {
-	{
-		.procname	= "pty",
-		.mode		= 0555,
-		.child		= pty_table,
-	},
-	{}
-};
-
-static struct ctl_table pty_root_table[] = {
-	{
-		.procname	= "kernel",
-		.mode		= 0555,
-		.child		= pty_kern_table,
-	},
-	{}
-};
 
 #define TCOOFF 0
 #define TCOON 1
@@ -694,6 +649,9 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 
 	nonseekable_open(inode, filp);
 
+	/* We refuse fsnotify events on ptmx, since it's a shared resource */
+	filp->f_mode |= FMODE_NONOTIFY;
+
 	retval = tty_alloc_file(filp);
 	if (retval)
 		return retval;
@@ -793,8 +751,6 @@ static void __init unix98_pty_init(void)
 		panic("Couldn't register Unix98 ptm driver");
 	if (tty_register_driver(pts_driver))
 		panic("Couldn't register Unix98 pts driver");
-
-	register_sysctl_table(pty_root_table);
 
 	/* Now create the /dev/ptmx special device */
 	tty_default_fops(&ptmx_fops);

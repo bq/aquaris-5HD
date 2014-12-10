@@ -58,6 +58,15 @@ typedef enum EIndex_ISO
     eNUM_OF_ISO_IDX
 } EIndex_ISO_T;
 
+// CCM index
+typedef enum EIndex_CCM
+{
+    eIDX_CCM_D65  = 0,
+    eIDX_CCM_TL84,
+    eIDX_CCM_CWF,
+    eIDX_CCM_A,
+    eIDX_CCM_NUM
+} EIndex_CCM_T;
 
 // PCA LUT index
 typedef enum EIndex_PCA_LUT
@@ -113,7 +122,7 @@ public:
 
     //MINT32              i4CCT;              //  color temperature.
     EIndex_PCA_LUT_T    eIdx_PCA_LUT;       // Index for PCA
-    //EIndex_CCM_CCT_T    eIdx_CCM_CCT;       //  CT index for CCM.
+    EIndex_CCM_T    eIdx_CCM;       //  index for CCM.
     EIndex_Shading_CCT_T    eIdx_Shading_CCT;       //  CT index for Shading.
     AWB_INFO_T rAWBInfo; // AWB info for ISP tuning
     AE_INFO_T rAEInfo; // AE info for ISP tuning
@@ -141,7 +150,7 @@ public:
         , u4ISOValue(0)
         , eIdx_ISO(eIDX_ISO_100)
         , eIdx_PCA_LUT(eIDX_PCA_LOW)
-        //, eIdx_CCM_CCT(eIDX_CCM_CCT_BEGIN)
+        , eIdx_CCM(eIDX_CCM_D65)
         , eIdx_Shading_CCT(eIDX_Shading_CCT_CWF)
         , rAWBInfo()
         , i4ZoomRatio_x100(0)

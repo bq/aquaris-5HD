@@ -36,7 +36,6 @@ SEC_CRYPTO_SIGNATURE_TYPE g_sig_type = SEC_CRYPTO_SIG_RSA1024;
 static unsigned int g_fb_chunk_size = 0x1000000; //default is 16MB
 #define FIX_FB_PADDING_HEADER_SIZE 0x4000 //default is 16KB
 
-
 /**************************************************************************
  *  INTERNAL UTILITES
  **************************************************************************/
@@ -211,6 +210,7 @@ int imp_cfg(char *cfg_name, SEC_IMG_HEADER *sec)
     SEC_EXTENTION_CFG *p_ext_cfg = (SEC_EXTENTION_CFG *)get_ext_cfg();    
     bool b_ext_offset[MAX_VERITY_COUNT] = {0};
     bool b_ext_length[MAX_VERITY_COUNT] = {0};
+    unsigned int sign_hdr_version = 0;
 
     p_ext_cfg->chunk_size = SEC_CHUNK_SIZE_ZERO;
     
@@ -256,9 +256,9 @@ int imp_cfg(char *cfg_name, SEC_IMG_HEADER *sec)
                 if (strlen(VERIFY_OFFSET) != strlen(r0))
                 {
                     sscanf(r0, "VERIFY_OFFSET[%d]", &tmp);
-                    p_ext_cfg->verify_offset[tmp] = atoi(r2);
+                    p_ext_cfg->verify_offset[tmp] = atoll(r2);
                     b_ext_offset[tmp] = TRUE;
-                    MSG("[%s] VERIFY_OFFSET[%d]=%d\n",MOD, tmp, p_ext_cfg->verify_offset[tmp]);
+                    MSG("[%s] VERIFY_OFFSET[%d]=%lld\n",MOD, tmp, p_ext_cfg->verify_offset[tmp]);
                 }
                 else
                 {
@@ -270,9 +270,9 @@ int imp_cfg(char *cfg_name, SEC_IMG_HEADER *sec)
                 if (strlen(VERIFY_LENGTH) != strlen(r0))
                 {
                     sscanf(r0, "VERIFY_LENGTH[%d]", &tmp);
-                    p_ext_cfg->verify_length[tmp] = atoi(r2);
+                    p_ext_cfg->verify_length[tmp] = atoll(r2);
                     b_ext_length[tmp] = TRUE;
-                    MSG("[%s] VERIFY_LENGTH[%d]=%d\n",MOD, tmp, p_ext_cfg->verify_length[tmp]);
+                    MSG("[%s] VERIFY_LENGTH[%d]=%lld\n",MOD, tmp, p_ext_cfg->verify_length[tmp]);
                 }
                 else
                 {
@@ -295,6 +295,11 @@ int imp_cfg(char *cfg_name, SEC_IMG_HEADER *sec)
                 g_fb_chunk_size = atoi(r2); 
                 MSG("[%s] FB_CHUNK_SIZE=%d\n",MOD, g_fb_chunk_size);
             }
+            else if ( 0 == mcmp(r0,CFG_VERSION,strlen(CFG_VERSION)))
+            {
+                sign_hdr_version = atoi(r2); 
+                MSG("[%s] CFG_VERSION=%d\n",MOD, sign_hdr_version);
+            }
             else if (';' == r0[0])
             {
     
@@ -310,8 +315,13 @@ int imp_cfg(char *cfg_name, SEC_IMG_HEADER *sec)
             }            
         }
 
+        if( sign_hdr_version >= 4 )
+        {
+            set_hdr_version( (SEC_IMG_HEADER_VER)(SEC_HDR_V1 + sign_hdr_version) );
+        }
+
         /* check config format for v3 */
-        if( is_hdr_version3() )
+        if( is_hdr_version3() || is_hdr_version4())
         {
             for(i=0 ; i<p_ext_cfg->verify_count ; i++)
             {
@@ -333,6 +343,9 @@ int imp_cfg(char *cfg_name, SEC_IMG_HEADER *sec)
 int gen_hdr (char *cfg_name, char *hdr_name, char* img_name, char *hs_name)
 {
     SEC_IMG_HEADER sec = {0};
+    SEC_IMG_HEADER_V4 sec_v4 = {0};
+    int temp_file_fd;
+    struct stat temp_file_stat;
 
     if( 0!= imp_cfg(cfg_name, &sec))
     {
@@ -343,6 +356,7 @@ int gen_hdr (char *cfg_name, char *hdr_name, char* img_name, char *hs_name)
     /* fill and write header                 */
     /* ------------------------------------- */  
     COMPILE_ASSERT(SEC_IMG_HDR_SZ == sizeof(sec));
+    COMPILE_ASSERT(SEC_IMG_HDR_SZ == sizeof(sec_v4));
     
     FILE *hdr_fd = fopen(hdr_name,"wb");
 
@@ -353,44 +367,101 @@ int gen_hdr (char *cfg_name, char *hdr_name, char* img_name, char *hs_name)
         MSG("[%s] %s not found\n",MOD,img_name);
         goto img_err;
     }    
-    fseek(img_fd, 0, SEEK_END);
-    sec.img_len = ftell(img_fd);
-    fclose(img_fd);
-    sec.magic_num = SEC_IMG_MAGIC;
-    sec.img_off = SEC_IMG_HDR_SZ;
-    sec.sig_off = sec.img_off + sec.img_len;
-
-    if( is_hdr_version3() )
+    temp_file_fd = fileno(img_fd);
+    fstat(temp_file_fd, &temp_file_stat);
+    if( is_hdr_version4() )
     {
-        /* config header for v3 */
-        if(config_header_v3_chk(&sec))
-            goto check_err;
+        sec_v4.magic_num = SEC_IMG_MAGIC;
+        mcpy(sec_v4.cust_name,sec.cust_name,sizeof(sec.cust_name)); 
+        sec_v4.image_verion = sec.img_ver; 
+        sec_v4.image_offset = SEC_IMG_HDR_SZ; 
+        sec_v4.image_length_high = ((temp_file_stat.st_size&0xFFFFFFFF00000000ULL) >> 32) & 0x00000000FFFFFFFFULL;
+        sec_v4.image_length_low = (long long)temp_file_stat.st_size & 0x00000000FFFFFFFFULL;
+        MSG("[%s] size of '%s' is '0x%llx'\n",MOD,img_name,temp_file_stat.st_size);
+        MSG("[%s] size of '%s' is '0x%llx' (0x%x, 0x%x)\n",MOD,img_name,temp_file_stat.st_size,sec_v4.image_length_high,sec_v4.image_length_low);
     }
     else
     {
-        /* config header for v1 and v2 */
-        if(config_header_v1_v2_chk(&sec))
-            goto check_err;
+        sec.img_len = temp_file_stat.st_size;    
+        MSG("[%s] size of '%s' is '0x%x'\n",MOD,img_name,sec.img_len);
+        sec.magic_num = SEC_IMG_MAGIC;
+        sec.img_off = SEC_IMG_HDR_SZ;
+        sec.sig_off = sec.img_off + sec.img_len;
     }
+
+    fclose(img_fd);
+
+    if( is_hdr_version4() )
+    {
+        SEC_EXTENTION_CFG *p_ext_cfg = (SEC_EXTENTION_CFG *)get_ext_cfg();
+        unsigned long long img_length = sec_v4.image_length_high;
+        img_length = (img_length << 32) & 0xFFFFFFFF00000000ULL;
+        img_length += sec_v4.image_length_low;
+        
+        sec_v4.signature_length = get_sigature_size(g_sig_type)+get_hash_size(g_hash_type);
+        sec_v4.ext_magic = SEC_EXTENSION_MAGIC_V4;
+        sec_v4.ext_hdr_length = 0;
     
+        /* config header for v4 */
+        if(config_header_v3_chk(img_length))
+            goto check_err;
+        
+        /* ------------------------------------- */
+        /* write to image                        */
+        /* ------------------------------------- */    
+        fwrite (&sec_v4, 1 , sizeof(sec_v4) , hdr_fd);      
 
-    /* ------------------------------------- */
-    /* write to image                        */
-    /* ------------------------------------- */    
-    fwrite (&sec, 1 , sizeof(sec) , hdr_fd);      
+        /* ------------------------------------- */
+        /* dump information                      */
+        /* ------------------------------------- */    
+        MSG("[%s] hdr_v4.magic_num          = 0x%x\n",MOD,sec_v4.magic_num,sec_v4.magic_num);
+        MSG("[%s] hdr_v4.cust_name          = %s\n",MOD,sec_v4.cust_name); 
+        MSG("[%s] hdr_v4.image_verion       = %d (0x%x)\n",MOD,sec_v4.image_verion,sec_v4.image_verion);    
+        MSG("[%s] hdr_v4.signature_length   = %d (0x%x)\n",MOD,sec_v4.signature_length,sec_v4.signature_length); 
+        MSG("[%s] hdr_v4.image_offset       = %d (0x%x)\n",MOD,sec_v4.image_offset,sec_v4.image_offset);    
+        MSG("[%s] hdr_v4.ext_magic          = %d (0x%x)\n",MOD,sec_v4.ext_magic,sec_v4.ext_magic);     
+        MSG("[%s] hdr_v4.ext_hdr_length     = %d (0x%x)\n",MOD,sec_v4.ext_hdr_length,sec_v4.ext_hdr_length);     
+        MSG("[%s] hdr_v4.image_length       = %lld (0x%llx)\n",MOD,img_length,img_length);        
+    }
+    else 
+    {
+        if( is_hdr_version3() )
+        {
+            unsigned long long img_length = sec.img_len & 0xFFFFFFFFULL;
+            
+            sec.sig_len = get_sigature_size(g_sig_type)+get_hash_size(g_hash_type);
+            
+            sec.s_off = SEC_EXTENSION_MAGIC;
+            sec.s_len = SEC_EXTENSION_MAGIC;
+        
+            /* config header for v3 */
+            if(config_header_v3_chk(img_length))
+                goto check_err;
+        }
+        else
+        {
+            /* config header for v1 and v2 */
+            if(config_header_v1_v2_chk(&sec))
+                goto check_err;
+        }
+        /* ------------------------------------- */
+        /* write to image                        */
+        /* ------------------------------------- */    
+        fwrite (&sec, 1 , sizeof(sec) , hdr_fd);      
 
-    /* ------------------------------------- */
-    /* dump information                      */
-    /* ------------------------------------- */    
-    MSG("[%s] hdr.magic_num     = 0x%x\n",MOD,sec.magic_num,sec.magic_num);
-    MSG("[%s] hdr.cust_name     = %s\n",MOD,sec.cust_name); 
-    MSG("[%s] hdr.img_ver       = %d (0x%x)\n",MOD,sec.img_ver,sec.img_ver);   
-    MSG("[%s] hdr.img_len       = %d (0x%x)\n",MOD,sec.img_len,sec.img_len);       
-    MSG("[%s] hdr.img_off       = %d (0x%x)\n",MOD,sec.img_off,sec.img_off);     
-    MSG("[%s] hdr.s_off         = %d (0x%x)\n",MOD,sec.s_off,sec.s_off);     
-    MSG("[%s] hdr.s_len         = %d (0x%x)\n",MOD,sec.s_len,sec.s_len);     
-    MSG("[%s] hdr.sig_off       = %d (0x%x)\n",MOD,sec.sig_off,sec.sig_off);         
-    MSG("[%s] hdr.sig_len       = %d (0x%x)\n",MOD,sec.sig_len,sec.sig_len);                
+        /* ------------------------------------- */
+        /* dump information                      */
+        /* ------------------------------------- */    
+        MSG("[%s] hdr.magic_num     = 0x%x\n",MOD,sec.magic_num,sec.magic_num);
+        MSG("[%s] hdr.cust_name     = %s\n",MOD,sec.cust_name); 
+        MSG("[%s] hdr.img_ver       = %d (0x%x)\n",MOD,sec.img_ver,sec.img_ver);   
+        MSG("[%s] hdr.img_len       = %d (0x%x)\n",MOD,sec.img_len,sec.img_len);       
+        MSG("[%s] hdr.img_off       = %d (0x%x)\n",MOD,sec.img_off,sec.img_off);     
+        MSG("[%s] hdr.s_off         = %d (0x%x)\n",MOD,sec.s_off,sec.s_off);     
+        MSG("[%s] hdr.s_len         = %d (0x%x)\n",MOD,sec.s_len,sec.s_len);     
+        MSG("[%s] hdr.sig_off       = %d (0x%x)\n",MOD,sec.sig_off,sec.sig_off);         
+        MSG("[%s] hdr.sig_len       = %d (0x%x)\n",MOD,sec.sig_len,sec.sig_len);      
+    }
 
 img_err:
 check_err:
@@ -464,7 +535,7 @@ int pro_img_v1_v2(char *hs_name, char *img_name,char *hdr_name)
         goto _err;
     }
        
-    fseek(img_fd,sec->s_off*sizeof(char),SEEK_SET);   
+    fseeko(img_fd,sec->s_off*sizeof(char),SEEK_SET);   
     
     br = fread(d_buf+SEC_IMG_HDR_SZ,1,sec->s_len,img_fd);
 
@@ -530,7 +601,7 @@ _err:
 
 #define DUMP_MORE_FOR_DEBUG 0
 
-int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
+static int gen_hash_by_chunk(FILE *img_fd, unsigned long long img_hash_off, unsigned long long img_hash_len,
     uchar *final_hash_buf, SEC_CRYPTO_HASH_TYPE hash_type, uint32 chunk_size)
 {
     uint32 br = 0;
@@ -538,11 +609,11 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
     uchar *chunk_buf = NULL;
     uchar *hash_tmp;
     uchar *hash_comb;
-    uint32 seek_pos = 0;
+    unsigned long long seek_pos = 0;
     uint32 hash_size = get_hash_size(hash_type);
-    uint32 chunk_count = ((img_hash_len-1)/chunk_size)+1;
+    unsigned long long chunk_count = ((img_hash_len-1)/chunk_size)+1;
     uint32 read_size = 0;
-    uint32 left_size = 0;
+    unsigned long long left_size = 0;
 
     if(!img_hash_len)
     {
@@ -555,10 +626,10 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
 
 #if DUMP_MORE_FOR_DEBUG    
     DBG("[%s] Hash size is %d (0x%x)\n",MOD, hash_size, hash_size);
-    DBG("[%s] Offset is %d (0x%x)\n",MOD, img_hash_off, img_hash_off);
-    DBG("[%s] Size is %d (0x%x)\n",MOD, img_hash_len, img_hash_len);
+    DBG("[%s] Offset is %lld (0x%llx)\n",MOD, img_hash_off, img_hash_off);
+    DBG("[%s] Size is %lld (0x%llx)\n",MOD, img_hash_len, img_hash_len);
     DBG("[%s] Chunk size is %d (0x%x)\n",MOD, chunk_size, chunk_size);
-    DBG("[%s] Chunk count is %d (0x%x)\n",MOD, chunk_count, chunk_count);
+    DBG("[%s] Chunk count is %lld (0x%llx)\n",MOD, chunk_count, chunk_count);
 #endif
 
     /* allocate hash buffer */    
@@ -574,17 +645,17 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
     seek_pos = img_hash_off;
     left_size = img_hash_len;
     read_size = (left_size>=chunk_size)?chunk_size:left_size;
-    fseek(img_fd,seek_pos*sizeof(char),SEEK_SET);  
+    fseeko(img_fd,seek_pos*sizeof(char),SEEK_SET);  
     br = fread(chunk_buf,1,read_size,img_fd);    
     if(br != read_size)
     {
-        MSG("[%s] read image content fail, read offset = '0x%x'\n",MOD,seek_pos);
+        MSG("[%s] read image content fail, read offset = '0x%llx'\n",MOD,seek_pos);
         ret = -2;
         goto end_error;  
     }
     if( cust_hash(chunk_buf,read_size,hash_tmp,hash_size) == -1)
     {
-        MSG("[%s] hash fail, offset is '0x%x'(A)\n",MOD,seek_pos);
+        MSG("[%s] hash fail, offset is '0x%llx'(A)\n",MOD,seek_pos);
         ret = -3;
         goto end_error;
     }
@@ -595,7 +666,7 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
     /* ------------------------------------- */    
     DBG("[%s] Data value(4 bytes) ==> (0x%x, 0x%x, 0x%x, 0x%x) \n",MOD, 
             chunk_buf[0], chunk_buf[1], chunk_buf[2], chunk_buf[3]);    
-    DBG("[%s] Hash value(single) (0x%x): \n",MOD, seek_pos);    
+    DBG("[%s] Hash value(single) (0x%llx): \n",MOD, seek_pos);    
     for(i=0;i<hash_size;i++)
     {
         DBG("0x%x,",hash_tmp[i]);
@@ -615,12 +686,12 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
     {
         /* load data */
         read_size = (left_size>=chunk_size)?chunk_size:left_size;
-        fseek(img_fd,seek_pos*sizeof(char),SEEK_SET);  
+        fseeko(img_fd,seek_pos*sizeof(char),SEEK_SET);  
         br = fread(chunk_buf,1,read_size,img_fd);   
             
         if(br != read_size)
         {
-            MSG("[%s] read image content fail, read offset = '0x%x'\n",MOD,seek_pos);
+            MSG("[%s] read image content fail, read offset = '0x%llx'\n",MOD,seek_pos);
             ret = -4;
             goto end_error;  
         }
@@ -628,7 +699,7 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
         /* caculate this hash */        
         if( cust_hash(chunk_buf,read_size,hash_tmp,hash_size) == -1)
         {
-            MSG("[%s] hash fail, offset is '0x%x'(B)\n",MOD,seek_pos);
+            MSG("[%s] hash fail, offset is '0x%llx'(B)\n",MOD,seek_pos);
             ret = -5;
             goto end_error;
         }
@@ -639,7 +710,7 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
         /* ------------------------------------- */  
         DBG("[%s] Data value(4 bytes) ==> (0x%x, 0x%x, 0x%x, 0x%x) \n",MOD, 
             chunk_buf[0], chunk_buf[1], chunk_buf[2], chunk_buf[3]);   
-        DBG("[%s] Hash value(single) (0x%x): \n",MOD, seek_pos);    
+        DBG("[%s] Hash value(single) (0x%llx): \n",MOD, seek_pos);    
         for(i=0;i<hash_size;i++)
         {
             DBG("0x%x,",hash_tmp[i]);
@@ -653,7 +724,7 @@ int gen_hash_by_chunk(FILE *img_fd, uint32 img_hash_off, uint32 img_hash_len,
         /* caculate compose hash */
         if( cust_hash(hash_comb,hash_size*2,hash_tmp,hash_size) == -1)
         {
-            MSG("[%s] hash fail, offset is '0x%x'(C)\n",MOD,seek_pos);
+            MSG("[%s] hash fail, offset is '0x%llx'(C)\n",MOD,seek_pos);
             ret = -6;
             goto end_error;
         }
@@ -703,7 +774,7 @@ end_error:
     return ret;
 }
 
-int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,char *ext_sparse_name)
+int pro_img_v3_v4(char *hs_name, char *img_name,char *hdr_name,char sparse_header,char *ext_sparse_name)
 {
     uint32 br = 0;
     uchar *d_buf = NULL;
@@ -712,11 +783,11 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
     uchar *sig;
     uchar *hash;    
     uint32 i = 0, ret = 0;    
-    SEC_IMG_HEADER *sec = NULL;
     SEC_EXTENTION_CFG *p_ext_cfg = (SEC_EXTENTION_CFG *)get_ext_cfg();  
     SEC_EXTENSTION_CRYPTO *crypto_ext = NULL;
     SEC_FRAGMENT_CFG *frag_ext = NULL;
     SEC_EXTENSTION_HASH_ONLY **hash_only_ext;
+    SEC_EXTENSTION_HASH_ONLY_64 **hash_only_ext_64;
     SEC_EXTENSTION_END_MARK *end_ext = NULL;
     SEC_EXTENSTION_SPARSE *sparse_ext = NULL;
     uint32 total_size = 0;
@@ -743,8 +814,6 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
 
     br = fread(c_buf,1,SEC_IMG_HDR_SZ,hdr_fd); /* read header */    
 
-    sec = (SEC_IMG_HEADER *)c_buf;
-
     if(br == 0)
     {
         MSG("\n[%s] read '%s' image hdr fail, read bytes = '%d'\n",MOD,hdr_name,br);
@@ -764,9 +833,9 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
             MSG("[%s] %s not found\n",MOD,ext_sparse_name);
             goto _init_sparse_fail;
         }
-        fseek(sparse_fd, 0, SEEK_END);
+        fseeko(sparse_fd, 0, SEEK_END);
         sparse_ext_flen = ftell(sparse_fd);
-        fseek(sparse_fd, 0, SEEK_SET);
+        fseeko(sparse_fd, 0, SEEK_SET);
         sparse_buf = (uchar*) malloc(sparse_ext_flen);
         
         br = fread(sparse_buf,1,sparse_ext_flen,sparse_fd);
@@ -790,10 +859,22 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
     /* ------------------------------------- */ 
     crypto_ext = (SEC_EXTENSTION_CRYPTO *) allocate_ext_crypto();
     frag_ext = (SEC_FRAGMENT_CFG *) allocate_ext_frag();
-    hash_only_ext = (SEC_EXTENSTION_HASH_ONLY **)malloc(p_ext_cfg->verify_count * sizeof(SEC_EXTENSTION_HASH_ONLY *));
-    for(i=0;i<p_ext_cfg->verify_count;i++)
+    
+    if( is_hdr_version4() )
     {
-        hash_only_ext[i] = (SEC_EXTENSTION_HASH_ONLY *) allocate_ext_hash_only(g_hash_type);
+        hash_only_ext_64 = (SEC_EXTENSTION_HASH_ONLY_64 **)malloc(p_ext_cfg->verify_count * sizeof(SEC_EXTENSTION_HASH_ONLY_64 *));
+        for(i=0;i<p_ext_cfg->verify_count;i++)
+        {
+            hash_only_ext_64[i] = (SEC_EXTENSTION_HASH_ONLY_64 *) allocate_ext_hash_only_64(g_hash_type);
+        }
+    }
+    else
+    {
+        hash_only_ext = (SEC_EXTENSTION_HASH_ONLY **)malloc(p_ext_cfg->verify_count * sizeof(SEC_EXTENSTION_HASH_ONLY *));
+        for(i=0;i<p_ext_cfg->verify_count;i++)
+        {
+            hash_only_ext[i] = (SEC_EXTENSTION_HASH_ONLY *) allocate_ext_hash_only(g_hash_type);
+        }
     }
     if(sparse_header)
     {
@@ -809,10 +890,21 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
     crypto_ext->enc_type = SEC_CRYPTO_ENC_UNKNOWN;
     frag_ext->frag_count = p_ext_cfg->verify_count;
     frag_ext->chunk_size = p_ext_cfg->chunk_size;
-    for(i=0;i<p_ext_cfg->verify_count;i++)
+    if( is_hdr_version4() )
+    { 
+        for(i=0;i<p_ext_cfg->verify_count;i++)
+        {
+            hash_only_ext_64[i]->hash_offset_64 = p_ext_cfg->verify_offset[i];
+            hash_only_ext_64[i]->hash_len_64 = p_ext_cfg->verify_length[i];
+        }
+    }
+    else
     {
-        hash_only_ext[i]->hash_offset = p_ext_cfg->verify_offset[i];
-        hash_only_ext[i]->hash_len = p_ext_cfg->verify_length[i];
+        for(i=0;i<p_ext_cfg->verify_count;i++)
+        {
+            hash_only_ext[i]->hash_offset = p_ext_cfg->verify_offset[i];
+            hash_only_ext[i]->hash_len = p_ext_cfg->verify_length[i];
+        }
     }
     if(sparse_header)
     {
@@ -845,21 +937,43 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
 
     for(i=0;i<p_ext_cfg->verify_count;i++)
     {
-        if(frag_ext->chunk_size == 0)
-        {
-            real_chunk_size = hash_only_ext[i]->hash_len;
+        if( is_hdr_version4() )
+        { 
+            if(frag_ext->chunk_size == 0)
+            {
+                real_chunk_size = hash_only_ext_64[i]->hash_len_64;
+            }
+            else
+            {
+                real_chunk_size = frag_ext->chunk_size;
+            }
+            if(gen_hash_by_chunk(img_fd, hash_only_ext_64[i]->hash_offset_64, hash_only_ext_64[i]->hash_len_64,
+                hash, hash_only_ext_64[i]->sub_type, real_chunk_size)!=0)
+            {
+                ret = -1;
+                goto _ext_hash_fail;
+            }
+            mcpy(hash_only_ext_64[i]->hash_data,hash,get_hash_size(g_hash_type));
+
         }
         else
         {
-            real_chunk_size = frag_ext->chunk_size;
+            if(frag_ext->chunk_size == 0)
+            {
+                real_chunk_size = hash_only_ext[i]->hash_len;
+            }
+            else
+            {
+                real_chunk_size = frag_ext->chunk_size;
+            }
+            if(gen_hash_by_chunk(img_fd, hash_only_ext[i]->hash_offset, hash_only_ext[i]->hash_len,
+                hash, hash_only_ext[i]->sub_type, real_chunk_size)!=0)
+            {
+                ret = -1;
+                goto _ext_hash_fail;
+            }
+            mcpy(hash_only_ext[i]->hash_data,hash,get_hash_size(g_hash_type));
         }
-        if(gen_hash_by_chunk(img_fd, hash_only_ext[i]->hash_offset, hash_only_ext[i]->hash_len,
-            hash, hash_only_ext[i]->sub_type, real_chunk_size)!=0)
-        {
-            ret = -1;
-            goto _ext_hash_fail;
-        }
-        mcpy(hash_only_ext[i]->hash_data,hash,get_hash_size(g_hash_type));
     }
 
     /* ------------------------------------- */
@@ -869,9 +983,17 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
                     p_ext_cfg->verify_count*get_hash_size(g_hash_type)+                            
                     sizeof(*crypto_ext)+
                     sizeof(*frag_ext)+
-                    p_ext_cfg->verify_count*get_ext_hash_only_struct_size(g_hash_type)+
                     sizeof(*end_ext);
-    
+
+    if( is_hdr_version4() )
+    { 
+        total_size += p_ext_cfg->verify_count*get_ext_hash_only_64_struct_size(g_hash_type);
+    }
+    else
+    {
+        total_size += p_ext_cfg->verify_count*get_ext_hash_only_struct_size(g_hash_type);
+    }
+
     if(sparse_header)
     {
         total_size += get_ext_sparse_struct_size(sparse_ext_flen);
@@ -885,8 +1007,15 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
     
     /* copy hash */
     for(i=0;i<p_ext_cfg->verify_count;i++)
-    {
-        mcpy(d_buf_prt,hash_only_ext[i]->hash_data,get_hash_size(g_hash_type));
+    {   
+        if( is_hdr_version4() )
+        { 
+            mcpy(d_buf_prt,hash_only_ext_64[i]->hash_data,get_hash_size(g_hash_type));
+        }
+        else
+        {
+            mcpy(d_buf_prt,hash_only_ext[i]->hash_data,get_hash_size(g_hash_type));
+        }
         d_buf_prt += get_hash_size(g_hash_type);
     }
     
@@ -901,8 +1030,16 @@ int pro_img_v3(char *hs_name, char *img_name,char *hdr_name,char sparse_header,c
     /* copy hash extension */
     for(i=0;i<p_ext_cfg->verify_count;i++)
     {
-        mcpy(d_buf_prt,hash_only_ext[i],get_ext_hash_only_struct_size(g_hash_type));
-        d_buf_prt += get_ext_hash_only_struct_size(g_hash_type);
+        if( is_hdr_version4() )
+        { 
+            mcpy(d_buf_prt,hash_only_ext_64[i],get_ext_hash_only_64_struct_size(g_hash_type));
+            d_buf_prt += get_ext_hash_only_64_struct_size(g_hash_type);
+        }
+        else
+        {
+            mcpy(d_buf_prt,hash_only_ext[i],get_ext_hash_only_struct_size(g_hash_type));
+            d_buf_prt += get_ext_hash_only_struct_size(g_hash_type);
+        }
     }
 
     /* copy sparse extension */
@@ -1000,7 +1137,14 @@ _img_read_fail:
     }
     free(frag_ext);
     free(crypto_ext);
-    free(hash_only_ext);
+    if( is_hdr_version4() )
+    { 
+        free(hash_only_ext_64);
+    }
+    else
+    {
+        free(hash_only_ext);
+    }
     free(hash);
     free(sig);
 _sparse_read_fail:  
@@ -1019,9 +1163,9 @@ _init_fail:
 
 int pro_img(char *hs_name, char *img_name,char *hdr_name,char sparse_header,char *ext_sparse_name)
 {
-    if( is_hdr_version3() )
+    if( is_hdr_version3() || is_hdr_version4() )
     {
-        return pro_img_v3(hs_name, img_name, hdr_name, sparse_header, ext_sparse_name);
+        return pro_img_v3_v4(hs_name, img_name, hdr_name, sparse_header, ext_sparse_name);
     }
     else
     {
@@ -1040,6 +1184,7 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     uint32 last_underscore_pot = 0;
     SEC_IMG_HEADER sec = {0};
     SEC_FB_HEADER fb_hdr = {0};
+    SEC_FB_HEADER_V2 fb_hdr_v2 = {0};
     uchar *fb_chunk_buffer = NULL;
     uchar *fb_multiple_hash_buffer = NULL;
     uchar *fb_signature_file_buffer = NULL;
@@ -1050,13 +1195,14 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     uint32 sig_size = get_sigature_size(g_sig_type);
     uchar *sig_buf = NULL;
     uchar *hash_buf = NULL;
-    uint32 left_size = 0;
+    unsigned long long left_size = 0;
     uint32 read_size = 0;
-    uint32 seek_pos = 0;
+    unsigned long long seek_pos = 0;
     uint32 br = 0;
     uint32 current_chunk_count = 0;
     int temp_file_fd;
     struct stat temp_file_stat;
+    unsigned long long input_img_length = 0;
 
     /* ------------------------------------- */
     /* generate the output file name from input_img file name */
@@ -1100,10 +1246,15 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     }    
     temp_file_fd = fileno(orig_img_fd);
     fstat(temp_file_fd, &temp_file_stat);
-    //fseek(orig_img_fd, 0, SEEK_END);
-    //fb_hdr.orig_img_size = ftell(orig_img_fd);
-    fb_hdr.orig_img_size = temp_file_stat.st_size;
-    MSG("[%s] size of '%s' is '0x%x'\n",MOD,original_img_name,fb_hdr.orig_img_size);
+    if( is_hdr_version4() )
+    {
+        fb_hdr_v2.orig_img_size_64 = temp_file_stat.st_size;
+        MSG("[%s] size of '%s' is '0x%llx'\n",MOD,original_img_name,fb_hdr_v2.orig_img_size_64);
+    }
+    else{
+        fb_hdr.orig_img_size = temp_file_stat.st_size;
+        MSG("[%s] size of '%s' is '0x%x'\n",MOD,original_img_name,fb_hdr.orig_img_size);
+    }
     fclose(orig_img_fd);
 
     /* ------------------------------------- */
@@ -1118,42 +1269,71 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     }    
     temp_file_fd = fileno(img_fd);
     fstat(temp_file_fd, &temp_file_stat);
-    //fseek(img_fd, 0, SEEK_END);
-    //sec.img_len = ftell(img_fd);
-    sec.img_len = temp_file_stat.st_size;
-    MSG("[%s] size of '%s' is '0x%x'\n",MOD,input_img,sec.img_len);
+    input_img_length = temp_file_stat.st_size;
+    MSG("[%s] size of '%s' is '0x%llx'\n",MOD,input_img,input_img_length);
 
     /* ------------------------------------- */
     /* reset for fb header */
     /* ------------------------------------- */ 
     sec.magic_num = FB_IMG_MAGIC;
-    fb_hdr.magic_num = FB_IMG_MAGIC;
-    fb_hdr.hdr_ver = 0x01;
-    fb_hdr.chunk_size = g_fb_chunk_size;
-    if(sec.img_len <= (g_fb_chunk_size-FIX_FB_PADDING_HEADER_SIZE))
+
+    MSG("[%s] sec.magic_num              = 0x%x\n",MOD,sec.magic_num,sec.magic_num);
+    MSG("[%s] sec.cust_name              = %s\n",MOD,sec.cust_name); 
+    MSG("[%s] sec.img_ver                = %d (0x%x)\n",MOD,sec.img_ver,sec.img_ver);     
+    MSG("[%s] sec.img_len                = %lld (0x%llx)\n",MOD,input_img_length,input_img_length);   
+    if( is_hdr_version4() )
     {
-        fb_hdr.hash_count = 1;
+        fb_hdr_v2.magic_num = FB_IMG_MAGIC;
+        fb_hdr_v2.hdr_ver = 0x02;
+        fb_hdr_v2.chunk_size = g_fb_chunk_size;
+        if(input_img_length <= (g_fb_chunk_size-FIX_FB_PADDING_HEADER_SIZE))
+        {
+            fb_hdr_v2.hash_count = 1;
+        }
+        else
+        {
+            fb_hdr_v2.hash_count = ((input_img_length-(g_fb_chunk_size-FIX_FB_PADDING_HEADER_SIZE)-1)/g_fb_chunk_size)+1+1;
+        }
+        fb_chunk_count = fb_hdr_v2.hash_count;
+        memcpy(fb_hdr_v2.part_name, input_img+last_slash_pot+1, last_underscore_pot-last_slash_pot-1);
+        
+        /* ------------------------------------- */
+        /* dump information */  
+        /* ------------------------------------- */ 
+        MSG("[%s] fb_hdr_v2.magic_num        = %d (0x%x)\n",MOD,fb_hdr_v2.magic_num,fb_hdr_v2.magic_num);     
+        MSG("[%s] fb_hdr_v2.hdr_ver          = %d (0x%x)\n",MOD,fb_hdr_v2.hdr_ver,fb_hdr_v2.hdr_ver);     
+        MSG("[%s] fb_hdr_v2.hash_count       = %d (0x%x)\n",MOD,fb_hdr_v2.hash_count,fb_hdr_v2.hash_count);         
+        MSG("[%s] fb_hdr_v2.chunk_size       = %d (0x%x)\n",MOD,fb_hdr_v2.chunk_size,fb_hdr_v2.chunk_size);        
+        MSG("[%s] fb_hdr_v2.part_name        = '%s' \n",MOD,fb_hdr_v2.part_name);    
+        MSG("[%s] fb_hdr_v2.orig_img_size_64 = %lld (0x%llx)\n",MOD,fb_hdr_v2.orig_img_size_64,fb_hdr_v2.orig_img_size_64); 
     }
     else
     {
-        fb_hdr.hash_count = ((sec.img_len-(g_fb_chunk_size-FIX_FB_PADDING_HEADER_SIZE)-1)/g_fb_chunk_size)+1+1;
+        fb_hdr.magic_num = FB_IMG_MAGIC;
+        fb_hdr.hdr_ver = 0x01;
+        fb_hdr.chunk_size = g_fb_chunk_size;
+        if(input_img_length <= (g_fb_chunk_size-FIX_FB_PADDING_HEADER_SIZE))
+        {
+            fb_hdr.hash_count = 1;
+        }
+        else
+        {
+            fb_hdr.hash_count = ((input_img_length-(g_fb_chunk_size-FIX_FB_PADDING_HEADER_SIZE)-1)/g_fb_chunk_size)+1+1;
+        }
+        fb_chunk_count = fb_hdr.hash_count;
+        memcpy(fb_hdr.part_name, input_img+last_slash_pot+1, last_underscore_pot-last_slash_pot-1);
+        
+        /* ------------------------------------- */
+        /* dump information */  
+        /* ------------------------------------- */  
+        MSG("[%s] fb_hdr.magic_num     = %d (0x%x)\n",MOD,fb_hdr.magic_num,fb_hdr.magic_num);     
+        MSG("[%s] fb_hdr.hdr_ver       = %d (0x%x)\n",MOD,fb_hdr.hdr_ver,fb_hdr.hdr_ver);     
+        MSG("[%s] fb_hdr.hash_count    = %d (0x%x)\n",MOD,fb_hdr.hash_count,fb_hdr.hash_count);         
+        MSG("[%s] fb_hdr.chunk_size    = %d (0x%x)\n",MOD,fb_hdr.chunk_size,fb_hdr.chunk_size);        
+        MSG("[%s] fb_hdr.part_name     = '%s' \n",MOD,fb_hdr.part_name);    
+        MSG("[%s] fb_hdr.orig_img_size = %d (0x%x)\n",MOD,fb_hdr.orig_img_size,fb_hdr.orig_img_size); 
     }
-    fb_chunk_count = fb_hdr.hash_count;
-    memcpy(fb_hdr.part_name, input_img+last_slash_pot+1, last_underscore_pot-last_slash_pot-1);
-
-    /* ------------------------------------- */
-    /* dump information */  
-    /* ------------------------------------- */ 
-    MSG("[%s] sec.magic_num        = 0x%x\n",MOD,sec.magic_num,sec.magic_num);
-    MSG("[%s] sec.cust_name        = %s\n",MOD,sec.cust_name); 
-    MSG("[%s] sec.img_ver          = %d (0x%x)\n",MOD,sec.img_ver,sec.img_ver);     
-    MSG("[%s] sec.img_len          = %d (0x%x)\n",MOD,sec.img_len,sec.img_len);   
-    MSG("[%s] fb_hdr.magic_num     = %d (0x%x)\n",MOD,fb_hdr.magic_num,fb_hdr.magic_num);     
-    MSG("[%s] fb_hdr.hdr_ver       = %d (0x%x)\n",MOD,fb_hdr.hdr_ver,fb_hdr.hdr_ver);     
-    MSG("[%s] fb_hdr.hash_count    = %d (0x%x)\n",MOD,fb_hdr.hash_count,fb_hdr.hash_count);         
-    MSG("[%s] fb_hdr.chunk_size    = %d (0x%x)\n",MOD,fb_hdr.chunk_size,fb_hdr.chunk_size);        
-    MSG("[%s] fb_hdr.part_name     = '%s' \n",MOD,fb_hdr.part_name);    
-    MSG("[%s] fb_hdr.orig_img_size = %d (0x%x)\n",MOD,fb_hdr.orig_img_size,fb_hdr.orig_img_size);        
+       
 
     /* ------------------------------------- */
     /* prepare fb chunk buffer */
@@ -1188,8 +1368,8 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     /* generate hash by fb chunk size*/
     /* ------------------------------------- */  
     seek_pos = 0;
-    fseek(img_fd, seek_pos, SEEK_SET);
-    left_size = sec.img_len;
+    fseeko(img_fd, seek_pos, SEEK_SET);
+    left_size = input_img_length;
     current_chunk_count = 0;
 
     /* loop hash */
@@ -1204,17 +1384,17 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
         {
             read_size = (left_size>=g_fb_chunk_size)?g_fb_chunk_size:left_size;
         }
-        fseek(img_fd,seek_pos*sizeof(char),SEEK_SET);  
+        fseeko(img_fd,seek_pos*sizeof(char),SEEK_SET);  
         br = fread(fb_chunk_buffer,1,read_size,img_fd);   
 
         DBG("[%s] chunk[%d], read size %d (0x%x) \n",MOD, current_chunk_count, read_size, read_size);   
 #if DUMP_FB_FOR_DEBUG
-        DBG("[%s] read pos 0x%x, read size %d (0x%x) \n",MOD, seek_pos, read_size, read_size);   
+        DBG("[%s] read pos 0x%llx, read size %d (0x%x) \n",MOD, seek_pos, read_size, read_size);   
 #endif
 
         if(br != read_size)
         {
-            MSG("[%s] read image content fail, read offset = '0x%x'\n",MOD,seek_pos);
+            MSG("[%s] read image content fail, read offset = '0x%llx'\n",MOD,seek_pos);
             MSG("[%s] read image content fail, try read = '0x%x', return = '0x%x'\n",MOD,read_size, br);
             MSG("[%s] read image content fail, errno = '%d', err str = '%s'\n",MOD,errno,strerror(errno));
             ret = -4;
@@ -1225,7 +1405,7 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
         /* caculate this hash */        
         if( cust_hash(fb_chunk_buffer,read_size,hash_buf,hash_size) == -1)
         {
-            MSG("[%s] hash fail, offset is '0x%x'(B)\n",MOD,seek_pos);
+            MSG("[%s] hash fail, offset is '0x%llx'(B)\n",MOD,seek_pos);
             ret = -5;
             goto _chunk_fb_hash_fail;
         }
@@ -1234,7 +1414,7 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
         /* dump hash value for debug             */
         DBG("[%s] (loop)Data value(4 bytes) ==> (0x%x, 0x%x, 0x%x, 0x%x) \n",MOD, 
             fb_chunk_buffer[0], fb_chunk_buffer[1], fb_chunk_buffer[2], fb_chunk_buffer[3]);   
-        DBG("[%s] (loop)Hash value (0x%x): \n",MOD, seek_pos);    
+        DBG("[%s] (loop)Hash value (0x%llx): \n",MOD, seek_pos);    
         for(i=0;i<hash_size;i++)
         {
             DBG("0x%x,",hash_buf[i]);
@@ -1254,7 +1434,14 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     /* ------------------------------------- */
     /* generate final hash */
     /* ------------------------------------- */ 
-    mcpy(fb_multiple_hash_buffer,&fb_hdr,SEC_IMG_HDR_SZ);
+    if( is_hdr_version4() )
+    {
+        mcpy(fb_multiple_hash_buffer,&fb_hdr_v2,SEC_IMG_HDR_SZ);
+    }
+    else
+    {
+        mcpy(fb_multiple_hash_buffer,&fb_hdr,SEC_IMG_HDR_SZ);
+    }
 #if DUMP_FB_FOR_DEBUG
     /* dump multiple hash buffer for debug             */ 
     DBG("[%s] (final)multiple hash header value : \n",MOD);    
@@ -1322,7 +1509,14 @@ int pro_fb_sig(char *input_img, char *cfg_name, char *output_hdr, char *original
     /* prepare fb signature file buffer*/
     /* ------------------------------------- */ 
     memset(fb_signature_file_buffer, 0x00, FB_SIG_FILE_SIZE);
-    mcpy(fb_signature_file_buffer,&fb_hdr,SEC_IMG_HDR_SZ);
+    if( is_hdr_version4() )
+    {    
+        mcpy(fb_signature_file_buffer,&fb_hdr_v2,SEC_IMG_HDR_SZ);
+    }
+    else
+    {
+        mcpy(fb_signature_file_buffer,&fb_hdr,SEC_IMG_HDR_SZ);
+    }
     mcpy(fb_signature_file_buffer+SEC_IMG_HDR_SZ,sig_buf,sig_size);
     mcpy(fb_signature_file_buffer+SEC_IMG_HDR_SZ+sig_size,hash_buf,hash_size);
     

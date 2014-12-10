@@ -24,6 +24,7 @@ typedef bool                MBOOL;
 #define CAM_PIPE_MGR_JIFFIES_MAX    (0xFFFFFFFF)
 #define CAM_PIPE_MGR_PROC_NAME      "Default"
 #define CAM_PIPE_MGR_SCEN_HW_AMOUNT (7)
+#define CAM_PIPE_MGR_TIMEOUT_MAX    (10*1000)
 //-----------------------------------------------------------------------------
 #define CAM_PIPE_MGR_PIPE_NAME_LEN          (10)
 #define CAM_PIPE_MGR_PIPE_NAME_CAM_IO       "CamIO"

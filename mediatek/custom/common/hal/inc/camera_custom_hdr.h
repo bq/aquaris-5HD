@@ -10,6 +10,17 @@
  **************************************************************************/
 // For HDR Customer Parameters
 
+// [capture policy]
+//     - When CUST_HDR_CAPTURE_POLICY==0,
+//          The capture size of each frame will be as same as the HDR output image size.
+//          If no special reason (ex. memory issues), this one will be a good choise.
+//     - When CUST_HDR_CAPTURE_POLICY==1,
+//          Use the sensor size as the maximum frame size.
+//          The HDR result will be scaled up to fit JPEG size later.
+//          This option can save memory when capture size is larger than sensor size.
+//          But the cost is a HDR with worse quality.
+#define CUST_HDR_CAPTURE_POLICY	0
+
 // [Core Number]
 //     - Value Range: 1(For single-core)/2(For multi-core).
 #define CUST_HDR_CORE_NUMBER	2
@@ -23,7 +34,7 @@
 //     - When CUST_HDR_CAPTURE_ALGORITHM==2,
 //          Always take 2 pictures
 #define CUST_HDR_CAPTURE_ALGORITHM   1
-#define CUST_HDR_NEOverExp_Percent   15
+#define CUST_HDR_NEOverExp_Percent   10
 
 // [Prolonged VD]
 //     - Value Range: 1(default)~ (depend on sensor characteristics).

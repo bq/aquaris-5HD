@@ -119,7 +119,15 @@
 #endif
 
 
+#define FIX_ALPS00409409406
+
+
+#ifdef FIX_ALPS00409409406
+    extern atomic_t fgIsUnderEarlierSuspend;
+#else
 extern BOOLEAN fgIsUnderEarlierSuspend;
+#endif
+
 
 /*******************************************************************************
 *                              C O N S T A N T S
@@ -163,6 +171,7 @@ extern BOOLEAN fgIsUnderEarlierSuspend;
 
 static int netdev_event(struct notifier_block *nb, unsigned long notification, void *ptr)
 {
+   struct in_device *in_dev;    /* ALPS00409409406 */
     UINT_8  ip[4] = { 0 };
     UINT_32 u4NumIPv4 = 0;
 //#ifdef  CONFIG_IPV6
@@ -194,13 +203,27 @@ static int netdev_event(struct notifier_block *nb, unsigned long notification, v
     }
     ASSERT(prGlueInfo);
 
-    if (fgIsUnderEarlierSuspend == false) {
-        DBGLOG(REQ, INFO, ("netdev_event: PARAM_MEDIA_STATE_DISCONNECTED. (%d)\n", prGlueInfo->eParamMediaStateIndicated));
-        return NOTIFY_DONE;
+#ifdef FIX_ALPS00409409406
+           // <3> get the IPv4 address    
+           in_dev = in_dev_get(prDev);
+           if (!in_dev)
+              return;
+           
+           //rtnl_lock();                  
+           if(!in_dev->ifa_list ||!in_dev->ifa_list->ifa_local) {
+                  //rtnl_unlock();
+                  in_dev_put(in_dev);
+                  DBGLOG(REQ, INFO, ("ip is not avaliable.\n"));
+                  return;
     }
+           // <4> copy the IPv4 address
+           kalMemCopy(ip, &(in_dev->ifa_list->ifa_local), sizeof(ip));
+           //rtnl_unlock();
+           in_dev_put(in_dev);
 
-
-
+           DBGLOG(REQ, INFO, ("ip is %d.%d.%d.%d\n",
+                   ip[0],ip[1],ip[2],ip[3]));
+#else
     // <3> get the IPv4 address
     if(!prDev || !(prDev->ip_ptr)||\
             !((struct in_device *)(prDev->ip_ptr))->ifa_list||\
@@ -212,6 +235,7 @@ static int netdev_event(struct notifier_block *nb, unsigned long notification, v
     kalMemCopy(ip, &(((struct in_device *)(prDev->ip_ptr))->ifa_list->ifa_local), sizeof(ip));
     DBGLOG(REQ, INFO, ("ip is %d.%d.%d.%d\n",
             ip[0],ip[1],ip[2],ip[3]));
+#endif
 
     // todo: traverse between list to find whole sets of IPv4 addresses
     if (!((ip[0] == 0) &&
@@ -219,6 +243,43 @@ static int netdev_event(struct notifier_block *nb, unsigned long notification, v
          (ip[2] == 0) &&
          (ip[3] == 0))) {
         u4NumIPv4++;
+    }
+
+#if defined(MTK_WLAN_ARP_OFFLOAD)
+	if(NETDEV_UP == notification && PARAM_MEDIA_STATE_CONNECTED == prGlueInfo->eParamMediaStateIndicated){
+		PARAM_CUSTOM_SW_CTRL_STRUC_T SwCtrlInfo;
+		UINT_32 u4SetInfoLen;
+		WLAN_STATUS rStatus = WLAN_STATUS_FAILURE;
+		
+		SwCtrlInfo.u4Id = 0x90110000;
+		SwCtrlInfo.u4Data = 1;
+		
+		rStatus = kalIoctl(prGlueInfo,
+                wlanoidSetSwCtrlWrite,
+                (PVOID)&SwCtrlInfo,
+                sizeof(SwCtrlInfo),
+                FALSE,
+                FALSE,
+                TRUE,
+                FALSE,
+                &u4SetInfoLen);
+
+     if (rStatus != WLAN_STATUS_SUCCESS) {
+       		DBGLOG(REQ, INFO, ("ARP OFFLOAD fail 0x%lx\n", rStatus));
+     }else{
+       		DBGLOG(REQ, INFO, ("ARP OFFLOAD success\n"));  			
+    } 	  
+  }
+#endif
+
+
+#ifdef FIX_ALPS00409409406    
+       if(atomic_read(&fgIsUnderEarlierSuspend)==0){
+#else
+       if (fgIsUnderEarlierSuspend == false) {
+#endif
+				DBGLOG(REQ, INFO, ("netdev_event: PARAM_MEDIA_STATE_DISCONNECTED. (%d)\n", prGlueInfo->eParamMediaStateIndicated));
+				return NOTIFY_DONE;
     }
 
 //#ifdef  CONFIG_IPV6

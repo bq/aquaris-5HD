@@ -444,7 +444,6 @@ struct sk_buff *ndisc_build_skb(struct net_device *dev,
 	int hlen = LL_RESERVED_SPACE(dev);
 	int tlen = dev->needed_tailroom;
 	int len;
-	int err;
 	u8 *opt;
 
 	if (!dev->addr_len)
@@ -454,14 +453,12 @@ struct sk_buff *ndisc_build_skb(struct net_device *dev,
 	if (llinfo)
 		len += ndisc_opt_addr_space(dev);
 
-	skb = sock_alloc_send_skb(sk,
-				  (MAX_HEADER + sizeof(struct ipv6hdr) +
-				   len + hlen + tlen),
-				  1, &err);
+	skb = alloc_skb((MAX_HEADER + sizeof(struct ipv6hdr) +
+			 len + hlen + tlen), GFP_ATOMIC);
 	if (!skb) {
 		ND_PRINTK0(KERN_ERR
-			   "ICMPv6 ND: %s() failed to allocate an skb, err=%d.\n",
-			   __func__, err);
+			   "ICMPv6 ND: %s() failed to allocate an skb.\n",
+			   __func__);
 		return NULL;
 	}
 
@@ -488,6 +485,11 @@ struct sk_buff *ndisc_build_skb(struct net_device *dev,
 					   IPPROTO_ICMPV6,
 					   csum_partial(hdr,
 							len, 0));
+
+	/* Manually assign socket ownership as we avoid calling
+	 * sock_alloc_send_pskb() to bypass wmem buffer limits
+	 */
+	skb_set_owner_w(skb, sk);
 
 	return skb;
 }
@@ -596,7 +598,7 @@ static void ndisc_send_unsol_na(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 	struct inet6_ifaddr *ifa;
-	struct in6_addr mcaddr;
+	struct in6_addr mcaddr = IN6ADDR_LINKLOCAL_ALLNODES_INIT;
 
 	idev = in6_dev_get(dev);
 	if (!idev)
@@ -604,7 +606,6 @@ static void ndisc_send_unsol_na(struct net_device *dev)
 
 	read_lock_bh(&idev->lock);
 	list_for_each_entry(ifa, &idev->addr_list, if_list) {
-		addrconf_addr_solict_mult(&ifa->addr, &mcaddr);
 		ndisc_send_na(dev, NULL, &mcaddr, &ifa->addr,
 			      /*router=*/ !!idev->cnf.forwarding,
 			      /*solicited=*/ false, /*override=*/ true,
@@ -1207,16 +1208,12 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 					IF_RA_MANAGED : 0) |
 				(ra_msg->icmph.icmp6_addrconf_other ?
 					IF_RA_OTHERCONF : 0);
-#ifdef MTK_DHCPV6C_WIFI
-    if(in6_dev->if_flags & IF_RA_OTHERCONF){
-        printk(KERN_INFO "receive RA with o bit!\n");
-		in6_dev->cnf.ra_info_flag = 1;
+
+	/*MTK_NET*/
+	if (0 == strncmp(in6_dev->dev->name, "ccmni", 2)){
+		printk(KERN_INFO "[mtk_net][ipv6]skip default route for ccmni!\n");
+		in6_dev->cnf.accept_ra_defrtr = 0;
 	}
-    if(in6_dev->if_flags & IF_RA_MANAGED){
-        printk(KERN_INFO "receive RA with m bit!\n");
-		in6_dev->cnf.ra_info_flag = 2;
-	}	
-#endif
 
 	if (!in6_dev->cnf.accept_ra_defrtr)
 		goto skip_defrtr;
@@ -1413,12 +1410,35 @@ skip_routeinfo:
 		}
 	}
 
+#ifdef MTK_DHCPV6C_WIFI
+	if (in6_dev->if_flags & IF_RA_OTHERCONF){
+		printk(KERN_INFO "[mtk_net][ipv6]receive RA with o bit!\n");
+		in6_dev->cnf.ra_info_flag = 1;
+	} 
+	if(in6_dev->if_flags & IF_RA_MANAGED){
+		printk(KERN_INFO "[mtk_net][ipv6]receive RA with m bit!\n");
+		in6_dev->cnf.ra_info_flag = 2;
+	}
+	if(in6_dev->cnf.ra_info_flag == 0){
+		printk(KERN_INFO "[mtk_net][ipv6]receive RA neither O nor M bit is set!\n");
+		in6_dev->cnf.ra_info_flag = 4;
+	}
+#endif
+
 	if (ndopts.nd_useropts) {
 		struct nd_opt_hdr *p;
 		for (p = ndopts.nd_useropts;
 		     p;
 		     p = ndisc_next_useropt(p, ndopts.nd_useropts_end)) {
 			ndisc_ra_useropt(skb, p);
+#ifdef MTK_DHCPV6C_WIFI
+			/* only clear ra_info_flag when O bit is set */
+			if (p->nd_opt_type == ND_OPT_RDNSS &&
+					in6_dev->if_flags & IF_RA_OTHERCONF) {
+				printk(KERN_INFO "[mtk_net][ipv6]RDNSS, ignore RA with o bit!\n");
+				in6_dev->cnf.ra_info_flag = 0;
+			} 
+#endif
 		}
 	}
 

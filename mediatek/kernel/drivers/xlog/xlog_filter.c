@@ -128,7 +128,7 @@ static int xLog_insert(const char *name)
         offset = -1;
         goto insert_out;
     }
-    strncpy(modulemap[empty].name,name,XLOG_MODULE_NAME_MAX_LEN);
+    strncpy(modulemap[empty].name,name, sizeof(modulemap[empty].name) - 1);
     modulemap[empty].offset = empty; // value;
     modulemap[empty].left = NULL;
     modulemap[empty].right = NULL;
@@ -179,7 +179,7 @@ static int xlog_release(struct inode *ignored, struct file *file)
 static int xlog_mmap(struct file *file, struct vm_area_struct *vma) 
 {
 	vma->vm_ops = &xLog_vmops;
-	vma->vm_flags |= VM_RESERVED;
+	vma->vm_flags |= VM_IO;
 	vma->vm_private_data = file->private_data;
 	return 0;
 }
@@ -253,6 +253,7 @@ static struct miscdevice xlog_dev = {
 };
 
 #define XLOG_FILTER_FILE "filters"
+#define XLOG_SETFIL_FILE "setfil"
 
 static int proc_xlog_filters_show(struct seq_file *p, void *v)
 {
@@ -276,8 +277,17 @@ static const struct file_operations proc_xlog_filter_operations = {
   .release        = single_release,
 };
 
+static const struct file_operations proc_xlog_setfil_operations = {
+    .owner   = THIS_MODULE,
+    .unlocked_ioctl = xlog_ioctl,
+    .mmap    = xlog_mmap,
+    .open    = xlog_open,
+    .release = xlog_release,
+};
+
 static struct proc_dir_entry *xlog_proc_dir;
 static struct proc_dir_entry *xlog_filter_file;
+static struct proc_dir_entry *xlog_setfil_file;
 
 static int __init xlog_init(void) 
 {
@@ -289,10 +299,17 @@ static int __init xlog_init(void)
 		return -ENOMEM;
 	}
 	
-	xlog_filter_file = proc_create(XLOG_FILTER_FILE, 0444, xlog_proc_dir, 
+	xlog_filter_file = proc_create(XLOG_FILTER_FILE, 0400, xlog_proc_dir, 
 				       &proc_xlog_filter_operations);
 	if (xlog_filter_file == NULL) {
-		printk(KERN_ERR "xlog create_proc_read_entry failed at %s\n", XLOG_FILTER_FILE);
+		printk(KERN_ERR "xlog proc_create failed at %s\n", XLOG_FILTER_FILE);
+		return -ENOMEM;
+	}
+
+	xlog_setfil_file = proc_create(XLOG_SETFIL_FILE, 0444, xlog_proc_dir, 
+				       &proc_xlog_setfil_operations);
+	if (xlog_setfil_file == NULL) {
+		printk(KERN_ERR "xlog proc_create failed at %s\n", XLOG_SETFIL_FILE);
 		return -ENOMEM;
 	}
 

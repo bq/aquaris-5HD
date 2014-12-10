@@ -544,6 +544,8 @@
 #include <linux/proc_fs.h>      /* The proc filesystem constants/structures */
 
 #include <linux/rtnetlink.h>    /* for rtnl_lock() and rtnl_unlock() */
+#include <net/addrconf.h>       /*for the ipv6*/
+#include <net/if_inet6.h>     /*for the ipv6*/
 #include <linux/kthread.h>      /* kthread_should_stop(), kthread_run() */
 #include <asm/uaccess.h>        /* for copy_from_user() */
 #include <linux/fs.h>           /* for firmware download */
@@ -578,6 +580,12 @@
 #endif
 
 #include <linux/module.h>
+
+#if defined(MTK_WLAN_ARP_OFFLOAD)
+#include <net/rtnetlink.h>
+#include <net/sock.h>
+#endif
+
 
 #include "gl_typedef.h"
 #include "typedef.h"

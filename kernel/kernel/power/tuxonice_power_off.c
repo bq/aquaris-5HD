@@ -94,7 +94,13 @@ static void __toi_power_down(int method)
 
 		/* Success - we're now post-resume-from-ram */
 		if (did_suspend_to_both)
+        {
+#ifdef CONFIG_MTK_HIBERNATION
+            // for lk
+            set_env("hibboot", "1");
+#endif
 			return;
+        }
 
 		/* Failed to suspend to ram - do normal power off */
 		break;
@@ -116,6 +122,11 @@ static void __toi_power_down(int method)
 
 	if (test_result_state(TOI_ABORTED))
 		goto out;
+
+#ifdef CONFIG_MTK_HIBERNATION
+    // for lk
+    set_env("hibboot", "1");
+#endif
 
 	kernel_power_off();
 	kernel_halt();

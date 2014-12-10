@@ -40,6 +40,9 @@
 #include "ddp_rdma.h"
 #include "ddp_wdma.h"
 #include "ddp_ovl.h"
+#include "ddp_bls.h"
+
+#include "disp_drv.h"
 
 unsigned int gMutexID = 0;
 unsigned int gTdshpStatus[OVL_LAYER_NUM] = {0};
@@ -150,6 +153,60 @@ int disp_path_release_mutex()
     }
 }
 
+
+static int disp_path_ovl_reset(void)
+{
+    static unsigned int ovl_hw_reset = 0;
+    int delay_cnt = 100;
+
+    DISP_REG_SET(DISP_REG_OVL_RST, 0x1);              // soft reset
+    DISP_REG_SET(DISP_REG_OVL_RST, 0x0);
+    while (delay_cnt && ((DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG)&0x3ff) != 0x1) &&
+    ((DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG)&0x3ff) != 0x2)) {
+        delay_cnt--;
+        udelay(100);
+    }
+    if(delay_cnt ==0 )
+    {
+        DISP_MSG("sw reset timeout, flow_ctrl=0x%x \n", DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG));
+    }
+    DISP_MSG("after sw reset in intr, flow_ctrl=0x%x \n", DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG));
+    /*if(((DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG)&0x3ff) != 0x1) &&
+    		((DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG)&0x3ff) != 0x2))
+    {
+         delay_cnt = 100;
+         while(delay_cnt && (((DISP_REG_GET(DDP_REG_BASE_SMI_LARB0)&0x1) == 0x1) ||
+             (((DISP_REG_GET(DDP_REG_BASE_SMI_COMMON+0x404)>>12)&0x1) != 0x1)))
+        {
+            delay_cnt--;
+            udelay(100);
+        }
+        if(delay_cnt ==0 )
+        {
+            DISP_MSG("wait smi idle timeout, smi_larb 0x%x, smi_comm 0x%x \n",
+                 DISP_REG_GET(DDP_REG_BASE_SMI_LARB0),DISP_REG_GET(DDP_REG_BASE_SMI_COMMON+0x404));
+        }
+        else
+        {
+             // HW reset will reset all registers to power on state, so need to backup and restore
+            //disp_reg_backup_module(DISP_MODULE_OVL);
+            DISP_REG_SET(DISP_REG_CONFIG_MMSYS_SW_RST_B, ~(1<<8));
+            DISP_REG_SET(DISP_REG_CONFIG_MMSYS_SW_RST_B, ~0);
+
+            //disp_reg_restore_module(DISP_MODULE_OVL);
+            DISP_MSG("after hw reset, flow_ctrl=0x%x \n", DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG));
+
+            // if ovl hw reset dose not have effect, will reset whole path
+            if((ovl_hw_reset > 0) && (DISP_IsDecoupleMode() == 0))
+            {
+                 DISP_MSG("disp_path_reset called! \n");
+                 //disp_path_reset();
+            }
+        }
+    }*/
+    return 0;
+}
+
 // check engines' clock bit and enable bit before unlock mutex
 #define DDP_SMI_LARB2_POWER_BIT     0x1
 #define DDP_OVL_POWER_BIT     0x30
@@ -192,6 +249,30 @@ int disp_check_engine_status(int mutexID)
         {
             result = -1;
             DISP_ERR("ovl abnormal, en=%d, clk=0x%x \n", DISP_REG_GET(DISP_REG_OVL_EN), DISP_REG_GET(DISP_REG_CONFIG_CG_CON0));
+        }
+        // ROI w, h >= 2
+        /*if( ((DISP_REG_GET(DISP_REG_OVL_ROI_SIZE) & 0x0fff) < 2) ||
+        		(((DISP_REG_GET(DISP_REG_OVL_ROI_SIZE) >> 16) & 0x0fff) < 2) )
+        {
+        	result = -1;
+        	DISP_ERR("ovl abnormal, roiW=%d, roiH=%d \n",
+        			DISP_REG_GET(DISP_REG_OVL_ROI_SIZE)&0x0fff,
+        			(DISP_REG_GET(DISP_REG_OVL_ROI_SIZE) >> 16)&0x0fff);
+        }*/
+        // OVL at IDLE state(0x1), if en=0; OVL at WAIT state(0x2), if en=1
+        if((DISP_IsVideoMode()==0)&&
+        	 ((DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG)&0x3ff) != 0x1) &&
+        	 ((DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG)&0x3ff) != 0x2))
+        {
+        	// Reset hw if it happens, to prevent last frame error from affect the
+        	// next frame transfer
+        	result = -1;
+        	DISP_ERR("ovl abnormal, flow_ctrl=0x%x, add_con=0x%x \n",
+        			DISP_REG_GET(DISP_REG_OVL_FLOW_CTRL_DBG),
+        			DISP_REG_GET(DISP_REG_OVL_ADDCON_DBG));
+        	//disp_clock_check();
+        	disp_dump_reg(DISP_MODULE_OVL);
+        	disp_path_ovl_reset();
         }
     }
     if(engine&(1<<3)) //COLOR
@@ -348,13 +429,11 @@ int disp_path_config_layer(OVL_CONFIG_STRUCT* pOvlConfig)
     pOvlConfig->source,   // data source (0=memory)
     pOvlConfig->fmt, 
     pOvlConfig->addr, // addr 
-    pOvlConfig->src_x,  // x
-    pOvlConfig->src_y,  // y
-    pOvlConfig->src_pitch, //pitch, pixel number
     pOvlConfig->dst_x,  // x
     pOvlConfig->dst_y,  // y
     pOvlConfig->dst_w, // width
     pOvlConfig->dst_h, // height
+    pOvlConfig->src_pitch, //pitch, pixel number
     pOvlConfig->keyEn,  //color key
     pOvlConfig->key,  //color key
     pOvlConfig->aen, // alpha enable
@@ -443,11 +522,46 @@ void _disp_path_wdma_callback(unsigned int param)
     wake_up_interruptible(&mem_out_wq);
 }
 
-void disp_path_wait_mem_out_done(void)
+extern unsigned int disp_ms2jiffies(unsigned long ms);
+int disp_path_wait_mem_out_done(void)
 {
-    wait_event_interruptible(mem_out_wq, mem_out_done);
-    mem_out_done = 0;
+    //wait_event_interruptible(mem_out_wq, mem_out_done);
+    //mem_out_done = 0;
+
+    int ret = 0;
+    // use timeout version instead of wait-forever
+    ret = wait_event_interruptible_timeout(
+                    mem_out_wq, 
+                    mem_out_done, 
+                    disp_ms2jiffies(2000) ); // timeout after 2s
+                    
+    /*wake-up from sleep*/
+    if(ret==0) // timeout
+    {
+        DISP_ERR("disp_path_wait_mem_out_done timeout \n");
+        disp_dump_reg(DISP_MODULE_WDMA0); 
+        disp_dump_reg(DISP_MODULE_OVL); 
+        disp_dump_reg(DISP_MODULE_CONFIG);
+
+        // reset DSI & WDMA engine
+        WDMAReset(0);
+        mem_out_done = 1;    
+        return -1;
+    }
+    else if(ret<0) // intr by a signal
+    {
+        DISP_ERR("disp_path_wait_mem_out_done intr by a signal ret=%d \n", ret);
+    }
+    
+    return 0;
 }
+
+int disp_path_clear_mem_out_done(void)
+{
+    mem_out_done = 0;    
+    return 0;
+}
+
 
 // add wdma1 into the path
 // should call get_mutex() / release_mutex for this func
@@ -491,7 +605,15 @@ int disp_path_config_mem_out(struct disp_path_config_mem_out_struct* pConfig)
                    pConfig->srcROI.width,
                    1, 
                    0);      
-        if (!bMemOutEnabled)
+		if(pConfig->outFormat == WDMA_OUTPUT_FORMAT_YUV420_P)
+		{
+			WDMAConfigUV(1, 
+					pConfig->dstAddr + pConfig->srcROI.width * pConfig->srcROI.height,
+					pConfig->dstAddr + pConfig->srcROI.width * pConfig->srcROI.height/4*5,
+					pConfig->srcROI.width);
+		}
+
+		if (!bMemOutEnabled)
         {
         WDMAStart(1);
         // mutex
@@ -1041,10 +1163,10 @@ int disp_path_config_(struct disp_path_config_struct* pConfig, int mutexId)
 /*************************************************/
 // Ultra config
     // ovl ultra 0x40402020
-    DISP_REG_SET(DISP_REG_OVL_RDMA0_MEM_GMC_SETTING, 0x40402020);
-    DISP_REG_SET(DISP_REG_OVL_RDMA1_MEM_GMC_SETTING, 0x40402020);
-    DISP_REG_SET(DISP_REG_OVL_RDMA2_MEM_GMC_SETTING, 0x40402020);
-    DISP_REG_SET(DISP_REG_OVL_RDMA3_MEM_GMC_SETTING, 0x40402020);
+    DISP_REG_SET(DISP_REG_OVL_RDMA0_MEM_GMC_SETTING, 0x0101a06b);
+    DISP_REG_SET(DISP_REG_OVL_RDMA1_MEM_GMC_SETTING, 0x0101a06b);
+    DISP_REG_SET(DISP_REG_OVL_RDMA2_MEM_GMC_SETTING, 0x0101a06b);
+    DISP_REG_SET(DISP_REG_OVL_RDMA3_MEM_GMC_SETTING, 0x0101a06b);
     // disp_rdma0 ultra
     DISP_REG_SET(DISP_REG_RDMA_MEM_GMC_SETTING_0, 0x20402040);
     // disp_rdma1 ultra
@@ -1052,10 +1174,12 @@ int disp_path_config_(struct disp_path_config_struct* pConfig, int mutexId)
     // disp_wdma0 ultra
     //DISP_REG_SET(DISP_REG_WDMA_BUF_CON1, 0x10000000);
     //DISP_REG_SET(DISP_REG_WDMA_BUF_CON2, 0x20402020);
+    DISP_REG_SET(DISP_REG_WDMA_SMI_CON, 0x7);//8-16 burst length
     // disp_wdma1 ultra
     DISP_REG_SET(DISP_REG_WDMA_BUF_CON1+0x1000, 0x800800ff);    
 
     DISP_REG_SET(DISP_REG_WDMA_BUF_CON2+0x1000, 0x20200808);
+	DISP_REG_SET(DISP_REG_WDMA_SMI_CON+0x1000, 0x7);//8-16 burst length
 /*************************************************/
        // TDOD: add debug cmd in display to dump register 
 //        disp_dump_reg(DISP_MODULE_OVL);

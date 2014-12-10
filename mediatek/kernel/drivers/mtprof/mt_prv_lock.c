@@ -91,8 +91,6 @@ static ssize_t mt_pvlk_write(struct file *filp, const char *ubuf,
         return ret;
     if(val == 0){
         debug_locks_off(); 
-    }if(val == 1){
-        debug_locks_on(); 
     }else if(val == 2){
         printk("==== circular lock test=====\n");
         mutex_lock(&mtx_a);

@@ -12,7 +12,10 @@ _entering_makefile_list_ := $(MAKEFILE_LIST)
 ifeq (,$(TARGET_PRODUCT))
   $(error TARGET_PRODUCT/PROJECT is not set)
 endif
-
+ifndef OUT_DIR
+  OUT_DIR := out
+endif
+export OUT_DIR
 FULL_PROJECT := $(TARGET_PRODUCT)$(if $(FLAVOR),[$(FLAVOR)],)
 MTK_PROJECT  := $(word 1,$(subst [, ,$(FULL_PROJECT)))
 export FULL_PROJECT MTK_PROJECT
@@ -71,21 +74,24 @@ $(eval $(if $(2),$(eval _2:=$(2)/),$(eval _2:=$(call to-root)))) \
 $(eval $(if $(1),$(eval _1:=/$(1)),$(eval _1:=/$(call from-root)))) \
 $(eval TO_ROOT := $(_2)) \
 $(eval MTK_ROOT := $(_2)mediatek) \
+$(eval MTK_ROOT_OUT := $(_2)$(OUT_DIR)/target/product/$(TARGET_PRODUCT)/obj) \
 $(eval MTK_ROOT_PLATFORM := $(MTK_ROOT)/platform/$(_3)) \
 $(eval MTK_ROOT_BUILD := $(MTK_ROOT)/build) \
 $(eval MTK_ROOT_SOURCE = $(MTK_ROOT)) \
 $(eval MTK_ROOT_SOURCE_OPERATOR := $(MTK_ROOT_SOURCE)/operator) \
 $(eval MTK_ROOT_CUSTOM := $(MTK_ROOT)/custom) \
-$(eval MTK_ROOT_CUSTOM_OUT := $(MTK_ROOT_CUSTOM)/out/$(FULL_PROJECT)) \
+$(eval MTK_ROOT_CUSTOM_OUT := $(MTK_ROOT_OUT)/CUSTGEN/custom) \
 $(eval MTK_ROOT_CONFIG := $(MTK_ROOT)/config) \
-$(eval MTK_ROOT_CONFIG_OUT := $(MTK_ROOT_CONFIG)/out/$(FULL_PROJECT)) \
+$(eval MTK_ROOT_CONFIG_OUT := $(MTK_ROOT_OUT)/CUSTGEN/config) \
 $(eval MTK_ROOT_GEN_CONFIG := $(MTK_ROOT_CONFIG_OUT)/autoconfig) \
 $(eval MTK_PATH_PLATFORM := $(MTK_ROOT_PLATFORM)$(_1)) \
 $(eval MTK_PATH_BUILD := $(MTK_ROOT_BUILD)$(_1)) \
 $(eval MTK_PATH_SOURCE := $(MTK_ROOT_SOURCE)$(_1)) \
 $(eval MTK_PATH_CUSTOM := $(MTK_ROOT_CUSTOM_OUT)$(_1)) \
+$(eval MTK_ROOT_SECURITY := $(MTK_ROOT)/protect-private/security/) \
+$(eval MTK_PATH_SECURITY := $(MTK_ROOT_SECURITY)$(_1)) \
 $(eval ###### if you add any exported variables below, please also update shell.mk ###### ) \
-$(eval export TO_ROOT MTK_ROOT MTK_ROOT_CUSTOM_OUT MTK_ROOT_CONFIG_OUT) \
+$(eval export TO_ROOT MTK_ROOT MTK_ROOT_OUT MTK_ROOT_CUSTOM_OUT MTK_ROOT_CONFIG_OUT) \
 $(eval export MTK_ROOT_PLATFORM MTK_ROOT_BUILD MTK_ROOT_SOURCE MTK_ROOT_CUSTOM MTK_ROOT_CONFIG) \
 $(eval export MTK_PATH_PLATFORM MTK_PATH_BUILD MTK_PATH_SOURCE MTK_PATH_CUSTOM MTK_ROOT_GEN_CONFIG)
 endef
@@ -95,6 +101,13 @@ $(call relative-include,libs/gmsl)        # basic library: GNU GMSL + MTK extend
 $(call relative-include,libs/definitions.mk)   # common functions : Functions used in MTK build extension
 $(call relative-include,libs/custom.mk)   # custom rules : Functions for custom folders
 $(call relative-include,libs/config.mk)   # config rules : Functions for config generation
+
+ifeq (,$(ARCH_MTK_PLATFORM))
+ifneq (,$(MTK_PLATFORM))
+  ARCH_MTK_PLATFORM := $(call lc,$(MTK_PLATFORM))
+  export ARCH_MTK_PLATFORM
+endif
+endif
 
 # let makefiles included in this makefile be invisible to all later makefiles
 $(_relative_dir_depth_)/_:=

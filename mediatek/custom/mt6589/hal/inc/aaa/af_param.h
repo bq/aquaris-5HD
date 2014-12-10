@@ -38,8 +38,8 @@ typedef struct
 typedef struct 
 {
 	MINT32  i4Count;
+    MINT32  i4Score;
 	AREA_T  sRect[AF_WIN_NUM_SPOT];    
-    
 } AF_AREA_T;
 
 typedef struct
@@ -135,6 +135,7 @@ typedef struct
     MINT32      i4IsMonitorFV;
     MINT32      i4AFBestPos;
     MINT32      i4AFPos;    
+    MINT32      i4FDDetect;  
     MINT64      i8AFValue;
     AF_CONFIG_T sAFStatConfig;
     AF_AREA_T   sAFArea;

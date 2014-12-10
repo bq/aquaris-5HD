@@ -15,5 +15,5 @@ obj-y += ddp_dpfd.o
 obj-y += ddp_aal.o
 obj-y += data_rgb888_64x64.o
 obj-y += data_rgb888_64x64_golden.o
-ccflags-y += -I$(MTK_PATH_SOURCE)/drivers/video/
+ccflags-y += -I$(MTK_PATH_PLATFORM)/drivers/videox/
 # EOF

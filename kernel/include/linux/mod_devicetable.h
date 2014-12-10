@@ -117,6 +117,7 @@ struct usb_device_id {
 
 	/* not matched against */
 	kernel_ulong_t	driver_info;
+	__u8		bInterfaceNumber;
 };
 
 /* Some useful macros to use to create struct usb_device_id */
@@ -130,6 +131,7 @@ struct usb_device_id {
 #define USB_DEVICE_ID_MATCH_INT_CLASS		0x0080
 #define USB_DEVICE_ID_MATCH_INT_SUBCLASS	0x0100
 #define USB_DEVICE_ID_MATCH_INT_PROTOCOL	0x0200
+#define USB_DEVICE_ID_MATCH_INT_NUMBER	0x0400
 
 #define HID_ANY_ID				(~0)
 

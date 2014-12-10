@@ -571,7 +571,7 @@ static long mt_otp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     switch (cmd){
     case EMMC_OTP_GET_LENGTH:
         printk("OTP IOCTL: EMMC_OTP_GET_LENGTH\n");
-        if (('i' == (otpctl.status & 0xf)) && ('c' == ((otpctl.status >> 8) & 0xf)) && ('c' == ((otpctl.status >> 16) & 0xf)) && ('c' == ((otpctl.status >> 24) & 0xf))){
+        if (('c' == (otpctl.status & 0xff)) && ('c' == ((otpctl.status >> 8) & 0xff)) && ('c' == ((otpctl.status >> 16) & 0xff)) && ('i' == ((otpctl.status >> 24) & 0xff))){
             otpctl.QLength = g_otp_user_ccci; 
         } else {
             g_emmc_otp_func.query_length(&otpctl.QLength);

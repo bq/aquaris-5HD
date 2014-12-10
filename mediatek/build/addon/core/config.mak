@@ -16,8 +16,6 @@ KERNEL_COMMON_DEFS_CONFIG    := $(MTK_BUILD_SYSTEM)/kernel_defs.mak
 KERNEL_DEP_RULE_CONFIG       := $(MTK_BUILD_SYSTEM)/kernel_dep_rule.mak
 ANDROID_COMMON_DEFS_CONFIG   := $(MTK_BUILD_SYSTEM)/android_defs.mak
 ANDROID_DEP_RULE_CONFIG      := $(MTK_BUILD_SYSTEM)/android_dep_rule.mak
-UBOOT_COMMON_DEFS_CONFIG     := $(MTK_BUILD_SYSTEM)/uboot_defs.mak
-UBOOT_DEP_RULE_CONFIG        := $(MTK_BUILD_SYSTEM)/uboot_dep_rule.mak
 PRELOADER_COMMON_DEFS_CONFIG := $(MTK_BUILD_SYSTEM)/preloader_defs.mak
 PRELOADER_DEP_RULE_CONFIG    := $(MTK_BUILD_SYSTEM)/preloader_dep_rule.mak
 
@@ -25,7 +23,6 @@ PRELOADER_DEP_RULE_CONFIG    := $(MTK_BUILD_SYSTEM)/preloader_dep_rule.mak
 INCLUDE_MAKEFILES := COMMON_DEP_RULE_CONFIG \
                      KERNEL_DEP_RULE_CONFIG \
                      ANDROID_DEP_RULE_CONFIG \
-                     UBOOT_DEP_RULE_CONFIG \
                      PRELOADER_DEP_RULE_CONFIG
 
 ifneq (,$(CUR_MODULE))
@@ -46,8 +43,6 @@ include $(KERNEL_COMMON_DEFS_CONFIG)
 #include $(KERNEL_DEP_RULE_CONFIG)
 include $(ANDROID_COMMON_DEFS_CONFIG)
 #include $(ANDROID_DEP_RULE_CONFIG)
-include $(UBOOT_COMMON_DEFS_CONFIG)
-#include $(UBOOT_DEP_RULE_CONFIG)
 include $(PRELOADER_COMMON_DEFS_CONFIG)
 #include $(PRELOADER_DEP_RULE_CONFIG)
 

@@ -102,7 +102,6 @@
 
 #ifndef __CCCI_CCMNI_H__
 #define __CCCI_CCMNI_H__
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -117,18 +116,18 @@
 #include <linux/wait.h>
 #include <linux/dma-mapping.h>
 #include <linux/timer.h>
+#include <linux/if_ether.h>
 #include <asm/bitops.h>
 #include <asm/dma-mapping.h>
-#include <ccci.h>
-#include <ccci_tty.h>
 #include <mach/mt_typedefs.h>
-#include <linux/if_ether.h>
-
 
 #define  CCCI_NETWORK           0
 #define  CCMNI_MTU              1500
 
 #define  CCMNI_CHANNEL_OFFSET   2
+//#define CCMNI_MAX_CHANNELS		NET_PORT_NUM
+//#define CCMNI_CHANNEL_CNT		CCMNI_V2_PORT_NUM //Currently, we use 3 channels.
+
 
 #define  IPV4_VERSION 0x40
 #define  IPV6_VERSION 0x60
@@ -160,8 +159,6 @@
 #define RX_BUF_RESOURCE_UPPER_BOUND (80)	//Should be more than 2*RX_BUF_RESOURCE_OCCUPY_CNT
 #define RX_BUF_RESOURCE_OCCUPY_CNT  (20)	//((RX_BUF_RESOURCE_UPPER_BOUND - RX_BUF_RESOURCE_LOWER_BOUND)/2 )
 
-#define CCMNI_MAX_CHANNELS		NET_PORT_NUM
-#define CCMNI_CHANNEL_CNT		CCMNI_V2_PORT_NUM //Currently, we use 3 channels.
 
 typedef struct
 {
@@ -205,4 +202,4 @@ typedef struct
 #define CCMNI_DL_CTRL_MEM_SIZE	((sizeof(buffer_control_ccmni_t)) + (CCMNI_CTRL_Q_RX_SIZE * (sizeof(q_ringbuf_ccmni_t))))
 #define CCMNI_UL_CTRL_MEM_SIZE	((sizeof(buffer_control_ccmni_t)) + (CCMNI_CTRL_Q_TX_SIZE * (sizeof(q_ringbuf_ccmni_t))))
 
-#endif
+#endif // __CCCI_CCMNI_H__ 

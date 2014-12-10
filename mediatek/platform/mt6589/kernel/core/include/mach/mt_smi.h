@@ -35,7 +35,8 @@ typedef enum
     SMI_BWC_SCEN_NORMAL,
     SMI_BWC_SCEN_VRCAMERA1066,
     SMI_BWC_SCEN_VR1066,
-    SMI_BWC_SCEN_VP1066
+    SMI_BWC_SCEN_VP1066,
+    SMI_BWC_SCEN_CNT
 } MTK_SMI_BWC_SCEN;
 
 
@@ -43,15 +44,22 @@ typedef struct
 {
     MTK_SMI_BWC_SCEN    scenario;
     int                 b_reduce_command_buffer;
+    int                 b_gpu_od;                   /*GPU overdrive enable or not*/
+    int                 b_on_off; //0 : exit this scenario , 1 : enter this scenario 
 
 } MTK_SMI_BWC_CONFIG;
 
+typedef struct
+{
+    unsigned int*       hwc_max_pixel; //0 : exit this scenario , 1 : enter this scenario 
+} MTK_SMI_BWC_STATE;
 
 #define MTK_IOC_SPC_CONFIG          MTK_IOW(20, unsigned long)
 #define MTK_IOC_SPC_DUMP_REG        MTK_IOW(21, unsigned long)
 #define MTK_IOC_SPC_DUMP_STA        MTK_IOW(22, unsigned long)
 #define MTK_IOC_SPC_CMD             MTK_IOW(23, unsigned long)
 #define MTK_IOC_SMI_BWC_CONFIG      MTK_IOW(24, MTK_SMI_BWC_CONFIG)
+#define MTK_IOC_SMI_BWC_STATE       MTK_IOWR(25, MTK_SMI_BWC_STATE)
 
 
 

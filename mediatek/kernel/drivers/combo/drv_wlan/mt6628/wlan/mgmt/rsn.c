@@ -1356,6 +1356,7 @@ rsnGenerateWPAIE (
     PUCHAR                cp;
     PUINT_8               pucBuffer;
     ENUM_NETWORK_TYPE_INDEX_T eNetworkId;
+    P_P2P_SPECIFIC_BSS_INFO_T prP2pSpecificBssInfo;
 
     DEBUGFUNC("rsnGenerateWPAIE");
 
@@ -1367,6 +1368,7 @@ rsnGenerateWPAIE (
     ASSERT(pucBuffer);
 
     eNetworkId = (ENUM_NETWORK_TYPE_INDEX_T)prMsduInfo->ucNetworkType;
+    prP2pSpecificBssInfo = prAdapter->rWifiVar.prP2pSpecificBssInfo;
 
     //if (eNetworkId != NETWORK_TYPE_AIS_INDEX)
     //    return;
@@ -1384,6 +1386,14 @@ rsnGenerateWPAIE (
         (prAdapter->rWifiVar.rConnSettings.eAuthMode == AUTH_MODE_WPA_PSK)))) 
 #endif
     {
+        if (prP2pSpecificBssInfo->u2WpaIeLen != 0)
+        {
+            kalMemCopy(pucBuffer, prP2pSpecificBssInfo->aucWpaIeBuffer,
+                prP2pSpecificBssInfo->u2WpaIeLen);
+            prMsduInfo->u2FrameLength += prP2pSpecificBssInfo->u2WpaIeLen;
+            return;
+        }
+        
         /* Construct a WPA IE for association request frame. */
         WPA_IE(pucBuffer)->ucElemId = ELEM_ID_WPA;
         WPA_IE(pucBuffer)->ucLength = ELEM_ID_WPA_LEN_FIXED;

@@ -142,7 +142,7 @@
             if (kalDevRegRead(_prAdapter->prGlueInfo, _u4Offset, _pu4Value) == FALSE) {\
                 HAL_SET_FLAG(_prAdapter, ADAPTER_FLAG_HW_ERR); \
                 fgIsBusAccessFailed = TRUE; \
-                DBGLOG(HAL, ERROR, ("HAL_MCR_RD access fail! 0x%x: 0x%x \n", _u4Offset, *_pu4Value)); \
+                DBGLOG(HAL, ERROR, ("HAL_MCR_RD access fail! 0x%x: 0x%lx \n", _u4Offset, *_pu4Value)); \
             } \
         } else { \
             DBGLOG(HAL, WARN, ("ignore HAL_MCR_RD access! 0x%x\n", _u4Offset)); \
@@ -158,10 +158,10 @@
             if (kalDevRegWrite(_prAdapter->prGlueInfo, _u4Offset, _u4Value) == FALSE) {\
                 HAL_SET_FLAG(_prAdapter, ADAPTER_FLAG_HW_ERR); \
                 fgIsBusAccessFailed = TRUE; \
-                DBGLOG(HAL, ERROR, ("HAL_MCR_WR access fail! 0x%x: 0x%x \n", _u4Offset, _u4Value)); \
+                DBGLOG(HAL, ERROR, ("HAL_MCR_WR access fail! 0x%x: 0x%lx \n", _u4Offset, _u4Value)); \
             } \
         } else { \
-            DBGLOG(HAL, WARN, ("ignore HAL_MCR_WR access! 0x%x: 0x%x \n", _u4Offset, _u4Value)); \
+            DBGLOG(HAL, WARN, ("ignore HAL_MCR_WR access! 0x%x: 0x%lx \n", _u4Offset, _u4Value)); \
         } \
      }
 

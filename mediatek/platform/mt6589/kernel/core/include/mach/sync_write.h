@@ -29,6 +29,25 @@
             dsb();  \
         } while (0)
 
+#define mt_reg_sync_writel(v, a) \
+        do {    \
+            __raw_writel((v), IOMEM((a)));   \
+            dsb();  \
+        } while (0)
+
+#define mt_reg_sync_writew(v, a) \
+        do {    \
+            __raw_writew((v), IOMEM((a)));   \
+            dsb();  \
+        } while (0)
+
+#define mt_reg_sync_writeb(v, a) \
+        do {    \
+            __raw_writeb((v), IOMEM((a)));   \
+            dsb();  \
+        } while (0)
+
+
 #else   /* __KERNEL__ */
 
 #include <sys/types.h>
@@ -36,6 +55,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+
+#define mt_reg_sync_writel(v, a)	mt65xx_reg_sync_writel(v, a)
+#define mt_reg_sync_writew(v, a)	mt65xx_reg_sync_writew(v, a)
+#define mt_reg_sync_writeb(v, a)	mt65xx_reg_sync_writeb(v, a)
 
 #define dsb()   \
         do {    \

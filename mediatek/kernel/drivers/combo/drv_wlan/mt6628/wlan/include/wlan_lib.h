@@ -360,6 +360,7 @@
 #define NVRAM_ERROR_INVALID_DPD             BIT(3)
 #define NVRAM_ERROR_INVALID_MAC_ADDR        BIT(4)
 
+#define NUM_TC_RESOURCE_TO_STATISTICS       4
 
 /*******************************************************************************
 *                             D A T A   T Y P E S
@@ -570,6 +571,40 @@ typedef struct _PARAM_MCR_RW_STRUC_T {
     UINT_32             u4McrData;
 } PARAM_MCR_RW_STRUC_T, *P_PARAM_MCR_RW_STRUC_T;
 
+typedef struct _PARAM_GET_STA_STATISTICS {
+    /* Per-STA statistic */
+	UINT_8 aucMacAddr[MAC_ADDR_LEN];
+
+    UINT_32 u4Flag;
+    
+    /* From driver */
+	UINT_32 u4TxTotalCount;
+	UINT_32 u4TxExceedThresholdCount;
+    
+    UINT_32 u4TxMaxTime;
+    UINT_32 u4TxAverageProcessTime;
+    
+	UINT_32 au4TcResourceEmptyCount[NUM_TC_RESOURCE_TO_STATISTICS];  
+	UINT_32 au4TcQueLen[NUM_TC_RESOURCE_TO_STATISTICS]; 
+
+    /* From FW */
+    UINT_8 ucPer;                       /* base: 128 */
+    UINT_8 ucRcpi;
+    UINT_32 u4PhyMode;
+    UINT_16 u2LinkSpeed;                /* unit is 0.5 Mbits*/
+    
+	UINT_32 u4TxFailCount;
+    UINT_32 u4TxLifeTimeoutCount;
+    
+    UINT_32 u4TxAverageAirTime;    
+
+    /* Global queue management statistic */
+	UINT_32 au4TcAverageQueLen[NUM_TC_RESOURCE_TO_STATISTICS];
+    UINT_32 au4TcCurrentQueLen[NUM_TC_RESOURCE_TO_STATISTICS];
+
+    /* Reserved fields */
+    UINT_8  au4Reserved[32];
+} PARAM_GET_STA_STA_STATISTICS, *P_PARAM_GET_STA_STATISTICS;
 
 /*******************************************************************************
 *                            P U B L I C   D A T A
@@ -878,6 +913,14 @@ wlanQueryNicCapability(
 
 
 /*----------------------------------------------------------------------------*/
+/* Compiler Flags Retrieve by Polling                                         */
+/*----------------------------------------------------------------------------*/
+WLAN_STATUS
+wlanQueryCompileFlags(
+    IN P_ADAPTER_T prAdapter
+    );
+
+/*----------------------------------------------------------------------------*/
 /* PD MCR Retrieve by Polling                                         */
 /*----------------------------------------------------------------------------*/
 WLAN_STATUS
@@ -1037,6 +1080,16 @@ wlanCheckSystemConfiguration (
     IN P_ADAPTER_T prAdapter
     );
 
+/*----------------------------------------------------------------------------*/
+/* query sta statistics information from driver and firmware                  */
+/*----------------------------------------------------------------------------*/
+WLAN_STATUS 
+wlanoidQueryStaStatistics(
+	IN P_ADAPTER_T prAdapter,
+	IN PVOID pvQueryBuffer,
+	IN UINT_32 u4QueryBufferLen,
+	OUT PUINT_32 pu4QueryInfoLen
+	);
 
 #endif /* _WLAN_LIB_H */
 

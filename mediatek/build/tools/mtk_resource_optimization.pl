@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 use strict;
-
+my $out_dir = $ENV{OUT_DIR}
 # one of "ldpi,mdpi,hdpi,xdpi";
 my $resource_select = $ARGV[0];
 
@@ -18,9 +18,9 @@ my $proj = $ARGV[4];
 
 
 # all log of optimization will be dumper to this file;
-die "can not create log file:$!" if (! open OUTPUT, ">>out/target/product/${proj}_AppResource_Optimization.log");
+die "can not create log file:$!" if (! open OUTPUT, ">>$out_dir/target/product/${proj}_AppResource_Optimization.log");
 
-my $temp_dir = "out/target/product/${proj}_AppResource";
+my $temp_dir = "$out_dir/target/product/${proj}_AppResource";
 
 # Ignore resource optimization if resource directory NOT exist
 if (defined $res_path)

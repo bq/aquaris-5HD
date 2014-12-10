@@ -421,7 +421,7 @@ static int write_cnodes(struct ubifs_info *c)
 				alen = ALIGN(wlen, c->min_io_size);
 				memset(buf + offs, 0xff, alen - wlen);
 				err = ubifs_leb_write(c, lnum, buf + from, from,
-						       alen, UBI_SHORTTERM);
+						       alen);
 				if (err)
 					return err;
 			}
@@ -479,8 +479,7 @@ static int write_cnodes(struct ubifs_info *c)
 			wlen = offs - from;
 			alen = ALIGN(wlen, c->min_io_size);
 			memset(buf + offs, 0xff, alen - wlen);
-			err = ubifs_leb_write(c, lnum, buf + from, from, alen,
-					      UBI_SHORTTERM);
+			err = ubifs_leb_write(c, lnum, buf + from, from, alen);
 			if (err)
 				return err;
 			dbg_chk_lpt_sz(c, 2, c->leb_size - offs);
@@ -506,8 +505,7 @@ static int write_cnodes(struct ubifs_info *c)
 			wlen = offs - from;
 			alen = ALIGN(wlen, c->min_io_size);
 			memset(buf + offs, 0xff, alen - wlen);
-			err = ubifs_leb_write(c, lnum, buf + from, from, alen,
-					      UBI_SHORTTERM);
+			err = ubifs_leb_write(c, lnum, buf + from, from, alen);
 			if (err)
 				return err;
 			dbg_chk_lpt_sz(c, 2, c->leb_size - offs);
@@ -531,7 +529,7 @@ static int write_cnodes(struct ubifs_info *c)
 	wlen = offs - from;
 	alen = ALIGN(wlen, c->min_io_size);
 	memset(buf + offs, 0xff, alen - wlen);
-	err = ubifs_leb_write(c, lnum, buf + from, from, alen, UBI_SHORTTERM);
+	err = ubifs_leb_write(c, lnum, buf + from, from, alen);
 	if (err)
 		return err;
 
@@ -1473,8 +1471,10 @@ void ubifs_lpt_free(struct ubifs_info *c, int wr_only)
 
 	kfree(c->ltab_cmt);
 	c->ltab_cmt = NULL;
+#if 0
 	kfree(c->lpt_buf);
 	c->lpt_buf = NULL;
+#endif
 	kfree(c->lsave);
 	c->lsave = NULL;
 

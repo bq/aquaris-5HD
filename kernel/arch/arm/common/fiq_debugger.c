@@ -382,15 +382,16 @@ static void dump_irqs(struct fiq_debugger_state *state)
 {
 	int n;
 
-	debug_printf(state, "irqnr       total  since-last   status  name\n");
+	debug_printf(state, "irqnr       total  since-last   status   state  name\n");
 	for (n = 0; n < NR_IRQS; n++) {
 		struct irqaction *act = irq_desc[n].action;
 		if (!act && !kstat_irqs(n))
 			continue;
-		debug_printf(state, "%5d: %10u %11u %8x  %s\n", n,
+		debug_printf(state, "%5d: %10u %11u %8x%8x  %s\n", n,
 			kstat_irqs(n),
 			kstat_irqs(n) - state->last_irqs[n],
 			irq_desc[n].status_use_accessors,
+			irq_desc[n].irq_data.state_use_accessors,
 			(act && act->name) ? act->name : "???");
 		state->last_irqs[n] = kstat_irqs(n);
 	}
@@ -641,7 +642,7 @@ static void debug_help(struct fiq_debugger_state *state)
 				" allregs       Extended Register dump\n"
 				" bt            Stack trace\n"
 				" reboot [<c>]  Reboot with command <c>\n"
-#if 0
+#if 0 /* cannot support the reset command due to the empty context */
 				" reset [<c>]   Hard reset with command <c>\n"
 #endif
 				" irqs          Interupt status\n"
@@ -1339,7 +1340,7 @@ static int fiq_debugger_probe(struct platform_device *pdev)
 
 	if (state->signal_irq >= 0) {
 		ret = request_irq(state->signal_irq, mt_debug_signal_irq,
-			  IRQF_TRIGGER_RISING, "debug-signal", state);
+			  IRQF_TRIGGER_NONE, "debug-signal", state);
 		if (ret)
 			pr_err("serial_debugger: could not install signal_irq");
 	}

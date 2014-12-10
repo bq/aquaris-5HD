@@ -51,6 +51,8 @@
 #define GET_AUDSYS_REG         _IOWR(AUD_DRV_IOC_MAGIC, 0x01, Register_Control*)
 #define SET_ANAAFE_REG         _IOWR(AUD_DRV_IOC_MAGIC, 0x02, Register_Control*)
 #define GET_ANAAFE_REG         _IOWR(AUD_DRV_IOC_MAGIC, 0x03, Register_Control*)
+#define AUDDRV_GET_DL1_REMAINDATA_TIME  _IOWR(AUD_DRV_IOC_MAGIC, 0x0A, int)
+#define AUDDRV_GET_UL_REMAINDATA_TIME   _IOWR(AUD_DRV_IOC_MAGIC, 0x0B, int)
 
 
 // Allocate mean allocate buffer and set stream into ready state.
@@ -135,6 +137,9 @@
 #define SET_EARPIECE_ON	      _IOW(AUD_DRV_IOC_MAGIC, 0xa6, int)
 #define SET_EARPIECE_OFF	      _IOW(AUD_DRV_IOC_MAGIC, 0xa7, int)
 
+#define AUDDRV_GET_SUSPEND_EVER              _IOW(AUD_DRV_IOC_MAGIC, 0xF8, int)
+#define AUDDRV_CLEAR_SUSPEND_EVER         _IOW(AUD_DRV_IOC_MAGIC, 0xF9, int)
+
 
 // used for debug
 #define AUDDRV_AEE_IOCTL              _IOW(AUD_DRV_IOC_MAGIC, 0xFA, int)
@@ -164,6 +169,17 @@ typedef struct
    int bVT;
    int bAudioPlay;
 }SPH_Control;
+
+struct _Info_Data {
+    unsigned int info;
+    unsigned int param1;
+    unsigned int param2;
+};
+
+// below defines the YUSU_INFO_FROM_USER message
+#define INFO_U2K_MATV_AUDIO_START   0x1001
+#define INFO_U2K_MATV_AUDIO_STOP     0x1002
+#define INFO_U2K_MICANA_SWITCH         0x1003
 
 /*****************************************************************************
 *                        F U N C T I O N   D E F I N I T I O N

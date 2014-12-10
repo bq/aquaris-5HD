@@ -49,6 +49,20 @@ typedef struct{
 #define GSENSOR_IOCTL_CLR_CALI				_IO(GSENSOR, 0x08)
 
 
+// mCube add start
+// G-sensor
+
+#define GSENSOR_MCUBE_IOCTL_READ_RBM_DATA      _IOR(GSENSOR, 0x09, SENSOR_DATA)
+#define GSENSOR_MCUBE_IOCTL_SET_RBM_MODE       _IO(GSENSOR, 0x0a)
+#define GSENSOR_MCUBE_IOCTL_CLEAR_RBM_MODE     _IO(GSENSOR, 0x0b)
+#define GSENSOR_MCUBE_IOCTL_SET_CALI           _IOW(GSENSOR, 0x0c, SENSOR_DATA)
+#define GSENSOR_MCUBE_IOCTL_REGISTER_MAP       _IO(GSENSOR, 0x0d)
+#define GSENSOR_IOCTL_SET_CALI_MODE            _IOW(GSENSOR, 0x0e,int)
+#define GSENSOR_MCUBE_IOCTL_READ_PRODUCT_ID    _IOR(GSENSOR, 0x0f, int)
+#define GSENSOR_MCUBE_IOCTL_READ_FILEPATH      _IOR(GSENSOR, 0x10, char[256])
+#define GSENSOR_MCUBE_IOCTL_VIRTUAL_Z          _IOR(GSENSOR, 0x11, int)
+#define GSENSOR_MCUBE_IOCTL_READ_PCODE         _IOR(GSENSOR, 0x12, char)	
+#define	GSENSOR_MCUBE_IOCTL_GET_OFLAG          _IOR(GSENSOR, 0x13, short)
 
 
 /* IOCTLs for Msensor misc. device library */
@@ -86,7 +100,12 @@ typedef struct{
 #define ECS_IOCTL_GET_ACCEL         	_IOR(MSENSOR, 0x24, short[3])
 #define MMC31XX_IOC_RM					_IO(MSENSOR, 0x25)
 #define MMC31XX_IOC_RRM					_IO(MSENSOR, 0x26)
-
+/* IOCTLs for akm09911 device */
+#define ECS_IOCTL_GET_INFO			_IOR(MSENSOR, 0x27, unsigned char[AKM_SENSOR_INFO_SIZE])
+#define ECS_IOCTL_GET_CONF			_IOR(MSENSOR, 0x28, unsigned char[AKM_SENSOR_CONF_SIZE])
+#define ECS_IOCTL_SET_YPR_09911               _IOW(MSENSOR, 0x29, int[26])
+#define ECS_IOCTL_GET_DELAY_09911             _IOR(MSENSOR, 0x30, int64_t[3])
+#define	ECS_IOCTL_GET_LAYOUT_09911			_IOR(MSENSOR, 0x31, char)
 
 /* IOCTLs for MMC31XX device */
 #define MMC31XX_IOC_TM					_IO(MSENSOR, 0x18)
@@ -121,6 +140,11 @@ typedef struct{
 #define ALSPS_GET_PS_THRESHOLD_LOW           	_IOR(ALSPS, 0x0C, int)
 #define ALSPS_GET_ALS_THRESHOLD_HIGH           	_IOR(ALSPS, 0x0D, int)
 #define ALSPS_GET_ALS_THRESHOLD_LOW           	_IOR(ALSPS, 0x0E, int)
+#define ALSPS_IOCTL_CLR_CALI				_IOW(ALSPS, 0x0F, int)
+#define ALSPS_IOCTL_GET_CALI				_IOR(ALSPS, 0x10, int)
+#define ALSPS_IOCTL_SET_CALI				_IOW(ALSPS, 0x11, int)
+#define ALSPS_SET_PS_THRESHOLD           	_IOW(ALSPS, 0x12, int)
+#define ALSPS_SET_ALS_THRESHOLD           	_IOW(ALSPS, 0x13, int)
 
 
 #define GYROSCOPE							0X86
@@ -130,6 +154,9 @@ typedef struct{
 #define GYROSCOPE_IOCTL_SET_CALI			_IOW(GYROSCOPE, 0x04, SENSOR_DATA)
 #define GYROSCOPE_IOCTL_GET_CALI			_IOW(GYROSCOPE, 0x05, SENSOR_DATA)
 #define GYROSCOPE_IOCTL_CLR_CALI			_IO(GYROSCOPE, 0x06)
+#define GYROSCOPE_IOCTL_READ_SENSORDATA_RAW	_IOR(GYROSCOPE, 0x07, int)
+#define GYROSCOPE_IOCTL_READ_TEMPERATURE	_IOR(GYROSCOPE, 0x08, int)
+#define GYROSCOPE_IOCTL_GET_POWER_STATUS	_IOR(GYROSCOPE, 0x09, int)
 
 #define BROMETER							0X87
 #define BAROMETER_IOCTL_INIT				_IO(BROMETER, 0x01)

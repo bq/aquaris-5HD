@@ -11,6 +11,8 @@
 
 #include <mach/mtk_wcn_cmb_stub.h>
 #include "osal.h"
+#include "wmt_stp_exp.h"
+
 //not to reference to internal wmt
 //#include "wmt_core.h"
 /*******************************************************************************
@@ -60,17 +62,20 @@ extern UINT32 gWmtDbgLvl ;
 *                             D A T A   T Y P E S
 ********************************************************************************
 */
+#ifndef MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+
 typedef enum _ENUM_WMTDRV_TYPE_T {
     WMTDRV_TYPE_BT = 0,
     WMTDRV_TYPE_FM = 1,
     WMTDRV_TYPE_GPS = 2,
     WMTDRV_TYPE_WIFI = 3,
     WMTDRV_TYPE_WMT = 4,
-    WMTDRV_TYPE_STP = 5,
-    WMTDRV_TYPE_SDIO1 = 6,
-    WMTDRV_TYPE_SDIO2 = 7,
-    WMTDRV_TYPE_LPBK = 8,
-    WMTDRV_TYPE_COREDUMP = 9,
+    WMTDRV_TYPE_ANT = 5,
+    WMTDRV_TYPE_STP = 6,
+    WMTDRV_TYPE_SDIO1 = 7,
+    WMTDRV_TYPE_SDIO2 = 8,
+    WMTDRV_TYPE_LPBK = 9,
+    WMTDRV_TYPE_COREDUMP = 10,
     WMTDRV_TYPE_MAX
 } ENUM_WMTDRV_TYPE_T, *P_ENUM_WMTDRV_TYPE_T;
 
@@ -78,24 +83,16 @@ typedef enum _ENUM_WMTDRV_TYPE_T {
 // TODO: how do we extend for new chip and newer revision?
 // TODO: This way is hard to extend
 typedef enum _ENUM_WMTHWVER_TYPE_T{
-    WMTHWVER_MT6620_E1 = 0x0,
-    WMTHWVER_MT6620_E2 = 0x1,
-    WMTHWVER_MT6620_E3 = 0x2,
-    WMTHWVER_MT6620_E4 = 0x3,
-    WMTHWVER_MT6620_E5 = 0x4,
-    WMTHWVER_MT6620_E6 = 0x5,
-    WMTHWVER_MT6620_MAX,
+    WMTHWVER_E1 = 0x0,
+    WMTHWVER_E2 = 0x1,
+    WMTHWVER_E3 = 0x2,
+    WMTHWVER_E4 = 0x3,
+    WMTHWVER_E5 = 0x4,
+    WMTHWVER_E6 = 0x5,
+    WMTHWVER_E7 = 0x6,
+    WMTHWVER_MAX,
     WMTHWVER_INVALID = 0xff
 } ENUM_WMTHWVER_TYPE_T, *P_ENUM_WMTHWVER_TYPE_T;
-
-typedef enum _ENUM_WMTCHIN_TYPE_T{
-   WMTCHIN_CHIPID = 0x0,
-   WMTCHIN_HWVER = WMTCHIN_CHIPID + 1,
-   WMTCHIN_MAPPINGHWVER = WMTCHIN_HWVER + 1,
-   WMTCHIN_FWVER = WMTCHIN_MAPPINGHWVER + 1,
-   WMTCHIN_MAX,
-   
-}ENUM_WMT_CHIPINFO_TYPE_T, *P_ENUM_WMT_CHIPINFO_TYPE_T;
 
 typedef enum _ENUM_WMTDSNS_TYPE_T{
     WMTDSNS_FM_DISABLE = 0,
@@ -122,13 +119,6 @@ typedef enum _ENUM_WMTMSG_TYPE_T {
     WMTMSG_TYPE_MAX
 } ENUM_WMTMSG_TYPE_T, *P_ENUM_WMTMSG_TYPE_T;
 
-typedef enum _ENUM_WMTRSTMSG_TYPE_T{
-    WMTRSTMSG_RESET_START = 0x0,
-    WMTRSTMSG_RESET_END = 0x1,
-    WMTRSTMSG_RESET_MAX,
-    WMTRSTMSG_RESET_INVALID = 0xff
-} ENUM_WMTRSTMSG_TYPE_T, *P_ENUM_WMTRSTMSG_TYPE_T;
-
 typedef void (*PF_WMT_CB)(
     ENUM_WMTDRV_TYPE_T, /* Source driver type */
     ENUM_WMTDRV_TYPE_T, /* Destination driver type */
@@ -147,6 +137,25 @@ typedef enum _SDIO_PS_OP{
 
 typedef INT32 (*PF_WMT_SDIO_PSOP)(SDIO_PS_OP);
 
+#endif
+
+typedef enum _ENUM_WMTCHIN_TYPE_T{
+   WMTCHIN_CHIPID = 0x0,
+   WMTCHIN_HWVER = WMTCHIN_CHIPID + 1,
+   WMTCHIN_MAPPINGHWVER = WMTCHIN_HWVER + 1,
+   WMTCHIN_FWVER = WMTCHIN_MAPPINGHWVER + 1,
+   WMTCHIN_MAX,
+   
+}ENUM_WMT_CHIPINFO_TYPE_T, *P_ENUM_WMT_CHIPINFO_TYPE_T;
+
+
+typedef enum _ENUM_WMTRSTMSG_TYPE_T{
+    WMTRSTMSG_RESET_START = 0x0,
+    WMTRSTMSG_RESET_END = 0x1,
+    WMTRSTMSG_RESET_MAX,
+    WMTRSTMSG_RESET_INVALID = 0xff
+} ENUM_WMTRSTMSG_TYPE_T, *P_ENUM_WMTRSTMSG_TYPE_T;
+
 #if 1 /* moved from wmt_core.h */
 typedef enum {
     WMT_SDIO_SLOT_INVALID = 0,
@@ -161,6 +170,33 @@ typedef enum {
     WMT_SDIO_FUNC_MAX
 } WMT_SDIO_FUNC_TYPE;
 #endif
+
+
+typedef enum _ENUM_WMT_ANT_RAM_CTRL_T{
+    WMT_ANT_RAM_GET_STATUS = 0,
+	WMT_ANT_RAM_DOWNLOAD = WMT_ANT_RAM_GET_STATUS + 1,
+	WMT_ANT_RAM_CTRL_MAX
+}ENUM_WMT_ANT_RAM_CTRL, *P_ENUM_WMT_ANT_RAM_CTRL;
+
+typedef enum _ENUM_WMT_ANT_RAM_SEQ_T{
+    WMT_ANT_RAM_START_PKT = 1,
+	WMT_ANT_RAM_CONTINUE_PKT = WMT_ANT_RAM_START_PKT + 1,
+	WMT_ANT_RAM_END_PKT = WMT_ANT_RAM_CONTINUE_PKT + 1,
+	WMT_ANT_RAM_SEQ_MAX
+}ENUM_WMT_ANT_RAM_SEQ, *P_ENUM_WMT_ANT_RAM_SEQ;
+
+
+typedef enum _ENUM_WMT_ANT_RAM_STATUS_T{
+    WMT_ANT_RAM_NOT_EXIST = 0,
+	WMT_ANT_RAM_EXIST = WMT_ANT_RAM_NOT_EXIST + 1,
+	WMT_ANT_RAM_DOWN_OK = WMT_ANT_RAM_EXIST + 1,
+	WMT_ANT_RAM_DOWN_FAIL = WMT_ANT_RAM_DOWN_OK + 1,
+	WMT_ANT_RAM_PARA_ERR = WMT_ANT_RAM_DOWN_FAIL + 1,
+	WMT_ANT_RAM_OP_ERR = WMT_ANT_RAM_PARA_ERR + 1,
+	WMT_ANT_RAM_MAX
+}ENUM_WMT_ANT_RAM_STATUS, *P_ENUM_WMT_ANT_RAM_STATUS;
+
+
 
 /*******************************************************************************
 *                            P U B L I C   D A T A
@@ -180,6 +216,9 @@ typedef enum {
 *                  F U N C T I O N   D E C L A R A T I O N S
 ********************************************************************************
 */
+#ifndef MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+#define WMT_EXP_HID_API_EXPORT 0
+
 /*subsystem function ctrl APIs*/
 extern MTK_WCN_BOOL
 mtk_wcn_wmt_func_off (
@@ -196,7 +235,8 @@ extern MTK_WCN_BOOL mtk_wcn_wmt_dsns_ctrl (
     );
 
 extern MTK_WCN_BOOL mtk_wcn_wmt_assert (
-    VOID
+	ENUM_WMTDRV_TYPE_T type,
+    UINT32 reason
     );
 
 extern INT32 mtk_wcn_wmt_msgcb_reg (
@@ -234,6 +274,10 @@ mtk_wcn_wmt_hwver_get (VOID);
 extern INT32
 mtk_wcn_wmt_chipid_query (VOID);
 
+#else
+#define WMT_EXP_HID_API_EXPORT 1
+
+#endif
 
 extern INT32 wmt_lib_set_aif (
     CMB_STUB_AIF_X aif,
@@ -241,6 +285,16 @@ extern INT32 wmt_lib_set_aif (
     ); /* set AUDIO interface options */
 extern VOID
 wmt_lib_ps_irq_cb(VOID);
+
+extern ENUM_WMT_ANT_RAM_STATUS mtk_wcn_wmt_ant_ram_ctrl (
+    ENUM_WMT_ANT_RAM_CTRL ctrlId, UCHAR *pBuf, UINT32 length, ENUM_WMT_ANT_RAM_SEQ seq
+    );
+
+
+#ifdef MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+extern VOID mtk_wcn_wmt_exp_init(VOID);
+extern VOID mtk_wcn_wmt_exp_deinit(VOID);
+#endif
 /*******************************************************************************
 *                              F U N C T I O N S
 ********************************************************************************

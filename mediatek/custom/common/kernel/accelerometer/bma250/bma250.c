@@ -152,7 +152,7 @@ static struct platform_driver bma250_gsensor_driver;
 static struct bma250_i2c_data *obj_i2c_data = NULL;
 static bool sensor_power = true;
 static GSENSOR_VECTOR3D gsensor_gain;
-static char selftestRes[8]= {0}; 
+//static char selftestRes[8]= {0}; 
 
 /*----------------------------------------------------------------------------*/
 #define GSE_TAG                  "[Gsensor] "
@@ -235,7 +235,7 @@ static int BMA250_ReadData(struct i2c_client *client, s16 data[BMA250_AXES_NUM])
 	{
 		err = -EINVAL;
 	}
-	else if(err = hwmsen_read_block(client, addr, buf, 0x06))
+	else if((err = hwmsen_read_block(client, addr, buf, 0x06)))
 	{
 		GSE_ERR("error: %d\n", err);
 	}
@@ -261,7 +261,7 @@ static int BMA250_ReadData(struct i2c_client *client, s16 data[BMA250_AXES_NUM])
 			}
 		}	
 
-		if(1)//(atomic_read(&priv->trace) & ADX_TRC_RAWDATA)
+		if(atomic_read(&priv->trace) & ADX_TRC_RAWDATA)
 		{
 			GSE_LOG("[%08X %08X %08X] => [%5d %5d %5d] after\n", data[BMA250_AXIS_X], data[BMA250_AXIS_Y], data[BMA250_AXIS_Z],
 		                               data[BMA250_AXIS_X], data[BMA250_AXIS_Y], data[BMA250_AXIS_Z]);
@@ -324,6 +324,7 @@ static int BMA250_ReadOffset(struct i2c_client *client, s8 ofs[BMA250_AXES_NUM])
 {    
 	int err;
 #ifdef SW_CALIBRATION
+	err = 0;
 	ofs[0]=ofs[1]=ofs[2]=0x0;
 #else
 	if(err = hwmsen_read_block(client, BMA250_REG_OFSX, ofs, BMA250_AXES_NUM))
@@ -339,8 +340,10 @@ static int BMA250_ReadOffset(struct i2c_client *client, s8 ofs[BMA250_AXES_NUM])
 static int BMA250_ResetCalibration(struct i2c_client *client)
 {
 	struct bma250_i2c_data *obj = i2c_get_clientdata(client);
-	u8 ofs[4]={0,0,0,0};
+	#ifndef SW_CALIBRATION 
 	int err;
+	u8 ofs[4]={0,0,0,0};
+	#endif 
 	
 	#ifdef SW_CALIBRATION
 		
@@ -348,18 +351,21 @@ static int BMA250_ResetCalibration(struct i2c_client *client)
 		if(err = hwmsen_write_block(client, BMA250_REG_OFSX, ofs, 4))
 		{
 			GSE_ERR("error: %d\n", err);
+			return err;
 		}
 	#endif
 
 	memset(obj->cali_sw, 0x00, sizeof(obj->cali_sw));
 	memset(obj->offset, 0x00, sizeof(obj->offset));
-	return err;    
+	return 0;    
 }
 /*----------------------------------------------------------------------------*/
 static int BMA250_ReadCalibration(struct i2c_client *client, int dat[BMA250_AXES_NUM])
 {
     struct bma250_i2c_data *obj = i2c_get_clientdata(client);
+    #ifndef SW_CALIBRATION	
     int err;
+    #endif
     int mul;
 
 	#ifdef SW_CALIBRATION
@@ -383,7 +389,9 @@ static int BMA250_ReadCalibrationEx(struct i2c_client *client, int act[BMA250_AX
 {  
 	/*raw: the raw calibration data; act: the actual calibration data*/
 	struct bma250_i2c_data *obj = i2c_get_clientdata(client);
+	#ifndef SW_CALIBRATION
 	int err;
+	#endif 
 	int mul;
 
  
@@ -391,7 +399,7 @@ static int BMA250_ReadCalibrationEx(struct i2c_client *client, int act[BMA250_AX
 	#ifdef SW_CALIBRATION
 		mul = 0;//only SW Calibration, disable HW Calibration
 	#else
-		if(err = BMA250_ReadOffset(client, obj->offset))
+		if((err = BMA250_ReadOffset(client, obj->offset)))
 		{
 			GSE_ERR("read offset fail, %d\n", err);
 			return err;
@@ -415,10 +423,11 @@ static int BMA250_WriteCalibration(struct i2c_client *client, int dat[BMA250_AXE
 	struct bma250_i2c_data *obj = i2c_get_clientdata(client);
 	int err;
 	int cali[BMA250_AXES_NUM], raw[BMA250_AXES_NUM];
+#ifndef SW_CALIBRATION	
 	int lsb = bma250_offset_resolution.sensitivity;
 	int divisor = obj->reso->sensitivity/lsb;
-
-	if(err = BMA250_ReadCalibrationEx(client, cali, raw))	/*offset will be updated in obj->offset*/
+#endif 
+	if((err = BMA250_ReadCalibrationEx(client, cali, raw)))	/*offset will be updated in obj->offset*/
 	{ 
 		GSE_ERR("read offset fail, %d\n", err);
 		return err;
@@ -632,7 +641,7 @@ static int BMA250_SetBWRate(struct i2c_client *client, u8 bwrate)
 /*----------------------------------------------------------------------------*/
 static int BMA250_SetIntEnable(struct i2c_client *client, u8 intenable)
 {
-			u8 databuf[10];    
+	//		u8 databuf[10];    
 			int res = 0;
 		
 			res = hwmsen_write_byte(client, BMA250_INT_REG_1, 0x00);
@@ -765,7 +774,7 @@ static int BMA250_ReadSensorData(struct i2c_client *client, char *buf, int bufsi
 		}
 	}
 
-	if(res = BMA250_ReadData(client, obj->data))
+	if((res = BMA250_ReadData(client, obj->data)))
 	{        
 		GSE_ERR("I2C error: ret value=%d", res);
 		return -3;
@@ -816,7 +825,7 @@ static int BMA250_ReadRawData(struct i2c_client *client, char *buf)
 		return EINVAL;
 	}
 	
-	if(res = BMA250_ReadData(client, obj->data))
+	if((res = BMA250_ReadData(client, obj->data)))
 	{        
 		GSE_ERR("I2C error: ret value=%d", res);
 		return EIO;
@@ -845,6 +854,7 @@ static ssize_t show_chipinfo_value(struct device_driver *ddri, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);        
 }
 
+/*
 static ssize_t gsensor_init(struct device_driver *ddri, char *buf, size_t count)
 	{
 		struct i2c_client *client = bma250_i2c_client;
@@ -859,7 +869,7 @@ static ssize_t gsensor_init(struct device_driver *ddri, char *buf, size_t count)
 		return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);			
 	}
 
-
+*/
 
 /*----------------------------------------------------------------------------*/
 static ssize_t show_sensordata_value(struct device_driver *ddri, char *buf)
@@ -877,6 +887,7 @@ static ssize_t show_sensordata_value(struct device_driver *ddri, char *buf)
 	return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);            
 }
 
+/*
 static ssize_t show_sensorrawdata_value(struct device_driver *ddri, char *buf, size_t count)
 	{
 		struct i2c_client *client = bma250_i2c_client;
@@ -891,7 +902,7 @@ static ssize_t show_sensorrawdata_value(struct device_driver *ddri, char *buf, s
 		BMA250_ReadRawData(client, strbuf);
 		return snprintf(buf, PAGE_SIZE, "%s\n", strbuf);			
 	}
-
+*/
 /*----------------------------------------------------------------------------*/
 static ssize_t show_cali_value(struct device_driver *ddri, char *buf)
 {
@@ -910,11 +921,11 @@ static ssize_t show_cali_value(struct device_driver *ddri, char *buf)
 
 
 
-	if(err = BMA250_ReadOffset(client, obj->offset))
+	if((err = BMA250_ReadOffset(client, obj->offset)))
 	{
 		return -EINVAL;
 	}
-	else if(err = BMA250_ReadCalibration(client, tmp))
+	else if((err = BMA250_ReadCalibration(client, tmp)))
 	{
 		return -EINVAL;
 	}
@@ -937,7 +948,7 @@ static ssize_t show_cali_value(struct device_driver *ddri, char *buf)
     }
 }
 /*----------------------------------------------------------------------------*/
-static ssize_t store_cali_value(struct device_driver *ddri, char *buf, size_t count)
+static ssize_t store_cali_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 	struct i2c_client *client = bma250_i2c_client;  
 	int err, x, y, z;
@@ -945,7 +956,7 @@ static ssize_t store_cali_value(struct device_driver *ddri, char *buf, size_t co
 
 	if(!strncmp(buf, "rst", 3))
 	{
-		if(err = BMA250_ResetCalibration(client))
+		if((err = BMA250_ResetCalibration(client)))
 		{
 			GSE_ERR("reset offset err = %d\n", err);
 		}	
@@ -955,7 +966,7 @@ static ssize_t store_cali_value(struct device_driver *ddri, char *buf, size_t co
 		dat[BMA250_AXIS_X] = x;
 		dat[BMA250_AXIS_Y] = y;
 		dat[BMA250_AXIS_Z] = z;
-		if(err = BMA250_WriteCalibration(client, dat))
+		if((err = BMA250_WriteCalibration(client, dat)))
 		{
 			GSE_ERR("write calibration err = %d\n", err);
 		}		
@@ -994,7 +1005,7 @@ static ssize_t show_firlen_value(struct device_driver *ddri, char *buf)
 #endif
 }
 /*----------------------------------------------------------------------------*/
-static ssize_t store_firlen_value(struct device_driver *ddri, char *buf, size_t count)
+static ssize_t store_firlen_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 #ifdef CONFIG_BMA250_LOWPASS
 	struct i2c_client *client = bma250_i2c_client;  
@@ -1040,7 +1051,7 @@ static ssize_t show_trace_value(struct device_driver *ddri, char *buf)
 	return res;    
 }
 /*----------------------------------------------------------------------------*/
-static ssize_t store_trace_value(struct device_driver *ddri, char *buf, size_t count)
+static ssize_t store_trace_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 	struct bma250_i2c_data *obj = obj_i2c_data;
 	int trace;
@@ -1124,7 +1135,7 @@ static int bma250_create_attr(struct device_driver *driver)
 
 	for(idx = 0; idx < num; idx++)
 	{
-		if(err = driver_create_file(driver, bma250_attr_list[idx]))
+		if((err = driver_create_file(driver, bma250_attr_list[idx])))
 		{            
 			GSE_ERR("driver_create_file (%s) = %d\n", bma250_attr_list[idx]->attr.name, err);
 			break;
@@ -1411,7 +1422,7 @@ static long bma250_unlocked_ioctl(struct file *file, unsigned int cmd,unsigned l
 				err = -EINVAL;
 				break;	  
 			}
-			if(err = BMA250_ReadCalibration(client, cali))
+			if((err = BMA250_ReadCalibration(client, cali)))
 			{
 				break;
 			}
@@ -1515,7 +1526,7 @@ static void bma250_early_suspend(struct early_suspend *h)
 		return;
 	}
 	atomic_set(&obj->suspend, 1); 
-	if(err = BMA250_SetPowerMode(obj->client, false))
+	if((err = BMA250_SetPowerMode(obj->client, false)))
 	{
 		GSE_ERR("write power control fail!!\n");
 		return;
@@ -1539,7 +1550,7 @@ static void bma250_late_resume(struct early_suspend *h)
 	}
 
 	BMA250_power(obj->hw, 1);
-	if(err = bma250_init_client(obj->client, 0))
+	if((err = bma250_init_client(obj->client, 0)))
 	{
 		GSE_ERR("initialize client fail!!\n");
 		return;        
@@ -1574,7 +1585,7 @@ static int bma250_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 
 	obj->hw = get_cust_acc_hw();
 	
-	if(err = hwmsen_get_convert(obj->hw->direction, &obj->cvt))
+	if((err = hwmsen_get_convert(obj->hw->direction, &obj->cvt)))
 	{
 		GSE_ERR("invalid direction: %d\n", obj->hw->direction);
 		goto exit;
@@ -1607,19 +1618,19 @@ static int bma250_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 
 	bma250_i2c_client = new_client;	
 
-	if(err = bma250_init_client(new_client, 1))
+	if((err = bma250_init_client(new_client, 1)))
 	{
 		goto exit_init_failed;
 	}
 	
 
-	if(err = misc_register(&bma250_device))
+	if((err = misc_register(&bma250_device)))
 	{
 		GSE_ERR("bma250_device register failed\n");
 		goto exit_misc_device_register_failed;
 	}
 
-	if(err = bma250_create_attr(&bma250_gsensor_driver.driver))
+	if((err = bma250_create_attr(&bma250_gsensor_driver.driver)))
 	{
 		GSE_ERR("create attribute err = %d\n", err);
 		goto exit_create_attr_failed;
@@ -1628,7 +1639,7 @@ static int bma250_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 	sobj.self = obj;
     sobj.polling = 1;
     sobj.sensor_operate = gsensor_operate;
-	if(err = hwmsen_attach(ID_ACCELEROMETER, &sobj))
+	if((err = hwmsen_attach(ID_ACCELEROMETER, &sobj)))
 	{
 		GSE_ERR("attach fail = %d\n", err);
 		goto exit_kfree;
@@ -1661,17 +1672,17 @@ static int bma250_i2c_remove(struct i2c_client *client)
 {
 	int err = 0;	
 	
-	if(err = bma250_delete_attr(&bma250_gsensor_driver.driver))
+	if((err = bma250_delete_attr(&bma250_gsensor_driver.driver)))
 	{
 		GSE_ERR("bma150_delete_attr fail: %d\n", err);
 	}
 	
-	if(err = misc_deregister(&bma250_device))
+	if((err = misc_deregister(&bma250_device)))
 	{
 		GSE_ERR("misc_deregister fail: %d\n", err);
 	}
 
-	if(err = hwmsen_detach(ID_ACCELEROMETER))
+	if((err = hwmsen_detach(ID_ACCELEROMETER)))
 	    
 
 	bma250_i2c_client = NULL;
@@ -1717,8 +1728,8 @@ static struct platform_driver bma250_gsensor_driver = {
 /*----------------------------------------------------------------------------*/
 static int __init bma250_init(void)
 {
-	GSE_FUN();
 	struct acc_hw *hw = get_cust_acc_hw();
+	GSE_FUN();
 	GSE_LOG("%s: i2c_number=%d\n", __func__,hw->i2c_num); 
 	i2c_register_board_info(hw->i2c_num, &i2c_bma250, 1);
 	if(platform_driver_register(&bma250_gsensor_driver))

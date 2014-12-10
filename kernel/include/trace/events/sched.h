@@ -99,7 +99,84 @@ static inline long __trace_sched_switch_state(struct task_struct *p)
 
 	return state;
 }
-#endif
+
+# if defined(CONFIG_FAIR_GROUP_SCHED) && defined(CONFIG_MTK_SCHED_TRACERS)
+/*
+ * legacy cgroup hierarchy depth is no more than 3, and here we limit the
+ * size of each load printing no more than 10, 9 chars with a slash '/'.
+ * thus, making MTK_FAIR_DBG_SZ = 100 is pretty safe from array overflow,
+ * because 100 is much larger than 60, ((3 * 10) * 2), 2 for @prev and @next
+ * tasks.
+ */
+#  define MTK_FAIR_DBG_SZ	100
+/*
+ * snprintf writes at most @size bytes (including the trailing null bytes
+ * ('\0'), so increment 10 to 11
+ */
+#  define MTK_FAIR_DBG_LEN	(10 + 1)
+#  define MTK_FAIR_DBG_DEP	3
+
+static int fair_cgroup_load(char *buf, int cnt, struct task_struct *p)
+{
+	int loc = cnt;
+	int t, depth = 0;
+	unsigned long w[MTK_FAIR_DBG_DEP];
+	struct sched_entity *se = p->se.parent;
+
+	for (; se && (depth < MTK_FAIR_DBG_DEP); se = se->parent) {
+		w[depth++] = se->load.weight;
+	}
+
+	switch (p->policy) {
+	case SCHED_NORMAL:
+		loc += snprintf(&buf[loc], 7, "NORMAL"); break;
+	case SCHED_IDLE:
+		loc += snprintf(&buf[loc], 5, "IDLE"); break;
+	case SCHED_BATCH:
+		loc += snprintf(&buf[loc], 6, "BATCH"); break;
+	}
+
+	for (depth--; depth >= 0; depth--) {
+		t = snprintf(&buf[loc], MTK_FAIR_DBG_LEN, "/%lu", w[depth]);
+		if ((t < MTK_FAIR_DBG_LEN) && (t > 0)) {
+			loc += t;
+		} else {
+			loc += snprintf(&buf[loc], 7, "/ERROR");
+		}
+	}
+
+	t = snprintf(&buf[loc], MTK_FAIR_DBG_LEN, "/%lu", p->se.load.weight);
+	if ((t < MTK_FAIR_DBG_LEN) && (t > 0)) {
+		loc += t;
+	} else {
+		loc += snprintf(&buf[loc], 7, "/ERROR");
+	}
+
+	return loc;
+}
+
+static int is_fair_preempt(char *buf, struct task_struct *prev,
+			   struct task_struct *next)
+{
+	int cnt;
+	/* nothing needs to be clarified for RT class or yielding from IDLE */
+	if ((task_pid_nr(prev) == 0) || (rt_task(next) || rt_task(prev)))
+		return 0;
+
+	/* take care about preemption only */
+	if (prev->state &&
+	    !(task_thread_info(prev)->preempt_count & PREEMPT_ACTIVE)) {
+		return 0;
+	}
+
+	memset(buf, 0, MTK_FAIR_DBG_SZ);
+	cnt = fair_cgroup_load(buf, 0, prev);
+	cnt += snprintf(&buf[cnt], 6, " ==> ");
+	fair_cgroup_load(buf, cnt, next);
+	return 1;
+}
+# endif
+#endif /* CREATE_TRACE_POINTS */
 
 /*
  * Tracepoint for waking up a task:
@@ -180,6 +257,10 @@ TRACE_EVENT(sched_switch,
 		__array(	char,	next_comm,	TASK_COMM_LEN	)
 		__field(	pid_t,	next_pid			)
 		__field(	int,	next_prio			)
+#if defined(CONFIG_FAIR_GROUP_SCHED) && defined(CONFIG_MTK_SCHED_TRACERS)
+		__field(	int,	fair_preempt			)
+		__array(	char,	fair_dbg_buf,	MTK_FAIR_DBG_SZ )
+#endif
 	),
 
 	TP_fast_assign(
@@ -190,11 +271,15 @@ TRACE_EVENT(sched_switch,
 		memcpy(__entry->prev_comm, prev->comm, TASK_COMM_LEN);
 		__entry->next_pid	= next->pid;
 		__entry->next_prio	= next->prio;
+#if defined(CONFIG_FAIR_GROUP_SCHED) && defined(CONFIG_MTK_SCHED_TRACERS)
+		__entry->fair_preempt	= is_fair_preempt(__entry->fair_dbg_buf,
+							  prev, next);
+#endif
 	),
 
 	TP_printk(
 #ifdef CONFIG_MTK_SCHED_TRACERS
-            "prev_comm=%s prev_pid=%d prev_prio=%d prev_state=%s%s ==> next_comm=%s next_pid=%d next_prio=%d%s%s",
+            "prev_comm=%s prev_pid=%d prev_prio=%d prev_state=%s%s ==> next_comm=%s next_pid=%d next_prio=%d%s%s %s",
 #else
             "prev_comm=%s prev_pid=%d prev_prio=%d prev_state=%s%s ==> next_comm=%s next_pid=%d next_prio=%d",
 #endif
@@ -214,6 +299,11 @@ TRACE_EVENT(sched_switch,
             { _MT_TASK_BLOCKED_RTMUX, "r" },
             { _MT_TASK_BLOCKED_MUTEX, "m" },
             { _MT_TASK_BLOCKED_IO, "d" })
+# ifdef CONFIG_FAIR_GROUP_SCHED
+		, (__entry->fair_preempt ? __entry->fair_dbg_buf : "")
+# else
+		, ""
+# endif
 #endif
         )
 );
@@ -513,6 +603,50 @@ TRACE_EVENT(sched_pi_setprio,
 			__entry->comm, __entry->pid,
 			__entry->oldprio, __entry->newprio)
 );
+#ifdef CONFIG_MT_RT_SCHED_CRIT 
+TRACE_EVENT(sched_rt_crit,
+
+	TP_PROTO(int cpu,
+		 int rt_throttled),
+
+	TP_ARGS(cpu, rt_throttled),
+
+	TP_STRUCT__entry(
+		__field(	int,	cpu				)
+		__field(	int,	rt_throttled			)
+	),
+
+	TP_fast_assign(
+		__entry->cpu		= cpu;
+		__entry->rt_throttled 	= rt_throttled; 
+	),
+
+	TP_printk(
+            "cpu=%d rt_throttled=%d",
+		__entry->cpu, __entry->rt_throttled)
+        
+);
+#endif
+
+#ifdef CONFIG_MT_SCHED_NOTICE
+TRACE_EVENT(sched_log,
+
+    TP_PROTO(char *strings),
+
+    TP_ARGS(strings),
+
+    TP_STRUCT__entry(
+        __array(    char,  strings, 128)
+    ),
+
+    TP_fast_assign(
+        memcpy(__entry->strings, strings, 128);
+    ),
+
+    TP_printk("%s",__entry->strings)
+);
+#endif
+
 #ifdef CONFIG_MTK_SCHED_TRACERS
 TRACE_EVENT(int_switch,
 
@@ -623,6 +757,37 @@ TRACE_EVENT(sched_lbprof_log,
     TP_printk("%s",__entry->strings)
 );
 
+#endif
+
+#ifdef CONFIG_MTK_SCHED_CMP
+TRACE_EVENT(sched_task_entity_avg,
+
+	TP_PROTO(struct task_struct *tsk, struct sched_avg *avg),
+
+	TP_ARGS(tsk, avg),
+
+	TP_STRUCT__entry(
+		__array(	char, 		comm,	TASK_COMM_LEN	)
+		__field(	pid_t, 		tgid			)
+		__field(	pid_t, 		pid			)
+		__field(	unsigned long, 	contrib			)
+		__field(	unsigned long, 	ratio			)
+		__field(	u32,		usage_sum		)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->tgid      = task_pid_nr(tsk->group_leader);
+		__entry->pid       = task_pid_nr(tsk);
+		__entry->contrib   = avg->load_avg_contrib;
+		__entry->ratio     = avg->load_avg_ratio;
+		__entry->usage_sum = avg->usage_avg_sum;
+	),
+
+	TP_printk("comm=%s tgid=%d pid=%d contrib=%lu ratio=%lu usage_sum=%d",
+		  __entry->comm, __entry->tgid, __entry->pid,
+		  __entry->contrib, __entry->ratio, __entry->usage_sum)
+);
 #endif
 #endif /* _TRACE_SCHED_H */
 

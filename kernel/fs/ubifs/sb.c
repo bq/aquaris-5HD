@@ -58,7 +58,7 @@
 #define DEFAULT_RP_PERCENT 5
 
 /* The default maximum size of reserved pool in bytes */
-#define DEFAULT_MAX_RP_SIZE (5*1024*1024)
+#define DEFAULT_MAX_RP_SIZE (512*1024)
 
 /* Default time granularity in nanoseconds */
 #define DEFAULT_TIME_GRAN 1000000000
@@ -194,9 +194,10 @@ static int create_default_filesystem(struct ubifs_info *c)
 	if (tmp64 > DEFAULT_MAX_RP_SIZE)
 		tmp64 = DEFAULT_MAX_RP_SIZE;
 	sup->rp_size = cpu_to_le64(tmp64);
+	sup->rp_uid = 9996; //VID_CCCI
 	sup->ro_compat_version = cpu_to_le32(UBIFS_RO_COMPAT_VERSION);
 
-	err = ubifs_write_node(c, sup, UBIFS_SB_NODE_SZ, 0, 0, UBI_LONGTERM);
+	err = ubifs_write_node(c, sup, UBIFS_SB_NODE_SZ, 0, 0);
 	kfree(sup);
 	if (err)
 		return err;
@@ -252,14 +253,12 @@ static int create_default_filesystem(struct ubifs_info *c)
 
 	mst->total_used = cpu_to_le64(UBIFS_INO_NODE_SZ);
 
-	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM, 0,
-			       UBI_UNKNOWN);
+	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM, 0);
 	if (err) {
 		kfree(mst);
 		return err;
 	}
-	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM + 1, 0,
-			       UBI_UNKNOWN);
+	err = ubifs_write_node(c, mst, UBIFS_MST_NODE_SZ, UBIFS_MST_LNUM + 1, 0);
 	kfree(mst);
 	if (err)
 		return err;
@@ -282,8 +281,7 @@ static int create_default_filesystem(struct ubifs_info *c)
 	key_write_idx(c, &key, &br->key);
 	br->lnum = cpu_to_le32(main_first + DEFAULT_DATA_LEB);
 	br->len  = cpu_to_le32(UBIFS_INO_NODE_SZ);
-	err = ubifs_write_node(c, idx, tmp, main_first + DEFAULT_IDX_LEB, 0,
-			       UBI_UNKNOWN);
+	err = ubifs_write_node(c, idx, tmp, main_first + DEFAULT_IDX_LEB, 0);
 	kfree(idx);
 	if (err)
 		return err;
@@ -315,8 +313,7 @@ static int create_default_filesystem(struct ubifs_info *c)
 	ino->flags = cpu_to_le32(UBIFS_COMPR_FL);
 
 	err = ubifs_write_node(c, ino, UBIFS_INO_NODE_SZ,
-			       main_first + DEFAULT_DATA_LEB, 0,
-			       UBI_UNKNOWN);
+			       main_first + DEFAULT_DATA_LEB, 0);
 	kfree(ino);
 	if (err)
 		return err;
@@ -336,7 +333,7 @@ static int create_default_filesystem(struct ubifs_info *c)
 
 	cs->ch.node_type = UBIFS_CS_NODE;
 	err = ubifs_write_node(c, cs, UBIFS_CS_NODE_SZ, UBIFS_LOG_LNUM,
-			       0, UBI_UNKNOWN);
+			       0);
 	kfree(cs);
 
 	ubifs_msg("default file-system created");
@@ -518,7 +515,7 @@ int ubifs_write_sb_node(struct ubifs_info *c, struct ubifs_sb_node *sup)
 	int len = ALIGN(UBIFS_SB_NODE_SZ, c->min_io_size);
 
 	ubifs_prepare_node(c, sup, UBIFS_SB_NODE_SZ, 1);
-	return ubifs_leb_change(c, UBIFS_SB_LNUM, sup, len, UBI_LONGTERM);
+	return ubifs_leb_change(c, UBIFS_SB_LNUM, sup, len);
 }
 
 /**
@@ -691,7 +688,7 @@ static int fixup_leb(struct ubifs_info *c, int lnum, int len)
 	if (err)
 		return err;
 
-	return ubifs_leb_change(c, lnum, c->sbuf, len, UBI_UNKNOWN);
+	return ubifs_leb_change(c, lnum, c->sbuf, len);
 }
 
 /**
@@ -724,8 +721,12 @@ static int fixup_free_space(struct ubifs_info *c)
 		lnum = ubifs_next_log_lnum(c, lnum);
 	}
 
-	/* Fixup the current log head */
-	err = fixup_leb(c, c->lhead_lnum, c->lhead_offs);
+	/*
+	 * Fixup the log head which contains the only a CS node at the
+	 * beginning.
+	 */
+	err = fixup_leb(c, c->lhead_lnum,
+			ALIGN(UBIFS_CS_NODE_SZ, c->min_io_size));
 	if (err)
 		goto out;
 

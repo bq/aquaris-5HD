@@ -28,6 +28,17 @@ typedef struct _SEC_FB_HEADER
     unsigned char reserved[12];
 } SEC_FB_HEADER;
 
+typedef struct _SEC_FB_HEADER_V2
+{
+    unsigned int magic_num;
+    unsigned int hdr_ver;
+    unsigned int hash_count;
+    unsigned int chunk_size;
+    unsigned char part_name[32];
+    unsigned long long orig_img_size_64;
+    unsigned char reserved[8];
+} SEC_FB_HEADER_V2;
+
  
 typedef struct _SEC_IMG_HEADER
 {
@@ -72,12 +83,30 @@ typedef struct _SEC_IMG_HEADER
 
 } SEC_IMG_HEADER;
 
+typedef struct _SEC_IMG_HEADER_V4
+{
+    unsigned int magic_num;
+
+    unsigned char cust_name [32];
+    unsigned int image_verion;
+    unsigned int signature_length;  
+    unsigned int image_offset;
+    
+    unsigned int ext_magic;
+    unsigned int ext_hdr_length;
+
+    unsigned int image_length_high;
+    unsigned int image_length_low;
+} SEC_IMG_HEADER_V4;
+
+
 typedef enum
 {
     SEC_HDR_V1 = 1,
     SEC_HDR_V2 = 2,
     SEC_HDR_V1_V2 = 3,
     SEC_HDR_V3 = 4,
+    SEC_HDR_V4 = 5,
     
     UNSET
 } SEC_IMG_HEADER_VER;

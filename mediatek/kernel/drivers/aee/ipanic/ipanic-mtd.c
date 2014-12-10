@@ -16,7 +16,7 @@
 
 #ifndef MTK_EMMC_SUPPORT
 
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -42,6 +42,7 @@
 #include <linux/aee.h>
 #include <linux/spinlock.h>
 #include <linux/mm.h>
+#include <linux/kmsg_dump.h>
 #include "ipanic.h"
 
 /*
@@ -49,16 +50,13 @@
 * <= entries of blk_offset
 */
 static int IPANIC_OOPS_BLOCK_COUNT = 0;
-struct mtd_ipanic_data {
-	struct mtd_info	*mtd;
-	struct ipanic_header curr;
-	void *bounce;
-	u32 blk_offset[512];
+extern u8 *log_temp;
 
-	struct proc_dir_entry *oops;
-};
+#ifdef CONFIG_MTK_WQ_DEBUG
+extern int mt_dump_wq_debugger(void);
+#endif
 
-static struct mtd_ipanic_data mtd_drv_ctx;
+struct mtd_ipanic_data mtd_drv_ctx;
 
 static int mtd_ipanic_block_scan(struct mtd_ipanic_data *ctx) 
 {
@@ -120,7 +118,7 @@ static int mtd_ipanic_block_read_single(struct mtd_ipanic_data *ctx, loff_t offs
 	return rc;
 }
 
-static int mtd_ipanic_block_write(struct mtd_ipanic_data *ctx, loff_t to, int bounce_len)
+int mtd_ipanic_block_write(struct mtd_ipanic_data *ctx, loff_t to, int bounce_len)
 {
 	int rc;
 	size_t wlen;
@@ -288,7 +286,7 @@ static int mtd_ipanic_proc_oops(char *page, char **start,
 static void mtd_panic_notify_add(struct mtd_info *mtd)
 {
 	struct mtd_ipanic_data *ctx = &mtd_drv_ctx;
-	struct ipanic_header *hdr = ctx->bounce;
+	struct ipanic_header *hdr;
 	int rc;
 
 	if (strcmp(mtd->name, AEE_IPANIC_PLABEL))
@@ -296,6 +294,11 @@ static void mtd_panic_notify_add(struct mtd_info *mtd)
 
 	ctx->mtd = mtd;
 
+	ctx->bounce = kzalloc(ctx->mtd->writesize, GFP_KERNEL);
+	if (ctx->bounce == NULL)
+	  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: mtd buffer kzalloc failed, %d \n", __func__, ctx->mtd->writesize);
+	  
+        hdr = ctx->bounce;  
 	if (!mtd_ipanic_block_scan(ctx))
 		goto out_err;
 
@@ -355,42 +358,6 @@ static struct mtd_notifier mtd_panic_notifier = {
 
 static int in_panic = 0;
 
-/*
- * Writes the contents of the console to the specified offset in flash.
- * Returns number of bytes written
- */
-static int ipanic_write_log_buf(struct mtd_info *mtd, unsigned int off, int log_copy_start, int log_copy_end)
-{
-	struct mtd_ipanic_data *ctx = &mtd_drv_ctx;
-	int saved_oip;
-	int rc, rc2;
-	unsigned int last_chunk = 0, copy_count = 0;
-
-	while (!last_chunk) {
-		saved_oip = oops_in_progress;
-		oops_in_progress = 1;
-		rc = log_buf_copy2(ctx->bounce, mtd->writesize, log_copy_start, log_copy_end);
-		BUG_ON(rc < 0);
-		log_copy_start += rc;
-		copy_count += rc;
-		if (rc != mtd->writesize)
-			last_chunk = rc;
-
-		oops_in_progress = saved_oip;
-		if (rc <= 0)
-			break;
-
-		rc2 = mtd_ipanic_block_write(ctx, off, rc);
-		if (rc2 <= 0) {
-			xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG,
-			       "aee-ipanic: Flash write failed (%d)\n", rc2);
-			return rc2;
-		}
-		off += rc2;
-	}
-	return copy_count;
-}
-
 static int ipanic_write_android_buf(struct mtd_info *mtd, unsigned int off, int type)
 {
 	struct mtd_ipanic_data *ctx = &mtd_drv_ctx;
@@ -419,7 +386,7 @@ static int ipanic_write_android_buf(struct mtd_info *mtd, unsigned int off, int 
 		}
 		off += rc2;
 	}
-	//xlog_printk(ANDROID_LOG_DEBUG, IPANIC_LOG_TAG, "dump droid log type %d, count %d\n", type, copy_count);
+
 	return copy_count;
 }
 
@@ -427,13 +394,15 @@ static int ipanic_write_android_buf(struct mtd_info *mtd, unsigned int off, int 
  * Writes the contents of the console to the specified offset in flash.
  * Returns number of bytes written
  */
+extern struct ipanic_log_index ipanic_detail_start, ipanic_detail_end;
+extern struct ipanic_log_index ipanic_get_log_start(void);
+extern struct ipanic_log_index ipanic_get_log_end(void);
+extern int ipanic_write_log_buf(struct mtd_info *mtd, unsigned int off, struct ipanic_log_index start, struct ipanic_log_index end);
 static int mtd_ipanic_write_console(struct mtd_info *mtd, unsigned int off)
 {
     #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
-    if (log_end > __LOG_BUF_LEN)
-	    return ipanic_write_log_buf(mtd, off, log_end-__LOG_BUF_LEN, log_end);
-	else
-	    return ipanic_write_log_buf(mtd, off, 0, log_end);
+
+  return ipanic_write_log_buf(mtd, off, ipanic_get_log_start(), ipanic_get_log_end());
 }
 
 static int mtd_ipanic_write_oops_header(struct mtd_info *mtd, unsigned int off)
@@ -458,7 +427,7 @@ static int mtd_ipanic_write_oops_header(struct mtd_info *mtd, unsigned int off)
 
 static int ipanic_write_oops_detail(struct mtd_info *mtd, unsigned int off)
 {
-	return ipanic_write_log_buf(mtd, off, ipanic_detail_start, ipanic_detail_end);
+  return ipanic_write_log_buf(mtd, off, ipanic_detail_start, ipanic_detail_end);
 }
 
 static struct aee_oops *mtd_ipanic_oops_copy(void)
@@ -735,6 +704,10 @@ static int mtd_ipanic(struct notifier_block *this, unsigned long event,
 
     aee_wdt_dump_info();
 
+#ifdef CONFIG_MTK_WQ_DEBUG
+	mt_dump_wq_debugger();
+#endif
+
     /*In case many core run here concurrently*/
     spin_lock(&ipanic_lock);
     if (in_panic)
@@ -833,7 +806,7 @@ int __init aee_mtd_ipanic_init(void)
 {
     spin_lock_init(&ipanic_lock);
 	memset(&mtd_drv_ctx, 0, sizeof(mtd_drv_ctx));
-	mtd_drv_ctx.bounce = (void *) __get_free_page(GFP_KERNEL);
+	log_temp = (u8 *) __get_free_page(GFP_KERNEL);
 	
 	register_mtd_user(&mtd_panic_notifier);
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);

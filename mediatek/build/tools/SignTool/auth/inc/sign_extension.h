@@ -5,7 +5,9 @@
 #define VERIFY_COUNT                "VERIFY_COUNT"
 #define CHUNK_SIZE                  "CHUNK_SIZE"
 #define FB_CHUNK_SIZE               "FB_CHUNK_SIZE"
+#define CFG_VERSION                 "CFG_VERSION"
 #define SEC_EXTENSION_MAGIC         (0x7A797A79)
+#define SEC_EXTENSION_MAGIC_V4      (0x7B797B79)
 #define SEC_EXTENSION_HEADER_MAGIC  (0x45454545)
 
 #define CRYPTO_SIZE_UNKNOWN 0
@@ -13,8 +15,8 @@
 typedef struct _SEC_EXTENTION_CFG
 {
     unsigned int verify_count;
-    unsigned int verify_offset[MAX_VERITY_COUNT];
-    unsigned int verify_length[MAX_VERITY_COUNT];
+    unsigned long long verify_offset[MAX_VERITY_COUNT];
+    unsigned long long verify_length[MAX_VERITY_COUNT];
     unsigned int chunk_size;
 } SEC_EXTENTION_CFG;
 
@@ -26,6 +28,7 @@ typedef enum
     SEC_EXT_HDR_HASH_ONLY = 3,
     SEC_EXT_HDR_HASH_SIG = 4,
     SEC_EXT_HDR_SPARSE = 5,
+    SEC_EXT_HDR_HASH_ONLY_64 = 6,
     
     SEC_EXT_HDR_END_MARK = 0xFFFFFFFF
 } SEC_EXT_HEADER_TYPE;
@@ -118,6 +121,17 @@ typedef struct _SEC_EXTENSTION_HASH_ONLY
     unsigned int hash_len;
     unsigned char hash_data[];
 } SEC_EXTENSTION_HASH_ONLY;
+
+typedef struct _SEC_EXTENSTION_HASH_ONLY_64
+{
+    unsigned int magic;
+    unsigned int ext_type;
+    unsigned int sub_type;  /* hash type */
+    unsigned int padding;
+    unsigned long long hash_offset_64;
+    unsigned long long hash_len_64;
+    unsigned char hash_data[];
+} SEC_EXTENSTION_HASH_ONLY_64;
 
 typedef struct _SEC_EXTENSTION_HASH_SIG
 {

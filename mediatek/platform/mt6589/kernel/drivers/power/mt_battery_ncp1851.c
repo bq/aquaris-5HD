@@ -146,7 +146,7 @@ extern kal_bool get_gFG_Is_Charging(void);
 extern bool mt_usb_is_device(void);
 extern void mt_usb_connect(void);
 extern void mt_usb_disconnect(void);
-extern bool mt_usb_is_ready(void);
+//extern bool mt_usb_is_ready(void);
 
 
 extern CHARGER_TYPE mt_charger_type_detection(void);
@@ -386,6 +386,7 @@ int g_Charging_Over_Time = 0;
 int gForceADCsolution=0;
 
 int gSyncPercentage=0;
+int gSyncPercentageStatus=0;// 0:discharging, 1:charging
 
 unsigned int g_BatteryNotifyCode=0x0000;
 unsigned int g_BN_TestMode=0x0000;
@@ -892,6 +893,10 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
     //if( (upmu_is_chr_det(CHR)==KAL_TRUE) && (!g_Battery_Fail) )
     if( (upmu_is_chr_det()==KAL_TRUE) && (!g_Battery_Fail) && (g_Charging_Over_Time==0) && (usb_is_discharging_det() == 0))
     {
+        /* clear sync flag when charging/discharging switching */
+        if (gSyncPercentage && !gSyncPercentageStatus)
+            gSyncPercentage=0;
+        
         if ( BMT_status.bat_exist )
         {
             /* Battery Full */
@@ -918,6 +923,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 				else
 				{
 					gSyncPercentage=1;
+					gSyncPercentageStatus=1;
 #if defined(MTK_JEITA_STANDARD_SUPPORT)
                     //increase after xxs
                     if(gFGsyncTimer_jeita >= g_default_sync_time_out_jeita)
@@ -969,6 +975,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 					bat_volt_check_point = 100;
 
 					gSyncPercentage=1;
+					gSyncPercentageStatus=1;
 					if (Enable_BATDRV_LOG == 1) {
 						xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[Battery_Recharging] Keep UI as 100. bat_volt_check_point=%d, BMT_status.SOC=%d\r\n",
 						bat_volt_check_point, BMT_status.SOC);
@@ -995,6 +1002,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 							bat_volt_check_point=99;
 							//BMT_status.SOC=99;
 							gSyncPercentage=1;
+							gSyncPercentageStatus=1;
 
 							//if (Enable_BATDRV_LOG == 1) {
 								xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[Battery] Use gas gauge : gas gague get 100 first (%d)\r\n", bat_volt_check_point);
@@ -1005,6 +1013,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 							if(bat_volt_check_point == BMT_status.SOC)
 							{
 								gSyncPercentage=0;
+								gSyncPercentageStatus=1;
 
 								if (Enable_BATDRV_LOG == 1) {
 									xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[Battery] Can sync due to bat_volt_check_point=%d, BMT_status.SOC=%d\r\n",
@@ -1035,6 +1044,9 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
     /* Only Battery */
     else
     {
+        /* clear sync flag when charging/discharging switching */
+        if (gSyncPercentage && gSyncPercentageStatus)
+            gSyncPercentage=0;
         if(usb_is_discharging_det() == 1)
             bat_data->BAT_STATUS = POWER_SUPPLY_STATUS_CHARGING;
         else
@@ -1053,6 +1065,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 			else
 			{
 				gSyncPercentage=1;
+				gSyncPercentageStatus=0;
 				bat_volt_check_point--;
 				if(bat_volt_check_point <= 0)
 				{
@@ -1072,6 +1085,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 		{
 			/*Use gas gauge*/
 			gSyncPercentage=1;
+			gSyncPercentageStatus=0;
 			if(gBAT_counter_15==0)
 			{
 				bat_volt_check_point--;
@@ -1095,6 +1109,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 		{
 			/*Use gas gauge*/
 			gSyncPercentage=1;
+			gSyncPercentageStatus=0;
 			gBAT_counter_15=1;
 			g_Calibration_FG = 0;
     		FGADC_Reset_SW_Parameter();
@@ -1153,6 +1168,7 @@ static void mt6320_battery_update(struct mt6320_battery_data *bat_data)
 						bat_volt_check_point=1;
 						//BMT_status.SOC=1;
 						gSyncPercentage=1;
+						gSyncPercentageStatus=0;
 
 						//if (Enable_BATDRV_LOG == 1) {
 							xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[Battery] Use gas gauge : gas gague get 0 first (%d)\r\n", bat_volt_check_point);
@@ -3464,6 +3480,7 @@ void PrechargeCheckStatus(void)
     
     while(1)
     {
+        //if((g_bat_init_flag == 1) && (g_pmic_init_for_ncp1851 == 1) && mt_usb_is_ready()) //make sure mt6320_battery_probe register finished
         if((g_bat_init_flag == 1) && (g_pmic_init_for_ncp1851 == 1)) //make sure mt6320_battery_probe register finished
             break;
         else
@@ -3488,9 +3505,10 @@ void PrechargeCheckStatus(void)
         vfet_status = ncp1851_get_vfet_ok();
         ncp1851_status = ncp1851_get_chip_status();
         bat_vol = get_i_sense_volt(10);
-        if(vfet_status == 1)
+        if((vfet_status == 1) && (ncp1851_status != 0x8) && (ncp1851_status != 0x9) && (ncp1851_status != 0xA)) //avoid battery protect state cause vfet ambiguous
         {
             g_ocv_lookup_done = 0;
+            xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath init, (vfet_status = %d) (ncp1851_status = 0x%x)\n", vfet_status, ncp1851_status);
             pchr_turn_off_charging_ncp1851();
             bat_vol = get_i_sense_volt(10);
             xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath init battery voltage > 3600, battery voltage during system discharging = %d\n", bat_vol);
@@ -3499,7 +3517,7 @@ void PrechargeCheckStatus(void)
         else if(bat_vol >= 3700) //Error handling when vfet_status is not reliable
         {
             g_ocv_lookup_done = 0;
-            xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath init, (vfet_status = %d) (ncp1851_status = %d)\n", vfet_status, ncp1851_status);
+            xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath init, (vfet_status = %d) (ncp1851_status = 0x%x)\n", vfet_status, ncp1851_status);
             pchr_turn_off_charging_ncp1851();
             bat_vol = get_i_sense_volt(10);
             xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath init battery voltage > 3600, battery voltage during system discharging = %d\n", bat_vol);
@@ -3525,7 +3543,7 @@ void PrechargeCheckStatus(void)
         {
             wake_lock(&battery_suspend_lock);
 
-            if(BMT_status.charger_type == CHARGER_UNKNOWN && mt_usb_is_ready())
+            if(BMT_status.charger_type == CHARGER_UNKNOWN)
             {
                 CHR_Type_num = mt_charger_type_detection();
                 xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] CHR_Type_num = %d\r\n", CHR_Type_num);
@@ -3643,7 +3661,8 @@ void PrechargeCheckStatus(void)
                 }
             }
 
-            if((bat_vol >= SYSTEM_OFF_VOLTAGE + 100) || (vfet_status == 1))
+            //avoid battery protect state cause vfet ambiguous
+            if(((bat_vol >= SYSTEM_OFF_VOLTAGE + 100) || (vfet_status == 1)) && !((ncp1851_status == 0x8) || (ncp1851_status == 0x9) || (ncp1851_status == 0xA)))
             {
                 xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath precharge finish, battery voltage = %d\n", bat_vol);
                 BMT_status.bat_charging_state = CHR_CC;
@@ -3677,7 +3696,9 @@ void PrechargeCheckStatus(void)
                 power_supply_changed(bat_psy);
 
                 sys_vol = get_bat_sense_volt(10);
-                xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath precharge continue, battery voltage (%d), system voltage (%d), charger volt (%d)\n", bat_vol, sys_vol, charger_vol);
+                xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "[BATTERY:ncp1851] Powerpath precharge continue, "
+                    "battery voltage (%d), system voltage (%d), charger volt (%d), ncp1851_status (0x%x)\n",
+                    bat_vol, sys_vol, charger_vol, ncp1851_status);
 
                 mt_battery_notify_check();
 #endif
@@ -4740,7 +4761,7 @@ void battery_kthread_hrtimer_init(void)
 {
     ktime_t ktime;
 
-    ktime = ktime_set(10, 0);	// 10s, 10* 1000 ms
+    ktime = ktime_set(5, 0);	// 10s, 10* 1000 ms
     hrtimer_init(&battery_kthread_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     battery_kthread_timer.function = battery_kthread_hrtimer_func;    
     hrtimer_start(&battery_kthread_timer, ktime, HRTIMER_MODE_REL);
@@ -4982,11 +5003,6 @@ static int mt6320_battery_resume(struct platform_device *dev)
     return 0;
 }
 
-struct platform_device MT6320_battery_device = {
-    .name   = "mt6320-battery",
-    .id	    = -1,
-};
-
 static struct platform_driver mt6320_battery_driver = {
     .probe         = mt6320_battery_probe,
     .remove        = mt6320_battery_remove,
@@ -4996,7 +5012,7 @@ static struct platform_driver mt6320_battery_driver = {
     .resume        = mt6320_battery_resume,
     //#endif
     .driver     = {
-        .name = "mt6320-battery",
+        .name = "battery",
     },
 };
 
@@ -5147,12 +5163,6 @@ static int __init mt6320_battery_init(void)
 {
     int ret;
 
-    ret = platform_device_register(&MT6320_battery_device);
-    if (ret) {
-        xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "****[mt6320_battery_driver] Unable to device register(%d)\n", ret);
-	return ret;
-    }
-    
     ret = platform_driver_register(&mt6320_battery_driver);
     if (ret) {
         xlog_printk(ANDROID_LOG_INFO, "Power/Battery", "****[mt6320_battery_driver] Unable to register driver (%d)\n", ret);

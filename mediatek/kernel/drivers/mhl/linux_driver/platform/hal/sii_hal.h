@@ -4,6 +4,9 @@
 #include "defs.h"
 #include "osal/include/osal.h"
 #include "si_osdebug.h"
+#include "hdmitx_i2c.h"
+
+
 #ifdef __cplusplus 
 extern "C" { 
 #endif  

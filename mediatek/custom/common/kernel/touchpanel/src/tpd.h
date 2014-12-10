@@ -9,43 +9,19 @@
 #include <linux/list.h>
 #include <linux/proc_fs.h> 
 
-#ifdef MT6589
-    #include <mach/mt_gpio.h>
-    #include <mach/mt_reg_base.h>
-    #include <mach/mt_typedefs.h>
-#endif
-#ifdef MT6577
-    #include <mach/mt_gpio.h>
-    #include <mach/mt_devs.h>
-    #include <mach/mt_reg_base.h>
-    #include <mach/mt_typedefs.h>
-#endif
-#ifdef MT6575
-    #include <mach/mt_gpio.h>
-    #include <mach/mt_devs.h>
-    #include <mach/mt_reg_base.h>
-    #include <mach/mt_typedefs.h>
-#endif
-#ifdef MT6573
-    #include <mach/mt6573_pll.h>
-    #include <mach/mt6573_gpio.h>
-    #include <mach/mt6573_devs.h>
-    #include <mach/mt6573_reg_base.h>
-    #include <mach/mt6573_typedefs.h>
-#endif
-#ifdef MT6516
-    #include <mach/mt6516_pll.h>
-    #include <mach/mt6516_gpio.h>
-    #include <mach/mt6516_devs.h>
-    #include <mach/mt6516_boot.h>
-    #include <mach/mt6516_reg_base.h>
-    #include <mach/mt6516_typedefs.h>
-#endif
+#include <linux/slab.h>
+
+#include <mach/mt_gpio.h>
+#include <mach/mt_reg_base.h>
+#include <mach/mt_typedefs.h>
+
 #include <mach/board.h>
 #include <mach/irqs.h>
+#include <mach/eint.h>
+
 #include <asm/io.h>
 #include <linux/platform_device.h>
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/kobject.h>
 #include <linux/earlysuspend.h>
 //#include "tpd_custom.h"
@@ -113,6 +89,11 @@ struct tpd_device
     int btn_state;
 };
 
+struct tpd_attrs
+{
+	struct device_attribute **attr;
+	int num;
+};
 struct tpd_driver_t
 {
 		char *tpd_device_name;
@@ -120,6 +101,7 @@ struct tpd_driver_t
  		void (*suspend)(struct early_suspend *h);
  		void (*resume)(struct early_suspend *h);
  		int tpd_have_button;
+		struct tpd_attrs attrs;
 };
 
 #if 1 //#ifdef TPD_HAVE_BUTTON

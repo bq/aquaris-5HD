@@ -104,6 +104,18 @@ static INT32 wmt_func_wifi_off(P_WMT_IC_OPS pOps, P_WMT_GEN_CONF pConf);
 #endif
 
 
+#if CFG_FUNC_ANT_SUPPORT
+
+static INT32 wmt_func_ant_on(P_WMT_IC_OPS pOps, P_WMT_GEN_CONF pConf);
+static INT32 wmt_func_ant_off(P_WMT_IC_OPS pOps, P_WMT_GEN_CONF pConf);
+
+    WMT_FUNC_OPS wmt_func_ant_ops = {
+        //BT subsystem function on/off
+        .func_on = wmt_func_ant_on,
+        .func_off = wmt_func_ant_off
+    };
+#endif
+
 /*******************************************************************************
 *                           P R I V A T E   D A T A
 ********************************************************************************
@@ -281,6 +293,27 @@ INT32 wmt_func_bt_off(P_WMT_IC_OPS pOps, P_WMT_GEN_CONF pConf)
 }
 
 #endif
+
+#if CFG_FUNC_ANT_SUPPORT
+
+INT32 _osal_inline_ wmt_func_ant_ctrl(ENUM_FUNC_STATE funcState)
+{
+    /*only need to send turn BT subsystem wmt command*/
+    return wmt_core_func_ctrl_cmd(WMTDRV_TYPE_ANT, (FUNC_ON == funcState) ? MTK_WCN_BOOL_TRUE : MTK_WCN_BOOL_FALSE);
+}
+
+INT32 wmt_func_ant_on(P_WMT_IC_OPS pOps, P_WMT_GEN_CONF pConf)
+{
+    return wmt_core_func_ctrl_cmd(WMTDRV_TYPE_ANT, MTK_WCN_BOOL_TRUE);
+}
+
+INT32 wmt_func_ant_off(P_WMT_IC_OPS pOps, P_WMT_GEN_CONF pConf)
+{
+    return wmt_core_func_ctrl_cmd(WMTDRV_TYPE_ANT, MTK_WCN_BOOL_FALSE);
+}
+
+#endif
+
 
 #if CFG_FUNC_GPS_SUPPORT
 

@@ -1,13 +1,29 @@
 #!/usr/bin/perl
 ($rslt, $logFile, $act) = @ARGV;
-if ($logFile eq "/dev/null") {
+#if ($logFile eq "/dev/null") {
   if ($rslt == 0) {
     print "                    ==> [OK]    " . &CurrTimeStr . "\n";
   } else {
     print "                    ==> [FAIL]  " . &CurrTimeStr . "\n";
   }
+ my $out_dir = "out";
+ if (exists $ENV{"OUT_DIR"})
+ {
+    $out_dir = $ENV{"OUT_DIR"};
+ }
+ if ($logFile =~ /\/([^\/]+)_([^_]+)\.log$/) {
+   $prj = $1;
+   $curMod = $2;
+ } else {
+      warn "Can NOT match project and module\n";
+ }
+$logpath="$out_dir/target/product/";
+  if ($act eq "clean" && $curMod eq "android"){
+    p_system("mkdir -p $logpath");
+    p_system("mv $logFile $logpath");
+  }
   exit $rslt;
-}
+#}
 
 (($#ARGV < 1) || ($#ARGV > 2)) && &Usage;
 
@@ -20,30 +36,22 @@ while (!-e $parseScrpt) {
   last if ($i > 8);
 }
 
-if ($logFile =~ /\/([^\/]+)_([^_]+)\.log$/) {
-  $prj = $1;
-  $curMod = $2;
-} else {
-  warn "Can NOT match project and module\n";
-}
-
 $chkBin = 1;
 ($prj = "generic") if ($prj eq "emulator");
-if ($curMod eq "uboot") {
-  $chkFile = "bootable/bootloader/uboot/u-boot-mt6516.bin";
-  $chkFile = "bootable/bootloader/uboot/uboot_${prj}.bin";
+if ($curMod eq "lk") {
+  $chkFile = "$ENV{MTK_ROOT_OUT}/BOOTLOADER_OBJ/build-${prj}/lk.bin";
 } elsif ($curMod eq "kernel") {
-  $chkFile = "kernel/Download/flash/${prj}_kernel.bin";
+  $chkFile = "$ENV{KERNEL_SOURCE}/Download/flash/${prj}_kernel.bin";
   if ($ENV{'KBUILD_OUTPUT_SUPPORT'} eq "yes")
-  {  
-    $chkFile = "kernel/out/kernel_${prj}.bin";
+  {
+     $chkFile = "$out_dir/target/product/${prj}/obj/KERNEL_OBJ/kernel_${prj}.bin";
   }
   else 
-  { 
-    $chkFile = "kernel/kernel_${prj}.bin"; 
+  {
+    $chkFile = "$ENV{KERNEL_SOURCE}/kernel_${prj}.bin"; 
   }
 } elsif ($curMod eq "android") {
-  $chkFile = "out/target/product/${prj}/system.img";
+  $chkFile = "$out_dir/target/product/${prj}/system.img";
 }
 
 if (($chkFile ne "") && (!-e $chkFile || -z $chkFile)) {

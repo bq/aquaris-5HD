@@ -37,18 +37,18 @@
 
 #include <linux/io.h>
 #include <linux/spinlock.h>
+
 extern bool mtk_usb_power;
 extern bool usb_enable_clock(bool enable);
-
-//static DEFINE_SPINLOCK(usb_io_lock);
 extern spinlock_t usb_io_lock;
+
 static inline u16 musb_readw(const void __iomem *addr, unsigned offset)
 {
 	u16 rc = 0;
-	if(mtk_usb_power)
+
+	if (mtk_usb_power) {
 		rc =  readw(addr + offset);
-	else
-	{
+    } else {
     	unsigned long flags = 0;
     	spin_lock_irqsave(&usb_io_lock, flags);
 		usb_enable_clock(true);
@@ -62,10 +62,10 @@ static inline u16 musb_readw(const void __iomem *addr, unsigned offset)
 static inline u32 musb_readl(const void __iomem *addr, unsigned offset)
 {
 	u32 rc = 0;
-	if(mtk_usb_power)
+
+	if (mtk_usb_power) {
 		rc =  readl(addr + offset);
-	else
-	{
+    } else {
     	unsigned long flags = 0;
     	spin_lock_irqsave(&usb_io_lock, flags);
 		usb_enable_clock(true);
@@ -80,10 +80,9 @@ static inline u32 musb_readl(const void __iomem *addr, unsigned offset)
 
 static inline void musb_writew(void __iomem *addr, unsigned offset, u16 data)
 {
-	if(mtk_usb_power)
+	if (mtk_usb_power) {
 		writew(data, addr + offset);
-	else
-	{
+    } else {
     	unsigned long flags = 0;
     	spin_lock_irqsave(&usb_io_lock, flags);
 		usb_enable_clock(true);
@@ -96,10 +95,9 @@ static inline void musb_writew(void __iomem *addr, unsigned offset, u16 data)
 
 static inline void musb_writel(void __iomem *addr, unsigned offset, u32 data)
 {
-	if(mtk_usb_power)
+	if (mtk_usb_power) {
 		writel(data, addr + offset);
-	else
-	{
+    } else {
     	unsigned long flags = 0;
     	spin_lock_irqsave(&usb_io_lock, flags);
 		usb_enable_clock(true);
@@ -113,10 +111,10 @@ static inline void musb_writel(void __iomem *addr, unsigned offset, u32 data)
 static inline u8 musb_readb(const void __iomem *addr, unsigned offset)
 {
 	u8 rc = 0;
-	if(mtk_usb_power)
+
+	if (mtk_usb_power) {
 		rc =  readb(addr + offset);
-	else
-	{
+    } else {
     	unsigned long flags = 0;
     	spin_lock_irqsave(&usb_io_lock, flags);
 		usb_enable_clock(true);
@@ -130,10 +128,9 @@ static inline u8 musb_readb(const void __iomem *addr, unsigned offset)
 
 static inline void musb_writeb(void __iomem *addr, unsigned offset, u8 data)
 {
-	if(mtk_usb_power)
+	if (mtk_usb_power) {
 		writeb(data, addr + offset);
-	else
-	{
+    } else {
     	unsigned long flags = 0;
     	spin_lock_irqsave(&usb_io_lock, flags);
 		usb_enable_clock(true);

@@ -63,16 +63,7 @@
 #include <linux/wait.h>
 #include <linux/spinlock.h>
 #include <linux/semaphore.h>
-
-#if defined(MT6577)
 #include <mach/mt_typedefs.h>
-#elif defined(MT6575) 
-#include <mach/mt_typedefs.h>
-#elif defined(MT6573)
-#include <mach/mt_typedefs.h>
-#else
-#include <mach/mt_typedefs.h>
-#endif
 
 #ifndef _YUSU_ANDROID_SPEAKER_H_
 #define _YUSU_ANDROID_SPEAKER_H_

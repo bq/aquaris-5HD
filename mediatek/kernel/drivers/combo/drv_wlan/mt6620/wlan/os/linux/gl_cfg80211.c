@@ -516,7 +516,9 @@ mtk_cfg80211_get_station (
 int 
 mtk_cfg80211_scan (
     struct wiphy *wiphy,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
     struct net_device *ndev,
+#endif
     struct cfg80211_scan_request *request
     )
 {
@@ -994,9 +996,13 @@ mtk_cfg80211_join_ibss (
     ASSERT(prGlueInfo);
 
     /* set channel */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3, 7, 0)
     if(params->channel) {
         u4ChnlFreq = nicChannelNum2Freq(params->channel->hw_value);
-
+#else
+    if(params->chandef.chan) {
+        u4ChnlFreq = nicChannelNum2Freq(params->chandef.chan->hw_value);
+#endif
         rStatus = kalIoctl(prGlueInfo,
                            wlanoidSetFrequency,
                            &u4ChnlFreq,
@@ -1281,7 +1287,11 @@ mtk_cfg80211_flush_pmksa (
 int 
 mtk_cfg80211_remain_on_channel (
     struct wiphy *wiphy,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
     struct net_device *ndev,
+#else
+    struct wireless_dev *wdev,
+#endif
     struct ieee80211_channel *chan,
     enum nl80211_channel_type channel_type,
     unsigned int duration,
@@ -1317,7 +1327,11 @@ mtk_cfg80211_remain_on_channel (
 int
 mtk_cfg80211_cancel_remain_on_channel (
     struct wiphy *wiphy,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
     struct net_device *ndev,
+#else
+    struct wireless_dev *wdev,
+#endif
     u64 cookie
     )
 {
@@ -1349,11 +1363,17 @@ mtk_cfg80211_cancel_remain_on_channel (
 int
 mtk_cfg80211_mgmt_tx (
     struct wiphy *wiphy,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
     struct net_device *ndev,
+#else
+    struct wireless_dev *wdev,
+#endif
     struct ieee80211_channel *channel,
     bool offscan,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
     enum nl80211_channel_type channel_type,
     bool channel_type_valid,
+#endif
     unsigned int wait,
     const u8 *buf,
     size_t len,
@@ -1391,7 +1411,11 @@ mtk_cfg80211_mgmt_tx (
 int
 mtk_cfg80211_mgmt_tx_cancel_wait (
     struct wiphy *wiphy,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
     struct net_device *ndev,
+#else
+    struct wireless_dev *wdev,
+#endif
     u64 cookie
     )
 {

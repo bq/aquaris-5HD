@@ -1,7 +1,8 @@
 #ifndef __MT6589_DRVBASE_H__
 #define __MT6589_DRVBASE_H__
 
-#include "val_types.h"
+#include "val_types_public.h"
+#include "val_types_private.h"
 
 //=============================================================
 // For driver

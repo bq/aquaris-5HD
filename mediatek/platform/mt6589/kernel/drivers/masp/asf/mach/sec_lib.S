@@ -528,15 +528,14 @@ SST_GetSecESChecksum:
 	.ascii	"short unsigned int\000"
 .LASF11:
 	.ascii	"GNU C 4.6.x-google 20120106 (prerelease)\000"
-.LASF12:
-	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
 .LASF1:
 	.ascii	"unsigned int\000"
 .LASF2:
 	.ascii	"char\000"
+.LASF12:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/sec_lib.c\000"
 .LASF8:
 	.ascii	"long long int\000"
 .LASF13:

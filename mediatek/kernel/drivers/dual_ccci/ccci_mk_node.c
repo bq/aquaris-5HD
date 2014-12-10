@@ -13,7 +13,7 @@
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/proc_fs.h>
-#include <ccci_common.h>
+#include <ccci.h>
 
 typedef struct _ccci_node
 {
@@ -46,13 +46,18 @@ static ccci_node_t ccci1_node_list[] = {
 	{"ccci_uem_tx",		"std chr",		19,		0},
 	{"ccci_md_log_rx",	"std chr",		42,		0},
 	{"ccci_md_log_tx",	"std chr",		43,		0},
-
-	{"ccci_ipc_1220_0",	"ipc",			0,		0},
+#ifdef MTK_ICUSB_SUPPORT
+	{"ttyC",			"tty",			0,		4},
+#else
+	{"ttyC",			"tty",			0,		3},
+#endif
+	{"ccci_ipc_1220_0",	"ipc",			0,		0}, //used by AGPS
+	{"ccci_ipc_2",		"ipc",			2,		0}, //used by GPS
 
 	{"ccci_fs",			"fs",			0,		0},
 
 	{"ccci_monitor",	"vir chr",		0,		0},
-	{"ccci_ioctl",		"vir chr",		1,		2},
+	{"ccci_ioctl",		"vir chr",		1,		5},
 };
 
 static ccci_node_t ccci2_node_list[] = {
@@ -65,18 +70,22 @@ static ccci_node_t ccci2_node_list[] = {
 	{"ccci2_md_log_rx",	"std chr",		42,		0}, 
 	{"ccci2_md_log_tx",	"std chr",		43,		0},
 
+#ifdef MTK_ICUSB_SUPPORT
+	{"ccci2_tty",			"tty",			0,		4},
+#else
+	{"ccci2_tty",			"tty",			0,		3},
+#endif
+
 	{"ccci2_ipc_",		"ipc",			0,		1}, 
 
 	{"ccci2_fs",		"fs",			0,		0},
 
 	{"ccci2_monitor",	"vir chr",		0,		0},
-	{"ccci2_ioctl",		"vir chr",		1,		2},
+	{"ccci2_ioctl",		"vir chr",		1,		5},
 };
 
 static ccci_node_type_table_t	ccci_node_type_table[MAX_MD_NUM];
 static void						*dev_class = NULL;
-
-
 
 
 static void init_ccci_node_type_table(void)
@@ -184,15 +193,6 @@ static void* create_dev_class(struct module *owner, const char *name)
 }
 
 
-/*
-static void release_dev_class(void *dev_class)
-{
-	if(NULL != dev_class)
-		class_destroy(dev_class);
-}
-*/
-
-
 static int register_dev_node(void *dev_class, const char *name, int major_id, int minor_start_id, int index)
 {
 	int ret = 0;
@@ -215,24 +215,242 @@ static int register_dev_node(void *dev_class, const char *name, int major_id, in
 }
 
 
-/*
+
 static void release_dev_node(void *dev_class, int major_id, int minor_start_id, int index)
 {
-	device_destroy(dev_class,MKDEV(major_id, minor_start_id) + index);
+	dev_t dev;
+
+	if(index >= 0) {
+		dev = MKDEV(major_id, minor_start_id) + index;
+		device_destroy((struct class *)dev_class, dev);
+	} else {
+		dev = MKDEV(major_id, minor_start_id);
+		device_destroy((struct class *)dev_class, dev);
+	}
 }
-*/
+
+
+
+/* ccci sysfs kobject */
+typedef struct ccci_info
+{
+	struct kobject kobj;
+	unsigned int ccci_attr_count;
+}ccci_info_t;
+
+typedef struct ccci_attribute
+{
+	struct attribute attr;
+	ssize_t (*show)(char *buf);
+	ssize_t (*store)(const char *buf, size_t count);
+}ccci_attribute_t;
+
+#define CCCI_ATTR(_name, _mode, _show, _store)				\
+	ccci_attribute_t ccci_attr_##_name = {					\
+	.attr = {.name = __stringify(_name), .mode = _mode },	\
+	.show = _show,											\
+	.store = _store,										\
+}
+
+/* common func declare */
+void	ccci_attr_release(struct kobject *kobj);
+ssize_t ccci_attr_show(struct kobject *kobj, struct attribute *attr, char *buf);
+ssize_t ccci_attr_store(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count);
+
+
+/* private func declear of specific attr */
+//ssize_t show_attr_boot(char *buf);
+//ssize_t store_attr_boot(const char *buf, size_t count);
+
+ssize_t show_attr_md1_postfix(char *buf);
+ssize_t show_attr_md2_postfix(char *buf);
+ssize_t show_attr_version(char *buf)
+{
+	return snprintf(buf, 16, "%d\n", 2); // hardcode
+}
+
+/* global vars */
+static ccci_info_t *ccci_sys_info = NULL;
+struct sysfs_ops ccci_sysfs_ops = {
+	.show  = ccci_attr_show,
+	.store = ccci_attr_store
+};
+
+CCCI_ATTR(boot, 0660, NULL, NULL);
+CCCI_ATTR(modem_info, 0644, NULL, NULL);
+CCCI_ATTR(md1_postfix, 0644, show_attr_md1_postfix, NULL);
+CCCI_ATTR(md2_postfix, 0644, show_attr_md2_postfix, NULL);
+CCCI_ATTR(version, 0644, show_attr_version, NULL);
+
+struct attribute *ccci_default_attrs[] = {
+	&ccci_attr_boot.attr,
+	&ccci_attr_modem_info.attr,
+	&ccci_attr_md1_postfix.attr,
+	&ccci_attr_md2_postfix.attr,
+	&ccci_attr_version.attr,
+	NULL
+};
+
+struct kobj_type ccci_ktype = {
+	.release		= ccci_attr_release,
+    .sysfs_ops 		= &ccci_sysfs_ops,
+    .default_attrs 	= ccci_default_attrs
+};
+
+/* common func implement */
+ssize_t ccci_attr_show(struct kobject *kobj, struct attribute *attr, char *buf)
+{
+	ssize_t len = 0;
+	ccci_attribute_t *a = container_of(attr, ccci_attribute_t, attr);
+
+	if (a->show)
+	{
+		len = a->show(buf);
+	}
+
+	return len;
+}
+
+ssize_t ccci_attr_store(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+{
+	ssize_t len = 0;
+	ccci_attribute_t *a = container_of(attr, ccci_attribute_t, attr);
+
+	if (a->store)
+	{
+		len = a->store(buf, count);
+	}
+
+	return len;
+}
+
+void ccci_attr_release(struct kobject *kobj)
+{
+	ccci_info_t *ccci_info_temp = container_of(kobj, ccci_info_t, kobj);
+	kfree(ccci_info_temp);
+	ccci_sys_info = NULL;
+}
+
+
+/* private func implement */
+#if 0
+ssize_t show_attr_boot(char *buf)
+{
+	sprintf(buf, "show ccci info success\n");
+	
+	CCCI_MSG("show_attr_boot!\n");
+
+	return strlen(buf);
+}
+
+ssize_t store_attr_boot(const char *buf, size_t count)
+{
+	int test = 0;
+	sscanf(buf, "%d", &test);
+
+	CCCI_MSG("store_attr_boot!\n", test);
+	return strlen(buf);
+}
+#endif
+
+ssize_t show_attr_md1_postfix(char *buf)
+{
+	get_md_post_fix(MD_SYS1, buf, NULL);
+	
+	CCCI_MSG("md1: %s\n", buf);
+	
+	return strlen(buf);
+}
+
+ssize_t show_attr_md2_postfix(char *buf)
+{
+	get_md_post_fix(MD_SYS2, buf, NULL);
+	
+	CCCI_MSG("md2: %s\n", buf);
+	
+	return strlen(buf);
+}
+
+
+int register_ccci_attr_func(const char *buf, ssize_t (*show)(char*), ssize_t (*store)(const char*,size_t))
+{
+	int i = 0;
+	ccci_attribute_t *ccci_attr_temp = NULL;
+	
+	while(ccci_default_attrs[i])
+	{
+		if (!strncmp(ccci_default_attrs[i]->name, buf, strlen(ccci_default_attrs[i]->name))) {
+			ccci_attr_temp = container_of(ccci_default_attrs[i], ccci_attribute_t, attr);
+			break;
+		}
+		i++;
+	}
+	if (ccci_attr_temp) {
+		ccci_attr_temp->show  = show;
+		ccci_attr_temp->store = store;
+		return 0;
+	} else {
+		CCCI_MSG("fail to register ccci attibute!\n");
+		return -1;
+	}
+}
+
+
+
+#define CCCI_KOBJ_NAME		"ccci"
+extern struct kobject *kernel_kobj;
+int ccci_attr_install(void)
+{
+	int ret = 0;
+
+	ccci_sys_info = kmalloc(sizeof(ccci_info_t), GFP_KERNEL);
+	if (!ccci_sys_info)
+		return -ENOMEM;
+
+	memset(ccci_sys_info, 0, sizeof(ccci_info_t));
+
+	ret = kobject_init_and_add(&ccci_sys_info->kobj, &ccci_ktype, kernel_kobj, CCCI_KOBJ_NAME);
+	if (ret < 0) {
+		kobject_put(&ccci_sys_info->kobj);
+        CCCI_MSG("fail to add ccci kobject in kernel\n");
+        return ret;
+    }
+
+	ccci_sys_info->ccci_attr_count = sizeof(*ccci_default_attrs)/sizeof(struct attribute);
+
+	return ret;
+
+}
 
 
 int init_ccci_dev_node(void)
 {
+	int ret = 0;
 	init_ccci_node_type_table();
 
 	// Make device class
 	dev_class = create_dev_class(THIS_MODULE, "ccci_node");
 	if(dev_class == NULL)
 		return -1;
+
+	ret = ccci_attr_install();
 	
-	return 0;
+	return ret;
+}
+
+
+void release_ccci_dev_node(void)
+{
+	if (dev_class)
+		class_destroy((struct class *)dev_class);
+
+	if (ccci_sys_info) {	
+		if (&ccci_sys_info->kobj)
+			kobject_put(&ccci_sys_info->kobj);
+		
+		kfree(ccci_sys_info);
+		ccci_sys_info = NULL;
+	}
 }
 
 
@@ -274,4 +492,36 @@ int mk_ccci_dev_node(int md_id)
 
 	return ret;
 }
+
+
+void ccci_dev_node_exit(int md_id)
+{
+	int	i, j, major, minor, num;
+	ccci_node_t *dev_node;
+
+	if (md_id == MD_SYS1) {
+		dev_node = ccci1_node_list;
+		num = sizeof(ccci1_node_list)/sizeof(ccci_node_t);
+	} else if (md_id == MD_SYS2) {
+		dev_node = ccci2_node_list;
+		num = sizeof(ccci2_node_list)/sizeof(ccci_node_t);
+	} else {
+		return;
+	}
+
+	for(i = 0; i < num; i++) {
+		if(get_dev_id_by_md_id(md_id, dev_node[i].type, &major, &minor) < 0)
+			break;
+
+		minor = minor + dev_node[i].idx;
+		if(dev_node[i].ext_num == 0) {
+			release_dev_node(dev_class, major, minor, -1);
+		} else {
+			for(j = 0; j < dev_node[i].ext_num; j++)
+				release_dev_node(dev_class, major, minor, j);
+		}
+	}
+}
+
+
 

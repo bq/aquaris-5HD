@@ -348,7 +348,7 @@ void tpd_em_log_output(int raw_x, int raw_y, int cal_x, int cal_y, int p, int do
         printk("[tpd_em_log] rx=%d,ry=%d,cx=%d,cy=%d,p=%d,d(+%ld ms)\n",
             raw_x, raw_y, cal_x, cal_y, p, (tpd_last_2_int_time[1] - tpd_last_2_int_time[0]) / 1000);
     } else if (down && tpd_down_status != 0) {
-        printk("[tpd_em_log] rx=%d,ry=%d,cx=%d,cy=%d,p=%d,d(+%ld ms)\n",
+        printk("[tpd_em_log] rx=%d,ry=%d,cx=%d,cy=%d,p=%d,m(+%ld ms)\n",
             raw_x, raw_y, cal_x, cal_y, p, (tpd_last_2_int_time[1] - tpd_last_2_int_time[0]) / 1000);
     } else {
         printk("[tpd_em_log] rx=%d,ry=%d,cx=%d,cy=%d,p=%d,u(+%ld ms)\n",

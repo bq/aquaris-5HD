@@ -61,7 +61,9 @@ int disp_path_config_(struct disp_path_config_struct* pConfig, int mutexId);
 
 int disp_path_config_mem_out(struct disp_path_config_mem_out_struct* pConfig);
 int disp_path_config_mem_out_without_lcd(struct disp_path_config_mem_out_struct* pConfig);
-void disp_path_wait_mem_out_done(void);
+int disp_path_wait_mem_out_done(void);
+int disp_path_clear_mem_out_done(void);
+
 
 #ifdef DDP_USE_CLOCK_API
 int disp_reg_backup(void);

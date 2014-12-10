@@ -46,19 +46,19 @@ static unsigned long g_u4CurrPosition   = 0;
 
 static int g_sr = 3;
 
-extern s32 mt_set_gpio_mode(u32 u4Pin, u32 u4Mode);
-extern s32 mt_set_gpio_out(u32 u4Pin, u32 u4PinOut);
-extern s32 mt_set_gpio_dir(u32 u4Pin, u32 u4Dir);
+extern int mt_set_gpio_mode(unsigned long pin, unsigned long mode);
+extern int mt_set_gpio_out(unsigned long pin, unsigned long dir);
+extern int mt_set_gpio_dir(unsigned long pin, unsigned long dir);
 
 
 static int s4BU6424AF_ReadReg(unsigned short * a_pu2Result)
 {
     int  i4RetValue = 0;
     char pBuff[2];
-    
-    mt_set_gpio_mode(GPIO133,GPIO_MODE_00);
-		mt_set_gpio_dir(GPIO133,GPIO_DIR_OUT);
-		mt_set_gpio_out(GPIO133,1);
+
+    mt_set_gpio_mode(GPIO_CAMERA_AF_EN_PIN,GPIO_MODE_00);
+		mt_set_gpio_dir(GPIO_CAMERA_AF_EN_PIN,GPIO_DIR_OUT);
+		mt_set_gpio_out(GPIO_CAMERA_AF_EN_PIN,1);
     i4RetValue = i2c_master_recv(g_pstBU6424AF_I2Cclient, pBuff , 2);
 
     if (i4RetValue < 0) 
@@ -75,10 +75,10 @@ static int s4BU6424AF_WriteReg(u16 a_u2Data)
 {
     int  i4RetValue = 0;
 		char puSendCmd[2] = {(char)(((a_u2Data >> 8) & 0x03) | 0xc0), (char)(a_u2Data & 0xff)};
-		
-		mt_set_gpio_mode(GPIO133,GPIO_MODE_00);
-		mt_set_gpio_dir(GPIO133,GPIO_DIR_OUT);
-		mt_set_gpio_out(GPIO133,1);
+
+		mt_set_gpio_mode(GPIO_CAMERA_AF_EN_PIN,GPIO_MODE_00);
+		mt_set_gpio_dir(GPIO_CAMERA_AF_EN_PIN,GPIO_DIR_OUT);
+		mt_set_gpio_out(GPIO_CAMERA_AF_EN_PIN,1);
     g_pstBU6424AF_I2Cclient->ext_flag |= I2C_A_FILTER_MSG;
     i4RetValue = i2c_master_send(g_pstBU6424AF_I2Cclient, puSendCmd, 2);
     if (i4RetValue < 0) 
@@ -284,7 +284,7 @@ static int BU6424AF_Release(struct inode * a_pstInode, struct file * a_pstFile)
         spin_unlock(&g_BU6424AF_SpinLock);
 
     }
-    mt_set_gpio_out(GPIO133,0);
+    mt_set_gpio_out(GPIO_CAMERA_AF_EN_PIN,0);
     BU6424AFDB("[BU6424AF] BU6424AF_Release - End\n");
 
     return 0;

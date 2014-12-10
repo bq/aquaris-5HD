@@ -2,7 +2,7 @@
 #define MT8193_H
 
 
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/fb.h>
@@ -37,7 +37,7 @@
 #include <asm/uaccess.h>
 #include <linux/slab.h>
 
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/init.h>
@@ -147,6 +147,11 @@
 // #define REG_RW_GPIO_EN_2             0x128        // need get register addr
 // #define REG_RW_GPIO_OUT_2             0x11c       // need get register addr
 // #define REG_RW_GPIO_IN_2            0x138       // need get register addr
+
+
+#define REG_RW_PLL_GPANACFG0          0x34c
+#define PLL_GPANACFG0_NFIPLL_EN       (1U<<1) 
+
 
 
 #define REG_RW_PAD_PD0            0x258

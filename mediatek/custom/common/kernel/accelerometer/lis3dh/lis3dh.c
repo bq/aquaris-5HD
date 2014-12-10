@@ -35,7 +35,6 @@
 #include "lis3dh.h"
 #include <linux/hwmsen_helper.h>
 
-//#include <mach/mt_devs.h>
 #include <mach/mt_typedefs.h>
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
@@ -71,6 +70,10 @@ static struct i2c_board_info __initdata i2c_LIS3DH={ I2C_BOARD_INFO("LIS3DH", (0
 static int lis3dh_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id); 
 static int lis3dh_i2c_remove(struct i2c_client *client);
 static int lis3dh_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
+#ifndef USE_EARLY_SUSPEND
+static int lis3dh_suspend(struct i2c_client *client, pm_message_t msg);
+static int lis3dh_resume(struct i2c_client *client);
+#endif
 /*----------------------------------------------------------------------------*/
 typedef enum {
     ADX_TRC_FILTER  = 0x01,
@@ -122,7 +125,7 @@ struct lis3dh_i2c_data {
     struct data_filter      fir;
 #endif 
     /*early suspend*/
-#if defined(CONFIG_HAS_EARLYSUSPEND)
+#ifdef USE_EARLY_SUSPEND
     struct early_suspend    early_drv;
 #endif     
 };
@@ -135,7 +138,7 @@ static struct i2c_driver lis3dh_i2c_driver = {
 	.probe      		= lis3dh_i2c_probe,
 	.remove    			= lis3dh_i2c_remove,
 	.detect				= lis3dh_i2c_detect,
-#if !defined(CONFIG_HAS_EARLYSUSPEND)    
+#if !defined(USE_EARLY_SUSPEND)    
     .suspend            = lis3dh_suspend,
     .resume             = lis3dh_resume,
 #endif
@@ -150,7 +153,8 @@ static struct lis3dh_i2c_data *obj_i2c_data = NULL;
 static bool sensor_power = true;
 static GSENSOR_VECTOR3D gsensor_gain, gsensor_offset;
 //static char selftestRes[10] = {0};
-static DEFINE_MUTEX(lis3dh_mutex);
+static DEFINE_MUTEX(lis3dh_i2c_mutex);
+static DEFINE_MUTEX(lis3dh_op_mutex);
 static bool enable_status = false;
 static int sensor_suspend = 0;
 
@@ -158,7 +162,7 @@ static int sensor_suspend = 0;
 #define GSE_TAG                  "[Gsensor] "
 #define GSE_FUN(f)               printk(KERN_INFO GSE_TAG"%s\n", __FUNCTION__)
 #define GSE_ERR(fmt, args...)    printk(KERN_ERR GSE_TAG"%s %d : "fmt, __FUNCTION__, __LINE__, ##args)
-#define GSE_LOG(fmt, args...)    printk(KERN_ERR GSE_TAG fmt, ##args)
+#define GSE_LOG(fmt, args...)    printk(KERN_INFO GSE_TAG fmt, ##args)
 /*----------------------------------------------------------------------------*/
 static struct data_resolution lis3dh_data_resolution[] = {
      /* combination by {FULL_RES,RANGE}*/
@@ -169,61 +173,88 @@ static struct data_resolution lis3dh_data_resolution[] = {
 /*----------------------------------------------------------------------------*/
 static struct data_resolution lis3dh_offset_resolution = {{15, 6}, 64};
 
-/*
-static int hwmsen_read_byte_sr(struct i2c_client *client, u8 addr, u8 *data)
-{
-   u8 buf;
-    int ret = 0;
-	
-    client->addr = client->addr& I2C_MASK_FLAG | I2C_WR_FLAG |I2C_RS_FLAG;
-    buf = addr;
-	ret = i2c_master_send(client, (const char*)&buf, 1<<8 | 1);
-    //ret = i2c_master_send(client, (const char*)&buf, 1);
-    if (ret < 0) {
-        GSE_ERR("send command error!!\n");
-        return -EFAULT;
-    }
-
-    *data = buf;
-	client->addr = client->addr& I2C_MASK_FLAG;
-    return 0;
-}
-*/
 /*--------------------read function----------------------------------*/
 static int lis_i2c_read_block(struct i2c_client *client, u8 addr, u8 *data, u8 len)
 {
-        u8 beg = addr;
-	struct i2c_msg msgs[2] = {
-		{
-			.addr = client->addr,	.flags = 0,
-			.len = 1,	.buf = &beg
-		},
-		{
-			.addr = client->addr,	.flags = I2C_M_RD,
-			.len = len,	.buf = data,
-		}
-	};
+    u8 beg = addr;
 	int err;
+	struct i2c_msg msgs[2]={{0},{0}};
+	
+	mutex_lock(&lis3dh_i2c_mutex);
+	
+	msgs[0].addr = client->addr;
+	msgs[0].flags = 0;
+	msgs[0].len =1;
+	msgs[0].buf = &beg;
 
+	msgs[1].addr = client->addr;
+	msgs[1].flags = I2C_M_RD;
+	msgs[1].len =len;
+	msgs[1].buf = data;
+	
 	if (!client)
-		return -EINVAL;
-	else if (len > C_I2C_FIFO_SIZE) {
-		GSE_ERR(" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
+	{
+	    mutex_unlock(&lis3dh_i2c_mutex);
 		return -EINVAL;
 	}
-
+	else if (len > C_I2C_FIFO_SIZE) 
+	{
+		GSE_ERR(" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
+		mutex_unlock(&lis3dh_i2c_mutex);
+		return -EINVAL;
+	}
 	err = i2c_transfer(client->adapter, msgs, sizeof(msgs)/sizeof(msgs[0]));
-	if (err != 2) {
-		GSE_ERR("i2c_transfer error: (%d %p %d) %d\n",
-			addr, data, len, err);
+	if (err != 2) 
+	{
+		GSE_ERR("i2c_transfer error: (%d %p %d) %d\n",addr, data, len, err);
 		err = -EIO;
-	} else {
+	} 
+	else 
+	{
 		err = 0;
 	}
+	mutex_unlock(&lis3dh_i2c_mutex);
 	return err;
 
 }
-/*--------------------read function----------------------------------*/
+
+static int lis_i2c_write_block(struct i2c_client *client, u8 addr, u8 *data, u8 len)
+{   /*because address also occupies one byte, the maximum length for write is 7 bytes*/
+    int err, idx, num;
+    char buf[C_I2C_FIFO_SIZE];
+    err =0;
+	mutex_lock(&lis3dh_i2c_mutex);
+    if (!client)
+    {
+        mutex_unlock(&lis3dh_i2c_mutex);
+        return -EINVAL;
+    }
+    else if (len >= C_I2C_FIFO_SIZE) 
+	{        
+        GSE_ERR(" length %d exceeds %d\n", len, C_I2C_FIFO_SIZE);
+		mutex_unlock(&lis3dh_i2c_mutex);
+        return -EINVAL;
+    }    
+
+    num = 0;
+    buf[num++] = addr;
+    for (idx = 0; idx < len; idx++)
+    {
+        buf[num++] = data[idx];
+    }
+
+    err = i2c_master_send(client, buf, num);
+    if (err < 0)
+	{
+        GSE_ERR("send command error!!\n");
+		mutex_unlock(&lis3dh_i2c_mutex);
+        return -EFAULT;
+    } 
+	mutex_unlock(&lis3dh_i2c_mutex);
+    return err;
+}
+/*----------------------------------------------------------------------------*/
+
 static void dumpReg(struct i2c_client *client)
 {
   int i=0;
@@ -237,7 +268,6 @@ static void dumpReg(struct i2c_client *client)
 	addr++;
   }
 }
-
 /*--------------------ADXL power control function----------------------------------*/
 static void LIS3DH_power(struct acc_hw *hw, unsigned int on) 
 {
@@ -599,11 +629,8 @@ static int LIS3DH_SetPowerMode(struct i2c_client *client, bool enable)
 	{
 		databuf[0] |= LIS3DH_MEASURE_MODE;
 	}
-	databuf[1] = databuf[0];
-	databuf[0] = LIS3DH_REG_CTL_REG1;
 	
-	
-	res = i2c_master_send(client, databuf, 0x2);
+	res = lis_i2c_write_block(client, LIS3DH_REG_CTL_REG1, databuf, 0x1);
 
 	if(res <= 0)
 	{
@@ -638,11 +665,7 @@ static int LIS3DH_SetDataFormat(struct i2c_client *client, u8 dataformat)
 	databuf[0] &= ~0x30;
 	databuf[0] |=dataformat;
 
-	databuf[1] = databuf[0];
-	databuf[0] = LIS3DH_REG_CTL_REG4;
-	
-
-	res = i2c_master_send(client, databuf, 0x2);
+	res = lis_i2c_write_block(client, LIS3DH_REG_CTL_REG4, databuf, 0x1);
 
 	if(res <= 0)
 	{
@@ -670,12 +693,9 @@ static int LIS3DH_SetBWRate(struct i2c_client *client, u8 bwrate)
 	databuf[0] &= ~0xF0;
 	databuf[0] |= bwrate;
 
-	databuf[1] = databuf[0];
-	databuf[0] = LIS3DH_REG_CTL_REG1;
+	res = lis_i2c_write_block(client, LIS3DH_REG_CTL_REG1, databuf, 0x1);
 
-	res = i2c_master_send(client, databuf, 0x2);
-
-	if(res <= 0)
+	if(res < 0)
 	{
 		return LIS3DH_ERR_I2C;
 	}
@@ -686,11 +706,11 @@ static int LIS3DH_SetBWRate(struct i2c_client *client, u8 bwrate)
 //enalbe data ready interrupt
 static int LIS3DH_SetIntEnable(struct i2c_client *client, u8 intenable)
 {
-	u8 databuf[10];
+	u8 databuf[2];
 	u8 addr = LIS3DH_REG_CTL_REG3;
 	int res = 0;
 
-	memset(databuf, 0, sizeof(u8)*10); 
+	memset(databuf, 0, sizeof(u8)*2); 
 
 	if(lis_i2c_read_block(client, addr, databuf, 0x01))
 	{
@@ -699,11 +719,9 @@ static int LIS3DH_SetIntEnable(struct i2c_client *client, u8 intenable)
 	}
 
 	databuf[0] = 0x00;
-	databuf[1] = databuf[0];
-	databuf[0] = LIS3DH_REG_CTL_REG3;
-	
-	res = i2c_master_send(client, databuf, 0x2);
-	if(res <= 0)
+
+	res = lis_i2c_write_block(client, LIS3DH_REG_CTL_REG3, databuf, 0x01);
+	if(res < 0)
 	{
 		return LIS3DH_ERR_I2C;
 	}
@@ -715,15 +733,17 @@ static int LIS3DH_Init(struct i2c_client *client, int reset_cali)
 {
 	struct lis3dh_i2c_data *obj = i2c_get_clientdata(client);
 	int res = 0;
+	u8 databuf[2] = {0, 0};
 /*
 	res = LIS3DH_CheckDeviceID(client); 
 	if(res != LIS3DH_SUCCESS)
 	{
 		return res;
 	}	
-*/
+*/	
     // first clear reg1
-    res = hwmsen_write_byte(client,LIS3DH_REG_CTL_REG1,0x0f);
+    databuf[0] = 0x0f;
+    res = lis_i2c_write_block(client, LIS3DH_REG_CTL_REG1, databuf, 0x01);
 	if(res != LIS3DH_SUCCESS)
 	{
 		return res;
@@ -1212,13 +1232,13 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 				{
 					sample_delay = LIS3DH_BW_50HZ;
 				}
-				mutex_lock(&lis3dh_mutex);
+				mutex_lock(&lis3dh_op_mutex);
 				err = LIS3DH_SetBWRate(priv->client, sample_delay);
 				if(err != LIS3DH_SUCCESS ) //0x2C->BW=100Hz
 				{
 					GSE_ERR("Set delay parameter error!\n");
 				}
-				mutex_unlock(&lis3dh_mutex);
+				mutex_unlock(&lis3dh_op_mutex);
 				if(value >= 50)
 				{
 					atomic_set(&priv->filter, 0);
@@ -1245,7 +1265,7 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 			{
 			    
 				value = *(int *)buff_in;
-				mutex_lock(&lis3dh_mutex);
+				mutex_lock(&lis3dh_op_mutex);
 				GSE_LOG("Gsensor device enable function enable = %d, sensor_power = %d!\n",value,sensor_power);
 				if(((value == 0) && (sensor_power == false)) ||((value == 1) && (sensor_power == true)))
 				{
@@ -1253,16 +1273,12 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 					GSE_LOG("Gsensor device have updated!\n");
 				}
 				else
-				{	if(sensor_suspend == 0){
+				{
 					enable_status = !sensor_power;
 					err = LIS3DH_SetPowerMode( priv->client, !sensor_power);
 					GSE_LOG("Gsensor not in suspend lis3dh_SetPowerMode!, enable_status = %d\n",enable_status);
-					}else{
-					enable_status = !sensor_power;
-					GSE_LOG("Gsensor in suspend and can not enable or disable!enable_status = %d\n",enable_status);
-					}
 				}
-				mutex_unlock(&lis3dh_mutex);			
+				mutex_unlock(&lis3dh_op_mutex);			
 			}
 			break;
 
@@ -1274,12 +1290,14 @@ int gsensor_operate(void* self, uint32_t command, void* buff_in, int size_in,
 			}
 			else
 			{
+				mutex_lock(&lis3dh_op_mutex);
 				gsensor_data = (hwm_sensor_data *)buff_out;
 				LIS3DH_ReadSensorData(priv->client, buff, LIS3DH_BUFSIZE);
 				sscanf(buff, "%x %x %x", &gsensor_data->values[0], 
 					&gsensor_data->values[1], &gsensor_data->values[2]);				
 				gsensor_data->status = SENSOR_STATUS_ACCURACY_MEDIUM;				
 				gsensor_data->value_divide = 1000;
+				mutex_unlock(&lis3dh_op_mutex);
 			}
 			break;
 		default:
@@ -1312,8 +1330,6 @@ static int lis3dh_release(struct inode *inode, struct file *file)
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
-//static int lis3dh_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-//       unsigned long arg)
 static long lis3dh_unlocked_ioctl(struct file *file, unsigned int cmd,
        unsigned long arg)
 
@@ -1494,7 +1510,6 @@ static struct file_operations lis3dh_fops = {
 	.owner = THIS_MODULE,
 	.open = lis3dh_open,
 	.release = lis3dh_release,
-	//.ioctl = lis3dh_ioctl,
 	.unlocked_ioctl = lis3dh_unlocked_ioctl,
 };
 /*----------------------------------------------------------------------------*/
@@ -1504,7 +1519,7 @@ static struct miscdevice lis3dh_device = {
 	.fops = &lis3dh_fops,
 };
 /*----------------------------------------------------------------------------*/
-#ifndef CONFIG_HAS_EARLYSUSPEND
+#ifndef USE_EARLY_SUSPEND
 /*----------------------------------------------------------------------------*/
 static int lis3dh_suspend(struct i2c_client *client, pm_message_t msg) 
 {
@@ -1512,29 +1527,28 @@ static int lis3dh_suspend(struct i2c_client *client, pm_message_t msg)
 	int err = 0;
 	u8 dat;
 	GSE_FUN();    
-
+	mutex_lock(&lis3dh_op_mutex);
 	if(msg.event == PM_EVENT_SUSPEND)
 	{   
 		if(obj == NULL)
-		{
+		{	
+			mutex_unlock(&lis3dh_op_mutex);
 			GSE_ERR("null pointer!!\n");
 			return -EINVAL;
 		}
 		//read old data
-		if ((err = lis_i2c_read_block(client, LIS3DH_REG_CTL_REG1, &dat, 0x01))) 
-		{
-           GSE_ERR("write data format fail!!\n");
-           return err;
-        }
-		dat = dat&0b10111111;
+		if((err = LIS3DH_SetPowerMode(obj->client, false)))
+			{
+				GSE_ERR("write power control fail!!\n");
+				mutex_unlock(&lis3dh_op_mutex);
+				return; 	   
+			}
+		
 		atomic_set(&obj->suspend, 1);
-		if(err = hwmsen_write_byte(client, LIS3DH_REG_CTL_REG1, dat))
-		{
-			GSE_ERR("write power control fail!!\n");
-			return err;
-		}        
 		LIS3DH_power(obj->hw, 0);
 	}
+	sensor_suspend = 1;
+	mutex_unlock(&lis3dh_op_mutex);
 	return err;
 }
 /*----------------------------------------------------------------------------*/
@@ -1543,9 +1557,10 @@ static int lis3dh_resume(struct i2c_client *client)
 	struct lis3dh_i2c_data *obj = i2c_get_clientdata(client);        
 	int err;
 	GSE_FUN();
-
+	mutex_lock(&lis3dh_op_mutex);
 	if(obj == NULL)
 	{
+		mutex_unlock(&lis3dh_op_mutex);
 		GSE_ERR("null pointer!!\n");
 		return -EINVAL;
 	}
@@ -1553,11 +1568,13 @@ static int lis3dh_resume(struct i2c_client *client)
 	LIS3DH_power(obj->hw, 1);
 	if(err = LIS3DH_Init(client, 0))
 	{
+		mutex_unlock(&lis3dh_op_mutex);
 		GSE_ERR("initialize client fail!!\n");
 		return err;        
 	}
 	atomic_set(&obj->suspend, 0);
-
+	sensor_suspend = 0;	
+	mutex_unlock(&lis3dh_op_mutex);
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
@@ -1578,16 +1595,16 @@ static void lis3dh_early_suspend(struct early_suspend *h)
 	}
 
 	atomic_set(&obj->suspend, 1); 
-	mutex_lock(&lis3dh_mutex);
+	mutex_lock(&lis3dh_op_mutex);
 	GSE_FUN(); 
 	if((err = LIS3DH_SetPowerMode(obj->client, false)))
 	{
 		GSE_ERR("write power control fail!!\n");
-		mutex_unlock(&lis3dh_mutex);
+		mutex_unlock(&lis3dh_op_mutex);
 		return;        
 	}
 	sensor_suspend = 1;
-	mutex_unlock(&lis3dh_mutex);
+	mutex_unlock(&lis3dh_op_mutex);
 	LIS3DH_power(obj->hw, 0);
 }
 /*----------------------------------------------------------------------------*/
@@ -1603,16 +1620,16 @@ static void lis3dh_late_resume(struct early_suspend *h)
 	}
 
 	LIS3DH_power(obj->hw, 1);
-	mutex_lock(&lis3dh_mutex);
+	mutex_lock(&lis3dh_op_mutex);
 	GSE_FUN();
 	if((err = LIS3DH_Init(obj->client, 0)))
 	{
 		GSE_ERR("initialize client fail!!\n");
-		mutex_unlock(&lis3dh_mutex);
+		mutex_unlock(&lis3dh_op_mutex);
 		return;        
 	}
 	sensor_suspend = 0;
-	mutex_unlock(&lis3dh_mutex);
+	mutex_unlock(&lis3dh_op_mutex);
 	atomic_set(&obj->suspend, 0);    
 }
 /*----------------------------------------------------------------------------*/
@@ -1631,6 +1648,7 @@ static int lis3dh_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 	struct lis3dh_i2c_data *obj;
 	struct hwmsen_object sobj;
 	int err = 0;
+	int retry = 0;
 	GSE_FUN();
 
 	if(!(obj = kzalloc(sizeof(*obj), GFP_KERNEL)))
@@ -1676,10 +1694,15 @@ static int lis3dh_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 
 	lis3dh_i2c_client = new_client;	
 
+	for(retry = 0; retry < 3; retry++){
 	if((err = LIS3DH_Init(new_client, 1)))
 	{
-		goto exit_init_failed;
+			GSE_ERR("lis3dh_device init cilent fail time: %d\n", retry);
+			continue;
+		}
 	}
+	if(err != 0)
+		goto exit_init_failed;
 	
 
 	if((err = misc_register(&lis3dh_device)))
@@ -1703,8 +1726,8 @@ static int lis3dh_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 		goto exit_kfree;
 	}
 
-#ifdef CONFIG_HAS_EARLYSUSPEND
-	obj->early_drv.level    = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1,
+#ifdef USE_EARLY_SUSPEND
+	obj->early_drv.level    = EARLY_SUSPEND_LEVEL_STOP_DRAWING - 2,
 	obj->early_drv.suspend  = lis3dh_early_suspend,
 	obj->early_drv.resume   = lis3dh_late_resume,    
 	register_early_suspend(&obj->early_drv);

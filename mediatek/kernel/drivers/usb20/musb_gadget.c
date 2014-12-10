@@ -44,185 +44,13 @@
 #include <linux/stat.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
-
+#include <linux/kfifo.h>
 
 #include <linux/musb/musb_core.h>
+
 #define FIFO_START_ADDR 512
-extern struct musb_hw_ep	*ep_in_list[MUSB_C_NUM_EPS];
-extern struct musb_hw_ep	*ep_out_list[MUSB_C_NUM_EPS];
 
-//#define is_buffer_mapped(req) (req->map_state != UN_MAPPED)
-//Added for USB Develpment debug, more log for more debuging help
-
-/*
-#ifdef DBG
-#undef DBG
-#endif
-
-#define DBG(level, fmt, args...) \
-	do { \
-			printk( fmt, ##args); \
-	} while (0)
-
-
-#ifdef VDBG
-#undef VDBG
-#endif
-
-#define VDBG(level, fmt, args...) \
-	do { \
-			printk( fmt, ##args); \
-	} while (0)
-
-
-#ifdef pr_debug
-#undef pr_debug
-#endif
-
-#define pr_debug(fmt, args...) \
-	do { \
-			printk( fmt, ##args); \
-	} while (0)
-
-#ifdef pr_info
-#undef pr_info
-#endif
-
-#define pr_info(fmt, args...) \
-	do { \
-			printk( fmt, ##args); \
-	} while (0)
-*/
-//Added for USB Develpment debug, more log for more debuging help
-
-/* Maps the buffer to dma  */
-
-/*static inline void map_dma_buffer(struct musb_request *request,
-			struct musb *musb, struct musb_ep *musb_ep)
-{
-	int compatible = true;
-	struct dma_controller *dma = musb->dma_controller;
-
-	printk("map_dma_buffer called!\n");
-
-	request->map_state = UN_MAPPED;
-
-	if (!musb_ep->dma){
-		request->map_state = UN_MAPPED;
-		return;
-	}*/
-	/* Check if DMA engine can handle this request.
-	 * DMA code must reject the USB request explicitly.
-	 * Default behaviour is to map the request.
-	 */
-	/*if (dma->is_compatible)
-		compatible = dma->is_compatible(musb_ep->dma,
-				musb_ep->packet_sz, request->request.buf,
-				request->request.length);
-	if (!compatible)
-		return;
-
-	if (request->request.dma == DMA_ADDR_INVALID) {
-		request->request.dma = dma_map_single(
-				musb->controller,
-				request->request.buf,
-				request->request.length,
-				request->tx
-					? DMA_TO_DEVICE
-					: DMA_FROM_DEVICE);
-		request->map_state = MUSB_MAPPED;
-	} else {
-		dma_sync_single_for_device(musb->controller,
-			request->request.dma,
-			request->request.length,
-			request->tx
-				? DMA_TO_DEVICE
-				: DMA_FROM_DEVICE);
-		request->map_state = PRE_MAPPED;
-	}
-}*/
-
-/* Unmap the buffer from dma and maps it back to cpu */
-/*static inline void unmap_dma_buffer(struct musb_request *request,
-				struct musb *musb)
-{
-	if (!is_buffer_mapped(request))
-		return;
-
-	if (request->request.dma == DMA_ADDR_INVALID) {
-		DBG(3,"not unmapping a never mapped buffer\n");
-		return;
-	}
-	if (request->map_state == MUSB_MAPPED) {
-		dma_unmap_single(musb->controller,
-			request->request.dma,
-			request->request.length,
-			request->tx
-				? DMA_TO_DEVICE
-				: DMA_FROM_DEVICE);
-		request->request.dma = DMA_ADDR_INVALID;
-	} else {*/ /* PRE_MAPPED */
-		/*dma_sync_single_for_cpu(musb->controller,
-			request->request.dma,
-			request->request.length,
-			request->tx
-				? DMA_TO_DEVICE
-				: DMA_FROM_DEVICE);
-	}
-	request->map_state = UN_MAPPED;
-}*/
-
-//Added for USB Develpment debug, more log for more debuging help
-/*#ifdef DBG
-#undef DBG
-#endif
-
-#define DBG(level, fmt, args...) \
-	do { \
-			pr_info( fmt, ##args); \
-	} while (0)
-*/
-//Added for USB Develpment debug, more log for more debuging help
-
-
-static void fifo_setup(struct musb *musb, struct musb_ep *musb_ep)
-{
-	void __iomem	*mbase = musb->mregs;
-	int	size = 0;
-	u16	maxpacket = musb_ep->fifo_size;
-	u16	c_off = musb->fifo_addr >> 3;
-	u8	c_size;
-
-	/* expect hw_ep has already been zero-initialized */
-
-	size = ffs(max(maxpacket, (u16) 8)) - 1;
-	maxpacket = 1 << size;
-
-	c_size = size - 3;
-	if (musb_ep->fifo_mode == BUF_DOUBLE) {
-		if ((musb->fifo_addr + (maxpacket << 1)) >(musb->fifo_size))
-			return ;
-
-		c_size |= MUSB_FIFOSZ_DPB;
-
-	}else if ((musb->fifo_addr + maxpacket) >(musb->fifo_size))
-		return ;
-
-	/* configure the FIFO */
-//	musb_writeb(mbase, MUSB_INDEX, hw_ep->epnum);
-	DBG(2,"fifo size is %d after %d, fifo address is %d\n",c_size,maxpacket,musb->fifo_addr);
-
-	if (musb_ep->is_in) {
-		musb_write_txfifosz(mbase, c_size);
-		musb_write_txfifoadd(mbase, c_off);
-	} else {
-		musb_write_rxfifosz(mbase, c_size);
-		musb_write_rxfifoadd(mbase, c_off);
-	}
-	musb->fifo_addr += (maxpacket << ((c_size & MUSB_FIFOSZ_DPB) ? 1 : 0));
-	return ;
-}
-
+//#define RX_DMA_MODE1 1
 
 /* MUSB PERIPHERAL status 3-mar-2006:
  *
@@ -268,6 +96,411 @@ static void fifo_setup(struct musb *musb, struct musb_ep *musb_ep)
 
 /* ----------------------------------------------------------------------- */
 
+//__ADB_DEBUG__ start
+extern struct usb_ep	*ep_in;
+extern struct usb_ep	*ep_out;
+extern int bitdebug_enabled;
+extern unsigned bitdebug_writeCnt;
+extern unsigned bitdebug_readCnt;
+
+struct amessage {
+    unsigned command;       /* command identifier constant      */
+    unsigned arg0;          /* first argument                   */
+    unsigned arg1;          /* second argument                  */
+    unsigned data_length;   /* length of payload (0 is allowed) */
+    unsigned data_check;    /* checksum of data payload         */
+    unsigned magic;         /* command ^ 0xffffffff             */
+};
+
+struct debuginfo {
+	unsigned headtoken;
+	unsigned command;       /* command identifier constant      */
+	unsigned msg_check;
+	unsigned data_check;
+	unsigned count;
+	unsigned dummy;
+	unsigned tailtoken;
+};
+typedef struct amessage amessage;
+typedef struct debuginfo debuginfo;
+
+
+#define A_SYNC 0x434e5953
+#define A_CNXN 0x4e584e43
+#define A_OPEN 0x4e45504f
+#define A_OKAY 0x59414b4f
+#define A_CLSE 0x45534c43
+#define A_WRTE 0x45545257
+#define A_AUTH 0x48545541
+#define A_DBUG 0x41424a42
+#define DBGHEADTOKEN 0x13579bdf
+#define DBGTAILTOKEN 0xdca86420
+
+struct adbDbg_t{
+	u32 cmdChkSum;
+	u32 dataSize;
+	u32 dataChkSum;
+};
+
+typedef struct adbDbg_t adbDbg_t;
+
+adbDbg_t adbDbg[2] = {{0},{0}};
+adbDbg_t adbDbgTest;
+spinlock_t debugLock;
+
+struct kfifo fifo;
+#define FIFO_SIZE	32
+
+static u32 adbDoChkSum(u32 length, u8 *buf)
+{
+	u32 i;
+	u32 chkSum = 0;
+	for (i=0;i<length;i++)
+		chkSum ^= buf[i];
+	return chkSum;
+}
+
+static void adbCmdLog(u8 *buf, u32 length, u8 is_in, char *func)
+{
+	amessage *msg = (amessage*) buf;
+	int status = -1;
+
+
+	if(bitdebug_enabled == 1)
+	{
+		if(msg != NULL)
+		{
+			if(sizeof(amessage) == length)
+			{
+				switch(msg->command)
+				{
+					case A_SYNC:
+					case A_CNXN:
+					case A_OPEN:
+					case A_OKAY:
+					case A_CLSE:
+					case A_WRTE:
+					case A_AUTH:
+						status = 0;
+						break;
+					case A_DBUG:
+						printk(KERN_INFO "adb: %s ERROR A_DBUG should not be tranfsered \n", func);
+						break;
+					default:
+						status = 1;
+						break;
+				}
+			}
+			else
+			{
+				status = 1;
+				//printk(KERN_INFO "adb: %s A_DATA, data length = 0x%x \n", func, length);
+			}
+		}
+		else
+			printk(KERN_INFO "adb: %s ERROR: amessage = NULL \n", func);
+
+		if (0 == status)
+		{
+			adbDbg[is_in].dataSize  = msg->data_length;
+			adbDbg[is_in].cmdChkSum = adbDoChkSum(length, buf);
+
+			if(0 == adbDbg[is_in].dataSize)
+				adbDbg[is_in].dataChkSum = 0;
+
+			printk(KERN_INFO "adb: %s cmd = 0x%x, pack length = 0x%x, checksum = 0x%x \n", func, msg->command, msg->data_length, adbDbg[is_in].cmdChkSum);
+		}
+
+		if (1 == status)
+		{
+			if(adbDbg[is_in].dataSize != length)
+			{
+				if (0 != length)
+				  printk(KERN_INFO "adb: %s ERROR: data size not match, adbDbg.dataSize = 0x%x, actual = 0x%x \n", func, adbDbg[is_in].dataSize, length);
+			}
+			else
+			{
+				adbDbg[is_in].dataChkSum = adbDoChkSum(length, buf);
+				printk(KERN_INFO "adb: %s data length = 0x%x, checksum = 0x%x \n", func, length, adbDbg[is_in].dataChkSum);
+			}
+		}
+	}
+}
+
+static int adbDbgInfoCheck(u8 *buf, u32 length, u8 is_in, char *func)
+{
+	debuginfo *dbg = (debuginfo*) buf;
+	int status = -1;
+
+	if(dbg != NULL)
+	{
+		if(sizeof(debuginfo) == length)
+		{
+			switch(dbg->command)
+			{
+				case A_DBUG:
+					//printk(KERN_INFO "adb: %s dbg->headtoken = 0x%x, dbg->tailtoken = 0x%x, is_in = %d \n", func, dbg->headtoken , dbg->tailtoken, is_in);
+					//printk(KERN_INFO "adb: %s dbg->msg_check = 0x%x, dbg->data_check = 0x%x, is_in = %d \n", func, dbg->msg_check , dbg->data_check, is_in);
+					if(dbg->command == A_DBUG && dbg->headtoken == DBGHEADTOKEN && dbg->tailtoken == DBGTAILTOKEN)
+					{
+						status = 0;
+						if (adbDbg[is_in].cmdChkSum != dbg->msg_check)
+							printk(KERN_INFO "adb: %s ERROR: cmdChkSum = 0x%x, msg_check = 0x%x, is_in = %d \n", func, adbDbg[is_in].cmdChkSum, dbg->msg_check, is_in);
+						//else
+						//	printk(KERN_INFO "adb: %s cmdChkSum match, count = %d \n", func, bitdebug_writeCnt);
+
+
+						if (adbDbg[is_in].dataChkSum != dbg->data_check)
+							printk(KERN_INFO "adb: %s ERROR: dataChkSum = 0x%x, data_check = 0x%x, is_in = %d \n", func, adbDbg[is_in].dataChkSum, dbg->data_check, is_in);
+						//else
+						//	printk(KERN_INFO "adb: %s dataChkSum match, count = %d \n", func, bitdebug_writeCnt);
+
+						adbDbg[is_in].cmdChkSum = 0;
+						adbDbg[is_in].dataChkSum = 0;
+
+						if (bitdebug_writeCnt != dbg->count)
+							printk(KERN_INFO "adb: %s ERROR: miss count = %d, dbg->count = %d \n", func, bitdebug_writeCnt, dbg->count);
+
+						bitdebug_writeCnt++;
+					}
+					else
+						printk(KERN_INFO "adb: %s ERROR: not A_DBUG, data length = 0x%x, is_in = %d \n", func, length, is_in);
+					break;
+			}
+		}
+	}
+	else
+		printk(KERN_INFO "adb: %s ERROR: debuginfo = NULL, is_in = %d \n", func, is_in);
+
+	return status;
+}
+
+static int adbDebugInfoWrite(struct musb_ep *ep, struct usb_request *req)
+{
+	static u32  isDebugCmd = 0;
+	static bool isDataCmd = false;
+	static bool isNormalCmd = false;
+	static bool packLength = 0;
+	unsigned long flags;
+
+	if (!((1 == ep->is_in) && (ep_in == &(ep->end_point))))
+		return -1;
+
+	spin_lock_irqsave(&debugLock, flags);
+	if(req->length == sizeof(amessage)){
+		amessage *msg = (amessage*) req->buf;
+		if(msg != NULL){
+			switch(msg->command){
+				case A_SYNC:
+				case A_CNXN:
+				case A_OPEN:
+				case A_OKAY:
+				case A_CLSE:
+				case A_WRTE:
+				case A_AUTH:
+					isNormalCmd = true;
+					packLength = msg->data_length;
+					printk(KERN_INFO "adb: adb_complete_in msg (0x%x) (0x%x) (0x%x), isNormalCmd = %d \n", msg->command, msg->data_length, msg->data_check, isNormalCmd);
+					break;
+				default:
+					isDataCmd = true;
+					printk(KERN_INFO "adb: adb_complete_in msg A_DATA, isDataCmd = %d \n", isDataCmd);
+					break;
+			}
+		}
+	}
+	else
+		if(req->length == sizeof(debuginfo)){
+			debuginfo *dbg = (debuginfo*) req->buf;
+			if(dbg != NULL && dbg->command == A_DBUG && dbg->headtoken == DBGHEADTOKEN && dbg->tailtoken == DBGTAILTOKEN){
+				isDebugCmd++;
+				printk(KERN_INFO "adb: adb_complete_in A_DBUG (0x%x) (0x%x) (0x%x), isDebugCmd = %d \n", dbg->command, dbg->msg_check, dbg->data_check, isDebugCmd);
+				//if (false == isDataCmd)
+				//  printk(KERN_INFO "adb_complete_in dbg WARNING, Data is not ready \n");
+				kfifo_in(&fifo, dbg, sizeof(debuginfo));
+				//printk(KERN_INFO "adb_complete_in A_DBUG a \n");
+			}
+		else
+		{
+			isDataCmd = true;
+			printk(KERN_INFO "adb: adb_complete_in msg A_DATA, isDataCmd = %d \n", isDataCmd);
+		}
+	}
+	else
+	{
+		isDataCmd = true;
+		printk(KERN_INFO "adb: adb_complete_in msg A_DATA, isDataCmd = %d \n", isDataCmd);
+	}
+
+	if ((isNormalCmd && isDataCmd && isDebugCmd) || (isNormalCmd && (0 == packLength) && isDebugCmd))
+	{
+		debuginfo tmp;
+		unsigned int ret;
+		ret = kfifo_out(&fifo, &tmp, sizeof(debuginfo));
+		//printk(KERN_INFO "adb_complete_in kfifo_out = %d \n", isDebugCmd);
+		if(-1 < adbDbgInfoCheck((u8 *)&tmp, sizeof(debuginfo), 1, "adb_complete_in"))
+		{
+			isDebugCmd--;
+			isDataCmd  = false;
+			isNormalCmd = false;
+			packLength = 0;
+			//printk(KERN_INFO "adb_complete_in Clear  isDebugCmd = 0x%x, isDataCmd = %d, isNormalCmd = %d \n", isDebugCmd, isDataCmd, isNormalCmd);
+		}
+		else
+			printk(KERN_INFO "adb: adb_complete_in ERROR adbDbgInfoCheck = %d, headtoken = 0x%x, command = 0x%x, msg_check = 0x%x, data_check = 0x%x \n",
+			isDebugCmd, tmp.headtoken, tmp.command, tmp.msg_check, tmp.data_check);
+  }
+
+	spin_unlock_irqrestore(&debugLock, flags);
+	return 0;
+}
+
+static int adbDegInfoHandle(struct usb_ep *ep, struct usb_request *req, char *func)
+{
+	struct musb_ep		*musb_ep;
+	struct musb_request	*request;
+	int status = -1;
+
+	if(bitdebug_enabled == 1){
+		musb_ep = to_musb_ep(ep);
+		request = to_musb_request(req);
+
+		if((musb_ep->is_in == 0) && (ep_out == &(musb_ep->end_point)))
+		{
+			if(req->length == sizeof(debuginfo))
+			{
+				debuginfo *dbg = (debuginfo*) req->buf;
+				if(dbg != NULL && dbg->command == A_DBUG){
+					dbg->msg_check = adbDbg[musb_ep->is_in].cmdChkSum;
+					dbg->data_check = adbDbg[musb_ep->is_in].dataChkSum;
+					dbg->count = bitdebug_readCnt++;
+					//printk(KERN_INFO "adb: %s dbg (0x%x) (0x%x) (0x%x) \n", func, dbg->command, dbg->msg_check, dbg->data_check);
+					request->request.complete(&request->ep->end_point, &request->request);
+					return -EINPROGRESS;
+				}
+			}
+		}
+
+		if((musb_ep->is_in == 1) && (ep_in == &(musb_ep->end_point)))
+		{
+#if 0
+	    if(req->length == sizeof(amessage))
+	    {
+	  		amessage *msg = (amessage*) req->buf;
+	  		if(msg != NULL){
+	  			switch(msg->command){
+					case A_SYNC:
+					case A_CNXN:
+					case A_OPEN:
+					case A_OKAY:
+					case A_CLSE:
+					case A_WRTE:
+					case A_AUTH:
+	  					printk(KERN_INFO "adb: %s msg (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) (0x%x) \n", func, msg->command, msg->arg0, msg->arg1,
+							msg->data_length, msg->data_check, msg->magic);
+	  					break;
+					default:
+						printk(KERN_INFO "adb: %s msg A_DATA or A_DBUG \n", func);
+						break;
+				}
+			}
+		}
+#endif
+			if(req->length == sizeof(debuginfo))
+			{
+				debuginfo *dbg = (debuginfo*) req->buf;
+				if(dbg != NULL && dbg->command == A_DBUG){
+					//printk(KERN_INFO "adb: %s dbg (0x%x) (0x%x) (0x%x) \n", func, dbg->command, dbg->msg_check, dbg->data_check);
+					adbDebugInfoWrite(musb_ep, req);
+					request->request.complete(&request->ep->end_point, &request->request);
+					return 0;
+				}
+			}
+		}
+	}
+
+	return status;
+}
+
+//__ADB_DEBUG__ end
+
+#define is_buffer_mapped(req) (is_dma_capable() && \
+					(req->map_state != UN_MAPPED))
+
+/* Maps the buffer to dma  */
+
+static inline void map_dma_buffer(struct musb_request *request,
+			struct musb *musb, struct musb_ep *musb_ep)
+{
+	int compatible = true;
+	struct dma_controller *dma = musb->dma_controller;
+
+	request->map_state = UN_MAPPED;
+
+	if (!is_dma_capable() || !musb_ep->dma)
+		return;
+
+	/* Check if DMA engine can handle this request.
+	 * DMA code must reject the USB request explicitly.
+	 * Default behaviour is to map the request.
+	 */
+	if (dma->is_compatible)
+		compatible = dma->is_compatible(musb_ep->dma,
+				musb_ep->packet_sz, request->request.buf,
+				request->request.length);
+	if (!compatible)
+		return;
+
+	if (request->request.dma == DMA_ADDR_INVALID) {
+		request->request.dma = dma_map_single(
+				musb->controller,
+				request->request.buf,
+				request->request.length,
+				request->tx
+					? DMA_TO_DEVICE
+					: DMA_FROM_DEVICE);
+		request->map_state = MUSB_MAPPED;
+	} else {
+		dma_sync_single_for_device(musb->controller,
+			request->request.dma,
+			request->request.length,
+			request->tx
+				? DMA_TO_DEVICE
+				: DMA_FROM_DEVICE);
+		request->map_state = PRE_MAPPED;
+	}
+}
+
+/* Unmap the buffer from dma and maps it back to cpu */
+static inline void unmap_dma_buffer(struct musb_request *request,
+				struct musb *musb)
+{
+	if (!is_buffer_mapped(request))
+		return;
+
+	if (request->request.dma == DMA_ADDR_INVALID) {
+		DBG(1, "not unmapping a never mapped buffer\n");
+		return;
+	}
+	if (request->map_state == MUSB_MAPPED) {
+		dma_unmap_single(musb->controller,
+			request->request.dma,
+			request->request.length,
+			request->tx
+				? DMA_TO_DEVICE
+				: DMA_FROM_DEVICE);
+		request->request.dma = DMA_ADDR_INVALID;
+	} else { /* PRE_MAPPED */
+		dma_sync_single_for_cpu(musb->controller,
+			request->request.dma,
+			request->request.length,
+			request->tx
+				? DMA_TO_DEVICE
+				: DMA_FROM_DEVICE);
+	}
+	request->map_state = UN_MAPPED;
+}
+
 /*
  * Immediately complete a request.
  *
@@ -275,14 +508,6 @@ static void fifo_setup(struct musb *musb, struct musb_ep *musb_ep)
  * @param status the status to complete the request with
  * Context: controller locked, IRQs blocked.
  */
-
-
-/*u32 req_count = 0;
-module_param(req_count,int,0644);
-u32 dereq_count = 0;
-module_param(dereq_count,int,0644);
-*/
-
 void musb_g_giveback(
 	struct musb_ep		*ep,
 	struct usb_request	*request,
@@ -295,33 +520,15 @@ __acquires(ep->musb->lock)
 	int			busy = ep->busy;
 
 	req = to_musb_request(request);
-	//list_del(&request->list);
-	list_del(&req->list);
 
+	list_del(&req->list);
 	if (req->request.status == -EINPROGRESS)
 		req->request.status = status;
 	musb = req->musb;
 
 	ep->busy = 1;
 	spin_unlock(&musb->lock);
-	if (ep->dma) {
-		if (req->map_state) {
-			dma_unmap_single(musb->controller,
-					req->request.dma,
-					req->request.length,
-					req->tx
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-			req->request.dma = DMA_ADDR_INVALID;
-			req->map_state = UN_MAPPED;
-		} else if (req->request.dma != DMA_ADDR_INVALID)
-			dma_sync_single_for_cpu(musb->controller,
-					req->request.dma,
-					req->request.length,
-					req->tx
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-	}
+	unmap_dma_buffer(req, musb);
 	if (request->status == 0)
 		DBG(1, "%s done request %p,  %d/%d\n",
 				ep->end_point.name, request,
@@ -331,11 +538,13 @@ __acquires(ep->musb->lock)
 				ep->end_point.name, request,
 				req->request.actual, req->request.length,
 				request->status);
+	//__ADB_DEBUG__ start
+	if(bitdebug_enabled == 1){
+		adbDebugInfoWrite(ep, request);
+	}
+	//__ADB_DEBUG__ end
 	req->request.complete(&req->ep->end_point, &req->request);
-/*	if(req->ep->current_epnum == 3 && !req->ep->is_in)
-		dereq_count++;*/
 	spin_lock(&musb->lock);
-	DBG(50,"MUSB:%s request done\n",req->ep->end_point.name);
 	ep->busy = busy;
 }
 
@@ -347,12 +556,13 @@ __acquires(ep->musb->lock)
  */
 static void nuke(struct musb_ep *ep, const int status)
 {
+	/*struct musb		*musb = ep->musb;*/
 	struct musb_request	*req = NULL;
 	void __iomem *epio = ep->musb->endpoints[ep->current_epnum].regs;
 
 	ep->busy = 1;
 
-	if (ep->dma) {
+	if (is_dma_capable() && ep->dma) {
 		struct dma_controller	*c = ep->musb->dma_controller;
 		int value;
 
@@ -362,150 +572,30 @@ static void nuke(struct musb_ep *ep, const int status)
 			 * the DMAMODE bit before DMAENAB, so we only
 			 * clear it in the second write...
 			 */
-			dumpTime(funcWritew, ep->current_epnum);
 			musb_writew(epio, MUSB_TXCSR,
 				    MUSB_TXCSR_DMAMODE | MUSB_TXCSR_FLUSHFIFO);
-			dumpTime(funcWritew, ep->current_epnum);
 			musb_writew(epio, MUSB_TXCSR,
 					0 | MUSB_TXCSR_FLUSHFIFO);
 		} else {
-			dumpTime(funcWritew, ep->current_epnum);
 			musb_writew(epio, MUSB_RXCSR,
 					0 | MUSB_RXCSR_FLUSHFIFO);
-			dumpTime(funcWritew, ep->current_epnum);
 			musb_writew(epio, MUSB_RXCSR,
 					0 | MUSB_RXCSR_FLUSHFIFO);
 		}
 
 		value = c->channel_abort(ep->dma);
-		DBG(value ? 1 : 3, "%s: %s: abort DMA --> %d\n", __func__, ep->name, value);
+		DBG(0, "%s: %s: abort DMA --> %d\n", __func__, ep->name, value);
 		c->channel_release(ep->dma);
 		ep->dma = NULL;
 	}
 
-	while (!list_empty(&(ep->req_list))) {
-		//req = container_of(ep->req_list.next, struct musb_request,
-		//		request.list);
+	while (!list_empty(&ep->req_list)) {
 		req = list_first_entry(&ep->req_list, struct musb_request, list);
 		musb_g_giveback(ep, &req->request, status);
 		DBG(0,"call musb_g_giveback on function %s ep is %s\n", __func__,ep->end_point.name);
 	}
 }
 
-//Added Modification for ALPS00255822, bug from WHQL test
-void musb_g_giveback_keepReq(
-	struct musb_ep		*ep,
-	struct usb_request	*request,
-	int			status)
-__releases(ep->musb->lock)
-__acquires(ep->musb->lock)
-{
-	struct musb_request	*req;
-	struct musb		*musb;
-	int			busy = ep->busy;
-
-
-	req = to_musb_request(request);
-	list_del(&req->list);
-
-	DBG(0,"%s: request = 0x%p\n", __func__, request);
-
-	if (req->request.status == -EINPROGRESS)
-		req->request.status = status;
-	musb = req->musb;
-
-	ep->busy = 1;
-	spin_unlock(&musb->lock);
-	if (ep->dma) {
-		if (req->map_state) {
-			dma_unmap_single(musb->controller,
-					req->request.dma,
-					req->request.length,
-					req->tx
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-			req->request.dma = DMA_ADDR_INVALID;
-			req->map_state = UN_MAPPED;
-		} else if (req->request.dma != DMA_ADDR_INVALID)
-			dma_sync_single_for_cpu(musb->controller,
-					req->request.dma,
-					req->request.length,
-					req->tx
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-	}
-	if (request->status == 0)
-		DBG(1, "%s: %s done request %p,  %d/%d\n",
-				__func__, ep->end_point.name, request,
-				req->request.actual, req->request.length);
-	else
-		DBG(1, "%s: %s request %p, %d/%d fault %d\n",
-				__func__, ep->end_point.name, request,
-				req->request.actual, req->request.length,
-				request->status);
-	req->request.complete(&req->ep->end_point, &req->request);
-/*	if(req->ep->current_epnum == 3 && !req->ep->is_in)
-		dereq_count++;*/
-	spin_lock(&musb->lock);
-	DBG(50,"%s: MUSB:%s request done\n",__func__, req->ep->end_point.name);
-	ep->busy = busy;
-}
-
-static void nuke_without_delReq(struct musb_ep *ep, const int status)
-{
-	struct musb_request	*req = NULL;
-	void __iomem *epio = ep->musb->endpoints[ep->current_epnum].regs;
-
-	ep->busy = 1;
-
-	ep->dmaRelease = 1;
-
-	DBG(1, "%s: ep->current_epnum = %d, \n", __func__, ep->current_epnum);
-
-	if (ep->dma) {
-		struct dma_controller	*c = ep->musb->dma_controller;
-		int value;
-
-		if (ep->is_in) {
-			/*
-			 * The programming guide says that we must not clear
-			 * the DMAMODE bit before DMAENAB, so we only
-			 * clear it in the second write...
-			 */
-			dumpTime(funcWritew, ep->current_epnum);
-			musb_writew(epio, MUSB_TXCSR,
-				    MUSB_TXCSR_DMAMODE | MUSB_TXCSR_FLUSHFIFO);
-			dumpTime(funcWritew, ep->current_epnum);
-			musb_writew(epio, MUSB_TXCSR,
-					0 | MUSB_TXCSR_FLUSHFIFO);
-		} else {
-			dumpTime(funcWritew, ep->current_epnum);
-			musb_writew(epio, MUSB_RXCSR,
-					0 | MUSB_RXCSR_FLUSHFIFO);
-			dumpTime(funcWritew, ep->current_epnum);
-			musb_writew(epio, MUSB_RXCSR,
-					0 | MUSB_RXCSR_FLUSHFIFO);
-		}
-
-		value = c->channel_abort(ep->dma);
-		DBG(value ? 1 : 3, "%s: %s: abort DMA --> %d\n", __func__, ep->name, value);
-		c->channel_release(ep->dma);
-		ep->dma = NULL;
-	}
-
-	while (!list_empty(&(ep->req_list)))
-	{
-		//req = container_of(ep->req_list.next, struct musb_request,
-		//		request.list);
-		req = list_first_entry(&ep->req_list, struct musb_request, list);
-		musb_g_giveback_keepReq(ep, &req->request, status);
-		DBG(0,"%s: call musb_g_giveback on function %s ep is %s\n", __func__, __func__,ep->end_point.name);
-		//Ainge
-		//DBG(1, "%s: call musb_g_giveback on function %s ep is %s\n", __func__, __func__,ep->end_point.name);
-		//Ainge
-	}
-}
-//Added Modification for ALPS00255822, bug from WHQL test
 /* ----------------------------------------------------------------------- */
 
 /* Data transfers - pure PIO, pure DMA, or mixed mode */
@@ -561,24 +651,15 @@ static inline int max_ep_writesize(struct musb *musb, struct musb_ep *ep)
  *
  * Context: controller locked, IRQs blocked, endpoint selected
  */
-#define TX_DMA_MODE1
-#ifdef TX_DMA_MODE1
 static void txstate(struct musb *musb, struct musb_request *req)
 {
 	u8			epnum = req->epnum;
 	struct musb_ep		*musb_ep;
-	//void __iomem		*epio = musb->endpoints[epnum].regs;
-	void __iomem		*epio =NULL;
+	void __iomem		*epio = musb->endpoints[epnum].regs;
 	struct usb_request	*request;
 	u16			fifo_count = 0, csr;
 	int			use_dma = 0;
-	size_t request_size;
 
-	if (ep_in_list[epnum]) {
-		epio = ep_in_list[epnum]->regs;
-	} else {
-		DBG(0,"ep%d in list is NULL\n",epnum);
-	}
 	musb_ep = req->ep;
 
 	/* Check if EP is disabled */
@@ -613,68 +694,89 @@ static void txstate(struct musb *musb, struct musb_request *req)
 		return;
 	}
 
-	DBG(3, "hw_ep%d, maxpacket %d, fifo count %d, txcsr %03x\n",
+	DBG(1, "hw_ep%d, maxpacket %d, fifo count %d, txcsr %03x\n",
 			epnum, musb_ep->packet_sz, fifo_count,
 			csr);
 
 	USB_LOGGER(TXSTATE, TXSTATE, epnum, musb_ep->packet_sz, fifo_count, csr);
 
-	if (musb_ep->dma) {
+	if (is_buffer_mapped(req)) {
 		struct dma_controller	*c = musb->dma_controller;
-		use_dma = (request->dma != DMA_ADDR_INVALID);
-		/* MUSB_TXCSR_P_ISO is still set correctly */
+		size_t request_size;
 
 		/* setup DMA, then program endpoint CSR */
-		request_size = min_t(size_t, request->length,
+		request_size = min_t(size_t, request->length - request->actual,
 					musb_ep->dma->max_len);
+
+		use_dma = (request->dma != DMA_ADDR_INVALID && request_size);
+
+		/* MUSB_TXCSR_P_ISO is still set correctly */
+
 		if (request_size < musb_ep->packet_sz)
 			musb_ep->dma->desired_mode = 0;
 		else
 			musb_ep->dma->desired_mode = 1;
 
-
 		use_dma = use_dma && c->channel_program(
 				musb_ep->dma, musb_ep->packet_sz,
 				musb_ep->dma->desired_mode,
 				request->dma + request->actual, request_size);
-
 		if (use_dma) {
-			musb_ep->dma_configed = TRUE;
 			if (musb_ep->dma->desired_mode == 0) {
+				/*
+				* We must not clear the DMAMODE bit
+				* before the DMAENAB bit -- and the
+				* latter doesn't always get cleared
+				* before we get here...
+				*/
 				csr &= ~(MUSB_TXCSR_AUTOSET
 					| MUSB_TXCSR_DMAENAB);
-				dumpTime(funcWritew, epnum);
 				musb_writew(epio, MUSB_TXCSR, csr
 					| MUSB_TXCSR_P_WZC_BITS);
 					csr &= ~MUSB_TXCSR_DMAMODE;
-					csr |= (MUSB_TXCSR_DMAENAB/*	 |
-						MUSB_TXCSR_MODE*/);
-			} else
-				csr |= (MUSB_TXCSR_AUTOSET
-						| MUSB_TXCSR_DMAENAB
+					csr |= (MUSB_TXCSR_DMAENAB |
+							MUSB_TXCSR_MODE);
+				/* against programming guide */
+			} else {
+					csr |= (MUSB_TXCSR_DMAENAB
 						| MUSB_TXCSR_DMAMODE
-						/*| MUSB_TXCSR_MODE*/);
-
+							| MUSB_TXCSR_MODE);
+				if (!musb_ep->hb_mult)
+					csr |= MUSB_TXCSR_AUTOSET;
+			}
 			csr &= ~MUSB_TXCSR_P_UNDERRUN;
-			dumpTime(funcWritew, epnum);
+
+			//__ADB_DEBUG__ start
+			if(bitdebug_enabled == 1){
+				if(ep_in == &(musb_ep->end_point)){
+					adbCmdLog(request->buf, request->length, musb_ep->is_in, "txstate");
+					//printk(KERN_INFO "adb: musb_g_tx length = 0x%x, actual = 0x%x, packet_sz = 0x%x \n", request->length, request->actual, musb_ep->packet_sz);
+				}
+			}
+			//__ADB_DEBUG__ end
 			musb_writew(epio, MUSB_TXCSR, csr);
 		}
 	}
 
 
 	if (!use_dma) {
+		/*
+		 * Unmap the dma buffer back to cpu if dma channel
+		 * programming fails
+		 */
+		unmap_dma_buffer(req, musb);
+
 		musb_write_fifo(musb_ep->hw_ep, fifo_count,
 				(u8 *) (request->buf + request->actual));
 		request->actual += fifo_count;
 		csr |= MUSB_TXCSR_TXPKTRDY;
 		csr &= ~MUSB_TXCSR_P_UNDERRUN;
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_TXCSR, csr);
 	}
 
 	/* host may already have the data when this message shows... */
-	DBG(3, "%s: %s TX/IN %s len %d/%d, txcsr %04x, fifo %d/%d\n",
-			__func__, musb_ep->end_point.name, use_dma ? "dma" : "pio",
+	DBG(1, "%s TX/IN %s len %d/%d, txcsr %04x, fifo %d/%d\n",
+			musb_ep->end_point.name, use_dma ? "dma" : "pio",
 			request->actual, request->length,
 			musb_readw(epio, MUSB_TXCSR),
 			fifo_count,
@@ -683,7 +785,6 @@ static void txstate(struct musb *musb, struct musb_request *req)
 	USB_LOGGER( TXSTATE_END, TXSTATE, musb_ep->end_point.name, use_dma ? "dma" : "pio",
 			request->actual, request->length, musb_readw(epio, MUSB_TXCSR), fifo_count,
 			musb_readw(epio, MUSB_TXMAXP));
-
 }
 
 /*
@@ -696,51 +797,29 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 	struct musb_request	*req;
 	struct usb_request	*request;
 	u8 __iomem		*mbase = musb->mregs;
-//	struct musb_ep		*musb_ep = &musb->endpoints[epnum].ep_in;
-//	void __iomem		*epio = musb->endpoints[epnum].regs;
-	struct musb_ep		*musb_ep = NULL;
-	void __iomem		*epio = NULL;
+	struct musb_ep		*musb_ep = &musb->endpoints[epnum].ep_in;
+	void __iomem		*epio = musb->endpoints[epnum].regs;
 	struct dma_channel	*dma;
 
-	if (ep_in_list[epnum]) {
-		musb_ep = &ep_in_list[epnum]->ep_in;
-		epio = ep_in_list[epnum]->regs;
-	} else {
-		DBG(0,"%s: ep%d in list is NULL\n", __func__, epnum);
-	}
-
 	musb_ep_select(mbase, epnum);
-	//request = next_request(musb_ep);
 	req = next_request(musb_ep);
 	request = &req->request;
 
 	csr = musb_readw(epio, MUSB_TXCSR);
-	DBG(3, "<== %s, txcsr %04x\n", musb_ep->end_point.name, csr);
+	DBG(1, "<== %s, txcsr %04x\n", musb_ep->end_point.name, csr);
+
 
 	USB_LOGGER(MUSB_G_TX, MUSB_G_TX, musb_ep->end_point.name, csr);
 
-//Added Modification for ALPS00255822, bug from WHQL test
-	if(request == 0 && musb_ep->dmaRelease) {
-		//Ainge
-		/*DBG(4, "%s line %d: sending zero pkt\n", __func__, __LINE__);
-		musb_writew(epio, MUSB_TXCSR, MUSB_TXCSR_TXPKTRDY);
-		*/
-		DBG(0, "%s: %s request == NULL and dmaReleased!!\n", __func__, musb_ep->end_point.name);
-		musb_ep->dmaRelease = 0;
-		musb_ep->nextUnderRun = 1;
-		return;
+	//__ADB_DEBUG__ start
+	if(bitdebug_enabled == 1){
+		//if(ep_in == &(musb_ep->end_point)){
+		//	printk(KERN_INFO "adb: musb_g_tx length = 0x%x, csr = 0x%x, musb_ep->is_in = %d \n", request->length, csr, musb_ep->is_in);
+		//}
 	}
+	//__ADB_DEBUG__ end
 
-	if(request && musb_ep->nextUnderRun) {
-		/*csr &= ~(MUSB_TXCSR_P_SENDSTALL| MUSB_TXCSR_P_SENTSTALL | MUSB_TXCSR_TXPKTRDY);
-		csr |= MUSB_TXCSR_CLRDATATOG;
-		musb_writew(epio, MUSB_TXCSR, csr);*/
-		DBG(4, "%s line %d: clear halt, csr = 0x%x\n", __func__, __LINE__, csr);
-
-		musb_ep->nextUnderRun = 0;
-	}
-//Added Modification for ALPS00255822, bug from WHQL test
-	dma = musb_ep->dma;
+	dma = is_dma_capable() ? musb_ep->dma : NULL;
 
 	/*
 	 * REVISIT: for high bandwidth, MUSB_TXCSR_P_INCOMPTX
@@ -749,38 +828,14 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 	if (csr & MUSB_TXCSR_P_SENTSTALL) {
 		csr |=	MUSB_TXCSR_P_WZC_BITS;
 		csr &= ~MUSB_TXCSR_P_SENTSTALL;
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_TXCSR, csr);
 		return;
 	}
 
 	if (csr & MUSB_TXCSR_P_UNDERRUN) {
 		/* We NAKed, no big deal... little reason to care. */
-//Added Modification for ALPS00255822, bug from WHQL test
-		DBG(1, "%s, line %d: underrun on ep%d, req 0x%p, csr 0x%x, musb_ep->nextUnderRun = %d \n", __func__, __LINE__, epnum, request, csr, musb_ep->nextUnderRun);
-		if(musb_ep->nextUnderRun && request == 0)
-		{
-			//musb_writew(epio, MUSB_TXCSR, MUSB_TXCSR_TXPKTRDY);
-			//DBG(1, "%s, line %d: underrun on ep%d, req %p, csr 0x%x, sending ZLP, musb_ep->nextUnderRun = %d \n", __func__, __LINE__, epnum, request, csr, musb_ep->nextUnderRun);
-			//send stall
-/*			csr |= MUSB_TXCSR_CLRDATATOG;
-			csr |= MUSB_TXCSR_P_SENDSTALL;
-			csr &= ~MUSB_TXCSR_TXPKTRDY;
-			musb_writew(epio, MUSB_TXCSR, csr);
-			DBG(1, "%s, line %d: underrun on ep%d, req %p, csr 0x%x, send Stall, musb_ep->nextUnderRun = %d \n", __func__, __LINE__, epnum, request, csr, musb_ep->nextUnderRun);*/
-			DBG(1, "%s, line %d: TXMAXP 0x%x \n", __func__, __LINE__, musb_readw(epio, MUSB_TXMAXP));
-			//DBG(1, "%s, line %d: TXMAXP 0x%llu, MUSB_FIFO_OFFSET(epnum) = %d \n", __func__, __LINE__, musb_readw(epio, MUSB_FIFO_OFFSET(epnum)), MUSB_FIFO_OFFSET(epnum));
-			return;
-		}
-		else
-		{
-//Added Modification for ALPS00255822, bug from WHQL test
 		csr |=	 MUSB_TXCSR_P_WZC_BITS;
 		csr &= ~(MUSB_TXCSR_P_UNDERRUN | MUSB_TXCSR_TXPKTRDY);
-//Added Modification for ALPS00255822, bug from WHQL test
-		}
-//Added Modification for ALPS00255822, bug from WHQL test
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_TXCSR, csr);
 		DBG(1, "underrun on ep%d, req %p\n", epnum, request);
 	}
@@ -795,15 +850,13 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 	}
 
 	if (request) {
-		u8 is_dma = 0;
+		u8	is_dma = 0;
 
 		if (dma && (csr & MUSB_TXCSR_DMAENAB)) {
 			is_dma = 1;
-			musb_ep->dma_configed = FALSE;
 			csr |= MUSB_TXCSR_P_WZC_BITS;
 			csr &= ~(MUSB_TXCSR_DMAENAB | MUSB_TXCSR_P_UNDERRUN |
-				 MUSB_TXCSR_TXPKTRDY);
-			dumpTime(funcWritew, epnum);
+				 MUSB_TXCSR_TXPKTRDY | MUSB_TXCSR_AUTOSET);
 			musb_writew(epio, MUSB_TXCSR, csr);
 			/* Ensure writebuffer is empty. */
 			csr = musb_readw(epio, MUSB_TXCSR);
@@ -812,39 +865,53 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 				epnum, csr, musb_ep->dma->actual_len, request);
 		}
 
-		if (is_dma || request->actual == request->length) {
-			/*
-			 * First, maybe a terminating short packet. Some DMA
-			 * engines might handle this by themselves.
-			 */
-			if ((request->zero && request->length
+		/*
+		 * First, maybe a terminating short packet. Some DMA
+		 * engines might handle this by themselves.
+		 */
+		if ((request->zero && request->length
 			&& (request->length % musb_ep->packet_sz == 0)
 			&& (request->actual == request->length))
-				|| (is_dma && (!dma->desired_mode ||
+			|| (is_dma && (!dma->desired_mode ||
 				(request->actual % musb_ep->packet_sz)))
-			) {
-				/*
-				 * On DMA completion, FIFO may not be
-				 * available yet...
-				 */
-				if (csr & MUSB_TXCSR_TXPKTRDY)
-					return;
+		) {
+			/*
+			 * On DMA completion, FIFO may not be
+			 * available yet...
+			 */
+			if (csr & MUSB_TXCSR_TXPKTRDY)
+				return;
 
-				DBG(4, "sending zero pkt\n");
-				dumpTime(funcWritew, epnum);
-				musb_writew(epio, MUSB_TXCSR, /*MUSB_TXCSR_MODE
-					|*/ MUSB_TXCSR_TXPKTRDY
+			DBG(4, "sending zero pkt\n");
+			musb_writew(epio, MUSB_TXCSR, MUSB_TXCSR_MODE
+					| MUSB_TXCSR_TXPKTRDY
 					| (csr & MUSB_TXCSR_P_ISO));
-				request->zero = 0;
+			request->zero = 0;
 			/*
 			 * Return from here with the expectation of the endpoint
 			 * interrupt for further action.
 			 */
 			return;
-			}
+		}
 
-			/* ... or if not, then complete it. */
+		if (request->actual == request->length) {
+#if 0
+			if(ep_in == &(musb_ep->end_point))
+			{
+				adbCmdLog(request->buf, request->actual, musb_ep->is_in, "musb_g_tx");
+				//printk(KERN_INFO "adb: musb_g_tx length = 0x%x, actual = 0x%x, packet_sz = 0x%x \n", request->length, request->actual, musb_ep->packet_sz);
+			}
+#endif
 			musb_g_giveback(musb_ep, request, 0);
+			/*
+			 * In the giveback function the MUSB lock is
+			 * released and acquired after sometime. During
+			 * this time period the INDEX register could get
+			 * changed by the gadget_queue function especially
+			 * on SMP systems. Reselect the INDEX to be sure
+			 * we are reading/modifying the right registers
+			 */
+			musb_ep_select(mbase, epnum);
 
 			/*
 			 * Kickstart next transfer if appropriate;
@@ -853,14 +920,11 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 			 * REVISIT for double buffering...
 			 * FIXME revisit for stalls too...
 			 */
-
-			musb_ep_select(mbase, epnum);
 			/* If configured as DB, then FIFONOTEMPTY doesn't mean no space for new packet */
 			if(!(musb_read_txfifosz(mbase) & MUSB_FIFOSZ_DPB)) {
 				csr = musb_readw(epio, MUSB_TXCSR);
 				if (csr & MUSB_TXCSR_FIFONOTEMPTY) {
 					if ((csr & MUSB_TXCSR_TXPKTRDY) == 0 ) {
-						dumpTime(funcWritew, epnum);
 						musb_writew(epio, MUSB_TXCSR, /*MUSB_TXCSR_MODE
 											| */MUSB_TXCSR_TXPKTRDY);
 					}
@@ -868,7 +932,6 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 				}
 			}
 
-			//request = musb_ep->desc ? next_request(musb_ep) : NULL;
 			req = musb_ep->desc ? next_request(musb_ep) : NULL;
 			if (!req) {
 				DBG(1, "%s idle now\n",
@@ -880,213 +943,7 @@ void musb_g_tx(struct musb *musb, u8 epnum)
 		txstate(musb, req);
 	}
 }
-#else
-static void txstate(struct musb *musb, struct musb_request *req)
-{
-	u8			epnum = req->epnum;
-	struct musb_ep		*musb_ep;
-//	void __iomem		*epio = musb->endpoints[epnum].regs;
-	void __iomem		*epio = ep_in_list[epnum]->regs;
 
-	struct usb_request	*request;
-	u16			fifo_count = 0, csr;
-	int			use_dma = 0;
-
-
-	if(ep_in_list[epnum])
-	{
-			epio = ep_in_list[epnum]->regs;
-	}else
-	{
-			DBG(0,"ep%d in list is NULL\n");
-	}
-	musb_ep = req->ep;
-
-	/* we shouldn't get here while DMA is active ... but we do ... */
-	if (dma_channel_status(musb_ep->dma) == MUSB_DMA_STATUS_BUSY) {
-		DBG(0, "dma pending...\n");
-		return;
-	}
-
-	/* read TXCSR before */
-	csr = musb_readw(epio, MUSB_TXCSR);
-
-	request = &req->request;
-	fifo_count = min(max_ep_writesize(musb, musb_ep),
-			(int)(request->length - request->actual));
-
-	if (csr & MUSB_TXCSR_TXPKTRDY) {
-		DBG(0, "%s old packet still ready , txcsr %03x\n",
-				musb_ep->end_point.name, csr);
-		return;
-	}
-
-	if (csr & MUSB_TXCSR_P_SENDSTALL) {
-		DBG(0, "%s stalling, txcsr %03x\n",
-				musb_ep->end_point.name, csr);
-		return;
-	}
-
-	DBG(3, "hw_ep%d, maxpacket %d, fifo count %d, txcsr %03x\n",
-			epnum, musb_ep->packet_sz, fifo_count,
-			csr);
-
-	if (musb_ep->dma) {
-		struct dma_controller	*c = musb->dma_controller;
-		size_t request_size;
-		use_dma = (request->dma != DMA_ADDR_INVALID);
-		/* setup DMA, then program endpoint CSR */
-		request_size = min_t(size_t, request->length - request->actual,
-					musb_ep->packet_sz);
-		musb_ep->dma->desired_mode = 0;
-		use_dma = use_dma && c->channel_program(
-				musb_ep->dma, musb_ep->packet_sz,
-				musb_ep->dma->desired_mode,
-				request->dma + request->actual, request_size);
-
-		if (use_dma) {
-			musb_ep->dma_configed = TRUE;
-			if (musb_ep->dma->desired_mode == 0) {
-				csr &= ~(MUSB_TXCSR_AUTOSET
-					/*| MUSB_TXCSR_DMAENAB*/);
-				dumpTime(funcWritew, epnum);
-				musb_writew(epio, MUSB_TXCSR, csr
-					| MUSB_TXCSR_P_WZC_BITS);
-				csr &= ~MUSB_TXCSR_DMAMODE;
-				csr |= (MUSB_TXCSR_DMAENAB /*|
-							MUSB_TXCSR_MODE*/);
-			}
-
-			csr &= ~MUSB_TXCSR_P_UNDERRUN;
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_TXCSR, csr);
-		}
-	}
-
-
-	if (!use_dma) {
-		musb_write_fifo(musb_ep->hw_ep, fifo_count,
-				(u8 *) (request->buf + request->actual));
-		request->actual += fifo_count;
-		csr |= MUSB_TXCSR_TXPKTRDY;
-		csr &= ~MUSB_TXCSR_P_UNDERRUN;
-		dumpTime(funcWritew, epnum);
-		musb_writew(epio, MUSB_TXCSR, csr);
-	}
-
-	/* host may already have the data when this message shows... */
-	DBG(3, "%s TX/IN %s len %d/%d, txcsr %04x, fifo %d/%d\n",
-			musb_ep->end_point.name, use_dma ? "dma" : "pio",
-			request->actual, request->length,
-			musb_readw(epio, MUSB_TXCSR),
-			fifo_count,
-			musb_readw(epio, MUSB_TXMAXP));
-}
-void musb_g_tx(struct musb *musb, u8 epnum)
-{
-	u16			csr;
-	struct musb_request	*req;
-	struct usb_request	*request;
-	u8 __iomem		*mbase = musb->mregs;
-//	struct musb_ep		*musb_ep = &musb->endpoints[epnum].ep_in;
-//	void __iomem		*epio = musb->endpoints[epnum].regs;
-	struct musb_ep		*musb_ep = NULL;
-	void __iomem		*epio = NULL;
-
-	struct dma_channel	*dma;
-
-	if (ep_in_list[epnum]) {
-		musb_ep = &ep_in_list[epnum]->ep_in;
-		epio = ep_in_list[epnum]->regs;
-	} else {
-		DBG(0,"ep%d in list is NULL\n");
-	}
-	musb_ep_select(mbase, epnum);
-	//request = next_request(musb_ep);
-	req = next_request(musb_ep);
-	request = &req->request;
-
-	csr = musb_readw(epio, MUSB_TXCSR);
-	DBG(3, "<== %s, txcsr %04x\n", musb_ep->end_point.name, csr);
-
-	dma = musb_ep->dma;
-
-	if (csr & MUSB_TXCSR_P_SENTSTALL) {
-		csr |=	MUSB_TXCSR_P_WZC_BITS;
-		csr &= ~MUSB_TXCSR_P_SENTSTALL;
-		dumpTime(funcWritew, epnum);
-		musb_writew(epio, MUSB_TXCSR, csr);
-		DBG(0, "send stall on ep%d, req %p\n", epnum, request);
-		return;
-	}
-
-	if (csr & MUSB_TXCSR_P_UNDERRUN) {
-		csr |=	 MUSB_TXCSR_P_WZC_BITS;
-		csr &= ~(MUSB_TXCSR_P_UNDERRUN | MUSB_TXCSR_TXPKTRDY);
-		dumpTime(funcWritew, epnum);
-		musb_writew(epio, MUSB_TXCSR, csr);
-		DBG(1, "underrun on ep%d, req %p\n", epnum, request);
-	}
-
-	if (dma_channel_status(dma) == MUSB_DMA_STATUS_BUSY) {
-		DBG(0, "%s dma still busy?\n", musb_ep->end_point.name);
-		return;
-	}
-
-	if (request) {
-		if (dma && (csr & MUSB_TXCSR_DMAENAB)) {
-			musb_ep->dma_configed = FALSE;
-			csr |= MUSB_TXCSR_P_WZC_BITS;
-			csr &= ~(MUSB_TXCSR_DMAENAB | MUSB_TXCSR_P_UNDERRUN |
-				 MUSB_TXCSR_TXPKTRDY);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_TXCSR, csr);
-			/* Ensure writebuffer is empty. */
-			csr = musb_readw(epio, MUSB_TXCSR);
-			request->actual += musb_ep->dma->actual_len;
-			DBG(4, "TXCSR%d %04x, DMA off, len %zu, req %p\n",
-				epnum, csr, musb_ep->dma->actual_len, request);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_TXCSR, /*MUSB_TXCSR_MODE
-			| */MUSB_TXCSR_TXPKTRDY);
-			return ;
-		}
-
-		if (request->actual == request->length) {
-			if ((request->zero && request->length
-				&& request->length % musb_ep->packet_sz == 0)) {
-				if (csr & MUSB_TXCSR_TXPKTRDY)
-					return;
-				DBG(1, "sending zero pkt\n");
-				dumpTime(funcWritew, epnum);
-				musb_writew(epio, MUSB_TXCSR, /*MUSB_TXCSR_MODE
-						|*/ MUSB_TXCSR_TXPKTRDY);
-				request->zero = 0;
-				return ;
-			} else {
-				/* ... or if not, then complete it. */
-				musb_g_giveback(musb_ep, request, 0);
-				musb_ep_select(mbase, epnum);
-				csr = musb_readw(epio, MUSB_TXCSR);
-				if (csr & MUSB_TXCSR_FIFONOTEMPTY)
-					return;
-
-				//request = musb_ep->desc ? next_request(musb_ep) : NULL;
-				req = musb_ep->desc ? next_request(musb_ep) : NULL;
-				if (!request) {
-					DBG(1, "%s idle now\n",
-						musb_ep->end_point.name);
-					return;
-				}
-			}
-
-
-		}
-
-		txstate(musb, to_musb_request(request));
-	}
-}
-#endif
 /* ------------------------------------------------------------ */
 
 
@@ -1125,24 +982,20 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 {
 	const u8		epnum = req->epnum;
 	struct usb_request	*request = &req->request;
-//	struct musb_ep		*musb_ep = &musb->endpoints[epnum].ep_out;
-//	void __iomem		*epio = musb->endpoints[epnum].regs;
-	struct musb_ep		*musb_ep = NULL;
-	void __iomem		*epio = NULL;
-
-	unsigned		fifo_count = 0;
-	u16			len = 0;
-	u16			csr = 0;
+	struct musb_ep		*musb_ep;
+	void __iomem		*epio = musb->endpoints[epnum].regs;
+	unsigned		len = 0;
+	u16			fifo_count;
+	u16			csr = musb_readw(epio, MUSB_RXCSR);
+	struct musb_hw_ep	*hw_ep = &musb->endpoints[epnum];
 	u8			use_mode_1;
 
+	if (hw_ep->is_shared_fifo)
+		musb_ep = &hw_ep->ep_in;
+	else
+		musb_ep = &hw_ep->ep_out;
 
-	if(ep_out_list[epnum]) {
-		musb_ep = &ep_out_list[epnum]->ep_out;
-		epio = ep_out_list[epnum]->regs;
-	} else {
-		DBG(0,"ep%d out list is NULL \n",epnum);
-		return;
-	}
+	fifo_count = musb_ep->packet_sz;
 
 	/* Check if EP is disabled */
 	if (!musb_ep->desc) {
@@ -1151,37 +1004,90 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 		return;
 	}
 
-	len = musb_ep->packet_sz;
-	csr = musb_readw(epio, MUSB_RXCSR);
 	/* We shouldn't get here while DMA is active, but we do... */
 	if (dma_channel_status(musb_ep->dma) == MUSB_DMA_STATUS_BUSY) {
 		DBG(0, "DMA pending...\n");
 		return;
 	}
+
 	if (csr & MUSB_RXCSR_P_SENDSTALL) {
 		DBG(0, "%s stalling, RXCSR %04x\n",
 		    musb_ep->end_point.name, csr);
 		return;
 	}
-	if (csr & MUSB_RXCSR_RXPKTRDY) {
-		len = musb_readw(epio, MUSB_RXCOUNT);
 
+    if (csr & MUSB_RXCSR_RXPKTRDY) {
+		fifo_count = musb_readw(epio, MUSB_RXCOUNT);
+
+		DBG(1,"rxstate epnum %d len %d\n ", epnum, len);
 		/*
 		 * Enable Mode 1 on RX transfers only when short_not_ok flag
 		 * is set. Currently short_not_ok flag is set only from
 		 * file_storage and f_mass_storage drivers
 		 */
-
-		if (request->short_not_ok && len == musb_ep->packet_sz)
+#ifdef RX_DMA_MODE1
+		if (fifo_count == musb_ep->packet_sz)
+#else
+		if (request->short_not_ok && fifo_count == musb_ep->packet_sz)
+#endif
 			use_mode_1 = 1;
 		else
 			use_mode_1 = 0;
 
 		if (request->actual < request->length) {
-			if (musb_ep->dma) {
+
+
+#ifdef RX_DMA_MODE1
+			if (is_buffer_mapped(req) && use_mode_1) {
 				struct dma_controller	*c;
 				struct dma_channel	*channel;
 				int			use_dma = 0;
+				int transfer_size;
+
+				c = musb->dma_controller;
+				channel = musb_ep->dma;
+
+				/* Experimental: Mode1 works with mass storage use cases */
+				csr |= MUSB_RXCSR_AUTOCLEAR;
+				musb_writew(epio, MUSB_RXCSR, csr);
+				csr |= MUSB_RXCSR_DMAENAB;
+				musb_writew(epio, MUSB_RXCSR, csr);
+
+				musb_writew(epio, MUSB_RXCSR,
+					csr | MUSB_RXCSR_DMAMODE);
+
+				transfer_size = min(request->length - request->actual,
+						channel->max_len);
+				/* Program the transfer length to be
+				 * a multiple of packet size because
+				 * short packets cant be transferred
+				 * over mode1
+				 */
+				transfer_size = transfer_size -
+						(transfer_size
+						 % musb_ep->packet_sz);
+				musb_ep->dma->prog_len = transfer_size;
+
+				musb_ep->dma->desired_mode = 1;
+
+				use_dma = c->channel_program(
+						channel,
+						musb_ep->packet_sz,
+						channel->desired_mode,
+						request->dma
+						+ request->actual,
+						transfer_size);
+
+				if (use_dma) {
+					return;
+				}
+			}
+#else
+			if (is_buffer_mapped(req)) {
+				struct dma_controller	*c;
+				struct dma_channel	*channel;
+				int			use_dma = 0;
+				int transfer_size;
 
 				c = musb->dma_controller;
 				channel = musb_ep->dma;
@@ -1210,10 +1116,8 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 				/* Experimental: Mode1 works with mass storage use cases */
 				if (use_mode_1) {
 					csr |= MUSB_RXCSR_AUTOCLEAR;
-					dumpTime(funcWritew, epnum);
 					musb_writew(epio, MUSB_RXCSR, csr);
 					csr |= MUSB_RXCSR_DMAENAB;
-					dumpTime(funcWritew, epnum);
 					musb_writew(epio, MUSB_RXCSR, csr);
 
 					/*
@@ -1221,11 +1125,13 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 					 * disabling MUSB_RXCSR_DMAMODE) is required
 					 * to get DMAReq to activate
 					 */
-					dumpTime(funcWritew, epnum);
 					musb_writew(epio, MUSB_RXCSR,
 						csr | MUSB_RXCSR_DMAMODE);
-					dumpTime(funcWritew, epnum);
 					musb_writew(epio, MUSB_RXCSR, csr);
+
+					transfer_size = min(request->length - request->actual,
+							channel->max_len);
+					musb_ep->dma->desired_mode = 1;
 
 				} else {
 					/*
@@ -1237,45 +1143,49 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 					 *	csr |= MUSB_RXCSR_AUTOCLEAR;
 					 */
 						csr |= MUSB_RXCSR_DMAENAB;
-						dumpTime(funcWritew, epnum);
 						musb_writew(epio, MUSB_RXCSR, csr);
-				}
 
-				if (request->actual < request->length) {
-					int transfer_size = 0;
-					if (use_mode_1) {
 						transfer_size = min(request->length - request->actual,
-								channel->max_len);
-						musb_ep->dma->desired_mode = 1;
-						DBG(1,"use_mode_1 %d\n",transfer_size);
-					} else {
-						transfer_size = min(request->length - request->actual,
-								(unsigned)len);
+							(unsigned)fifo_count);
 						musb_ep->dma->desired_mode = 0;
-					}
-
-					use_dma = c->channel_program(
-							channel,
-							musb_ep->packet_sz,
-							channel->desired_mode,
-							request->dma
-							+ request->actual,
-							transfer_size);
 				}
-				if (use_dma) {
-					musb_ep->dma_configed = TRUE;
+
+				use_dma = c->channel_program(
+						channel,
+						musb_ep->packet_sz,
+						channel->desired_mode,
+						request->dma
+						+ request->actual,
+						transfer_size);
+
+				if (use_dma)
 					return;
-
-				}
 			}
 
-			fifo_count = request->length - request->actual;
+#endif
+			len = request->length - request->actual;
 			DBG(3, "%s OUT/RX pio fifo %d/%d, maxpacket %d\n",
 					musb_ep->end_point.name,
 					len, fifo_count,
 					musb_ep->packet_sz);
 
 			fifo_count = min_t(unsigned, len, fifo_count);
+
+			/*
+			 * Unmap the dma buffer back to cpu if dma channel
+			 * programming fails. This buffer is mapped if the
+			 * channel allocation is successful
+			 */
+			 if (is_buffer_mapped(req)) {
+				unmap_dma_buffer(req, musb);
+
+				/*
+				 * Clear DMAENAB and AUTOCLEAR for the
+				 * PIO mode transfer
+				 */
+				csr &= ~(MUSB_RXCSR_DMAENAB | MUSB_RXCSR_AUTOCLEAR);
+				musb_writew(epio, MUSB_RXCSR, csr);
+			}
 
 			musb_read_fifo(musb_ep->hw_ep, fifo_count, (u8 *)
 					(request->buf + request->actual));
@@ -1284,19 +1194,29 @@ static void rxstate(struct musb *musb, struct musb_request *req)
 			/* REVISIT if we left anything in the fifo, flush
 			 * it and report -EOVERFLOW
 			 */
+
 			/* ack the read! */
 			csr |= MUSB_RXCSR_P_WZC_BITS;
 			csr &= ~MUSB_RXCSR_RXPKTRDY;
-			dumpTime(funcWritew, epnum);
 			musb_writew(epio, MUSB_RXCSR, csr);
 		}
-	} else {
-		DBG(1,"%s rx not ready,CSR is %x,ep is %d\n",musb_ep->end_point.name,csr,epnum);
 	}
 
 	/* reach the end or short packet detected */
-	if (request->actual == request->length || len < musb_ep->packet_sz)
+	if (request->actual == request->length ||
+	    fifo_count < musb_ep->packet_sz)
+	{
+		//__ADB_DEBUG__ start
+		if(bitdebug_enabled == 1){
+			if(ep_out == &(musb_ep->end_point))
+			{
+				adbCmdLog(request->buf, request->actual, musb_ep->is_in, "rxstate");
+				//printk(KERN_INFO "adb: rxstate length = 0x%x, actual = 0x%x, len = 0x%x, packet_sz = 0x%x \n", request->length, request->actual, len, musb_ep->packet_sz);
+			}
+		}
+		//__ADB_DEBUG__ end
 		musb_g_giveback(musb_ep, request, 0);
+}
 }
 
 /*
@@ -1308,42 +1228,50 @@ void musb_g_rx(struct musb *musb, u8 epnum)
 	struct musb_request	*req;
 	struct usb_request	*request;
 	void __iomem		*mbase = musb->mregs;
-//	struct musb_ep		*musb_ep = &musb->endpoints[epnum].ep_out;
-//	void __iomem		*epio = musb->endpoints[epnum].regs;
-	struct musb_ep		*musb_ep = NULL;
-	void __iomem		*epio = NULL;
-
+	struct musb_ep		*musb_ep;
+	void __iomem		*epio = musb->endpoints[epnum].regs;
 	struct dma_channel	*dma;
+	struct musb_hw_ep	*hw_ep = &musb->endpoints[epnum];
+#ifdef RX_DMA_MODE1
+	u16			len;
+	u32			residue;
+	struct dma_controller	*c = musb->dma_controller;
+	int			status;
+#endif
 
-	if (ep_out_list[epnum]) {
-		musb_ep = &ep_out_list[epnum]->ep_out;
-		epio = ep_out_list[epnum]->regs;
-	} else {
-		DBG(0,"ep%d out list is NULL \n",epnum);
-		return;
-	}
+	if (hw_ep->is_shared_fifo)
+		musb_ep = &hw_ep->ep_in;
+	else
+		musb_ep = &hw_ep->ep_out;
 
 	musb_ep_select(mbase, epnum);
-	csr = musb_readw(epio, MUSB_RXCSR);
 
 	req = next_request(musb_ep);
+
+
 	if (!req) {
-		if((csr & MUSB_RXCSR_RXPKTRDY)&&(musb_readw(epio, MUSB_RXCOUNT) == 0)) {
-			csr &= ~MUSB_RXCSR_RXPKTRDY;
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
-		}
-//Added Modification for ALPS00255822, bug from WHQL test
-		DBG(1,"%s: !req!!, \n", __func__);
-//Added Modification for ALPS00255822, bug from WHQL test
+#ifdef RX_DMA_MODE1
+		musb_ep->rx_pending = 1;
+		DBG(2, "Packet recieved on %s but no request queued\n",
+			musb_ep->end_point.name);
+#endif
 		return;
 	}
 
-
 	request = &req->request;
-	dma = musb_ep->dma;
 
-	DBG(3, "<== %s, rxcsr %04x%s %p\n", musb_ep->end_point.name,
+	csr = musb_readw(epio, MUSB_RXCSR);
+	dma = is_dma_capable() ? musb_ep->dma : NULL;
+
+	//__ADB_DEBUG__ start
+	if(bitdebug_enabled == 1){
+		//if(ep_out == &(musb_ep->end_point)){
+		//	printk(KERN_INFO "adb: musb_g_rx length = 0x%x, csr = 0x%x, musb_ep->is_in = %d \n", request->length, csr, musb_ep->is_in);
+		//}
+	}
+	//__ADB_DEBUG__ end
+
+	DBG(1, "<== %s, rxcsr %04x%s %p\n", musb_ep->end_point.name,
 			csr, dma ? " (dma)" : "", request);
 
 	USB_LOGGER(MUSB_G_RX, MUSB_G_RX, musb_ep->end_point.name, csr, \
@@ -1353,20 +1281,16 @@ void musb_g_rx(struct musb *musb, u8 epnum)
 		csr |= MUSB_RXCSR_P_WZC_BITS;
 		csr &= ~MUSB_RXCSR_P_SENTSTALL;
 		DBG(0,"%s sendstall on %p\n",musb_ep->name,request);
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_RXCSR, csr);
 		return;
 	}
 
 	if (csr & MUSB_RXCSR_P_OVERRUN) {
 		/* csr |= MUSB_RXCSR_P_WZC_BITS; */
-		DBG(0, "MUSB_WARNING : MUSB_RXCSR_P_OVERRUN\n");
 		csr &= ~MUSB_RXCSR_P_OVERRUN;
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_RXCSR, csr);
 
 		DBG(0, "%s iso overrun on %p\n", musb_ep->name, request);
-		//if (request && request->status == -EINPROGRESS)
 		if (request->status == -EINPROGRESS)
 			request->status = -EOVERFLOW;
 	}
@@ -1374,16 +1298,70 @@ void musb_g_rx(struct musb *musb, u8 epnum)
 		/* REVISIT not necessarily an error */
 		DBG(1, "%s, incomprx\n", musb_ep->end_point.name);
 	}
-	if(csr&MUSB_RXCSR_FIFOFULL)
+
+	if(csr & MUSB_RXCSR_FIFOFULL)
 	{
 		DBG(1, "%s, FIFO full\n", musb_ep->end_point.name);
 	}
 
 	if (dma_channel_status(dma) == MUSB_DMA_STATUS_BUSY) {
+
+#ifdef RX_DMA_MODE1
+		/* For short_not_ok type transfers and mode0 transfers */
+		if (dma->desired_mode == 0 || request->short_not_ok)
+			return;
+
+		if (!(csr & MUSB_RXCSR_RXPKTRDY)) {
+			DBG(1, "%s, DMA busy and Packet not ready\n",
+				musb_ep->end_point.name);
+			return;
+		}
+
+		/* For Mode1 we get here for the last short packet */
+		len = musb_readw(epio, MUSB_RXCOUNT);
+
+		/* We should get here only for a short packet.*/
+		if (len == musb_ep->packet_sz) {
+			DBG(2, "%s, Packet not short RXCOUNT=%d\n",
+				musb_ep->end_point.name, len);
+			return;
+		}
+
+		/* Pause the channel to get the correct transfer residue.*/
+		status = c->channel_pause(musb_ep->dma);
+		residue = c->tx_status(musb_ep->dma);
+		status = c->check_residue(musb_ep->dma, residue);
+
+		DBG(2, "len=%d, residue=%d\n", len, residue);
+
+		if (status) {
+			/* Something's wrong */
+			status = c->channel_resume(musb_ep->dma);
+			return;
+		}
+
+        /* In cases when we don't know the transfer length the short
+         * packet indicates end of current transfer.
+         */
+        status = c->channel_abort(musb_ep->dma);
+        /* Update with the actual number of bytes transferred */
+        request->actual = musb_ep->dma->prog_len - residue;
+        /* Clear DMA bits in the CSR */
+        csr &= ~(MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_DMAENAB
+                | MUSB_RXCSR_DMAMODE);
+        musb_writew(epio, MUSB_RXCSR, csr);
+
+        /* Proceed to read the short packet */
+        rxstate(musb, req);
+		/* Don't program next transfer, it will tamper with the DMA
+		 * busy condition. Wait for next OUT
+		 */
+#else
 		/* "should not happen"; likely RXPKTRDY pending for DMA */
 		DBG((csr & MUSB_RXCSR_DMAENAB) ? 40 : 40,
 			"%s busy, csr %04x\n",
 			musb_ep->end_point.name, csr);
+#endif
 		return;
 	}
 
@@ -1391,34 +1369,61 @@ void musb_g_rx(struct musb *musb, u8 epnum)
 		csr &= ~(MUSB_RXCSR_AUTOCLEAR
 				| MUSB_RXCSR_DMAENAB
 				| MUSB_RXCSR_DMAMODE);
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_RXCSR,
 			MUSB_RXCSR_P_WZC_BITS | csr);
 
 		request->actual += musb_ep->dma->actual_len;
-		musb_ep->dma_configed = FALSE;
-		DBG(3, "RXCSR%d %04x, dma off, %04x, len %zu, req %p\n",
+		DBG(1, "RXCSR%d %04x, dma off, %04x, len %zu, req %p ep %d\n",
 			epnum, csr,
 			musb_readw(epio, MUSB_RXCSR),
-			musb_ep->dma->actual_len, request);
+			musb_ep->dma->actual_len, request, epnum);
 		/* Autoclear doesn't clear RxPktRdy for short packets */
-		if ((dma->desired_mode == 0)
+		if ((dma->desired_mode == 0 && !hw_ep->rx_double_buffered)
 				|| (dma->actual_len
 					& (musb_ep->packet_sz - 1))) {
 			/* ack the read! */
 			csr &= ~MUSB_RXCSR_RXPKTRDY;
-			dumpTime(funcWritew, epnum);
 			musb_writew(epio, MUSB_RXCSR, csr);
 		}
+
+#ifdef RX_DMA_MODE1
+        /* We get here after DMA completion */
+        if ((dma->desired_mode == 1) && (!request->short_not_ok)) {
+        	/* Incomplete? wait for next OUT packet */
+			if (request->actual < request->length) {
+				DBG(2, "Wait for next OUT\n");
+            } else if (request->actual == request->length) {
+                DBG(2, "Transfer over mode1 done\n");
+                musb_g_giveback(musb_ep, request, 0);
+            } else {
+				DBG(2, "Transfer length exceeded!!\n");
+            }
+			return;
+        }
+#endif
 
 		/* incomplete, and not short? wait for next IN packet */
 		if ((request->actual < request->length)
 				&& (musb_ep->dma->actual_len
-					== musb_ep->packet_sz))
-		{
-			DBG(1,"request is not complete %d /%d\n",request->actual,request->length);
+					== musb_ep->packet_sz)) {
+			/* In double buffer case, continue to unload fifo if
+ 			 * there is Rx packet in FIFO.
+ 			 **/
+			csr = musb_readw(epio, MUSB_RXCSR);
+			if ((csr & MUSB_RXCSR_RXPKTRDY) &&
+				hw_ep->rx_double_buffered)
+				goto exit;
 			return;
 		}
+
+		//__ADB_DEBUG__ start
+		if(bitdebug_enabled == 1){
+			if(ep_out == &(musb_ep->end_point)){
+				adbCmdLog(request->buf, request->actual, musb_ep->is_in, "musb_g_rx");
+				//printk(KERN_INFO "adb: musb_g_rx length = 0x%x, actual = 0x%x, packet_sz = 0x%x \n", request->length, request->actual, musb_ep->packet_sz);
+			}
+		}
+		//__ADB_DEBUG__ end
 
 		musb_g_giveback(musb_ep, request, 0);
 		/*
@@ -1433,23 +1438,61 @@ void musb_g_rx(struct musb *musb, u8 epnum)
 
 		req = next_request(musb_ep);
 		if (!req)
-		{
-			DBG(1,"musb request is null\n");
 			return;
-
 		}
+exit:
+	/* Analyze request */
+		rxstate(musb, req);
+}
+
+static void fifo_setup(struct musb *musb, struct musb_ep *musb_ep)
+{
+	void __iomem	*mbase = musb->mregs;
+	int	size = 0;
+	u16	maxpacket = musb_ep->fifo_size;
+	u16	c_off = musb->fifo_addr >> 3;
+	u8	c_size;
+
+	/* expect hw_ep has already been zero-initialized */
+
+	size = ffs(max(maxpacket, (u16) 8)) - 1;
+	maxpacket = 1 << size;
+
+	DBG(0,"musb type=%s\n", (musb_ep->type==USB_ENDPOINT_XFER_BULK?"BULK": \
+		(musb_ep->type==USB_ENDPOINT_XFER_INT?"INT": \
+		(musb_ep->type==USB_ENDPOINT_XFER_ISOC?"ISO":"CONTROL"))));
+
+	c_size = size - 3;
+	/* Set double buffer, if the transfer type is bulk or isoc.*/
+	/* So user need to take care the fifo buffer is enough or not.*/
+	if ((musb_ep->type==USB_ENDPOINT_XFER_BULK) || musb_ep->type==USB_ENDPOINT_XFER_ISOC) {
+		if ((musb->fifo_addr + (maxpacket << 1)) >(musb->fifo_size)) {
+			DBG(0,"MUSB_BUF_DOUBLE USB FIFO is not enough!!! (%d>%d), fifo_addr=%d\n",
+				(musb->fifo_addr + (maxpacket << 1)), (musb->fifo_size), musb->fifo_addr);
+			return ;
+		}
+		DBG(0,"EP%d supports DBBUF\n", musb_ep->current_epnum);
+		c_size |= MUSB_FIFOSZ_DPB;
+	} else if ((musb->fifo_addr + maxpacket) > (musb->fifo_size)) {
+		DBG(0,"MUSB_BUF_SINGLE USB FIFO is not enough!!! (%d>%d)\n",
+			(musb->fifo_addr + maxpacket), (musb->fifo_size));
+		return ;
 	}
 
-	/* analyze request if the ep is hot */
-	if (req){
-		//rxstate(musb, to_musb_request(request));
-		rxstate(musb, req);
+	/* configure the FIFO */
+	// musb_writeb(mbase, MUSB_INDEX, musb_ep->hw_ep->epnum);
+	DBG(0,"fifo size is %d after %d, fifo address is %d, epnum %d,hwepnum %d\n",
+		c_size,maxpacket, musb->fifo_addr, musb_ep->current_epnum, musb_ep->hw_ep->epnum);
+
+	if(musb_ep->is_in) {
+		musb_write_txfifosz(mbase, c_size);
+		musb_write_txfifoadd(mbase, c_off);
+	} else {
+		musb_write_rxfifosz(mbase, c_size);
+		musb_write_rxfifoadd(mbase, c_off);
 	}
-	else
-		DBG(0, "packet waiting for %s%s request\n",
-				musb_ep->desc ? "" : "inactive ",
-				musb_ep->end_point.name);
-	return;
+	musb->fifo_addr += (maxpacket << ((c_size & MUSB_FIFOSZ_DPB) ? 1 : 0));
+	return ;
 }
 
 /* ------------------------------------------------------------ */
@@ -1471,6 +1514,13 @@ static int musb_gadget_enable(struct usb_ep *ep,
 	if (!ep || !desc)
 		return -EINVAL;
 
+	if(bitdebug_enabled == 1)
+	{
+		unsigned int ret;
+		ret = kfifo_alloc(&fifo, PAGE_SIZE, GFP_KERNEL);
+		spin_lock_init(&debugLock);
+	}
+
 	musb_ep = to_musb_ep(ep);
 	hw_ep = musb_ep->hw_ep;
 	regs = hw_ep->regs;
@@ -1487,36 +1537,63 @@ static int musb_gadget_enable(struct usb_ep *ep,
 	musb_ep->type = usb_endpoint_type(desc);
 
 	/* check direction and (later) maxpacket size against endpoint */
-/*	if (usb_endpoint_num(desc) != epnum)
-		goto fail;*/
+	if (usb_endpoint_num(desc) != epnum)
+		goto fail;
 
 	/* REVISIT this rules out high bandwidth periodic transfers */
-	tmp = le16_to_cpu(desc->wMaxPacketSize);
-	if (tmp & ~0x07ff)
+	tmp = usb_endpoint_maxp(desc);
+	if (tmp & ~0x07ff) {
+		int ok;
+
+		if (usb_endpoint_dir_in(desc))
+			ok = musb->hb_iso_tx;
+		else
+			ok = musb->hb_iso_rx;
+
+		if (!ok) {
+			DBG(2, "no support for high bandwidth ISO\n");
 		goto fail;
-	musb_ep->packet_sz = tmp;
+		}
+		musb_ep->hb_mult = (tmp >> 11) & 3;
+	} else {
+		musb_ep->hb_mult = 0;
+	}
+
+	musb_ep->packet_sz = tmp & 0x7ff;
+	tmp = musb_ep->packet_sz * (musb_ep->hb_mult + 1);
 
 	/* enable the interrupts for the endpoint, set the endpoint
 	 * packet size (or fail), set the mode, clear the fifo
 	 */
 	musb_ep_select(mbase, epnum);
 	if (usb_endpoint_dir_in(desc)) {
-		u16 int_txe = musb_readw(mbase, MUSB_INTRTXE);
 
 		if (hw_ep->is_shared_fifo)
 			musb_ep->is_in = 1;
 		if (!musb_ep->is_in)
 			goto fail;
-		if (tmp > hw_ep->max_packet_sz_tx)
+
+		if (tmp > hw_ep->max_packet_sz_tx) {
+			DBG(0, "packet size beyond hardware FIFO size\n");
 			goto fail;
+		}
 
-		int_txe |= (1 << epnum);
-		dumpTime(funcWritew, epnum);
-		musb_writew(mbase, MUSB_INTRTXE, int_txe);
-		dumpTime(funcWritew, epnum);
-		musb_writew(regs, MUSB_TXMAXP, tmp);
+		musb->intrtxe |= (1 << epnum);
+		musb_writew(mbase, MUSB_INTRTXE, musb->intrtxe);
 
-		csr = /*MUSB_TXCSR_MODE | */MUSB_TXCSR_CLRDATATOG;
+		/* REVISIT if can_bulk_split(), use by updating "tmp";
+		 * likewise high bandwidth periodic tx
+		 */
+		/* Set TXMAXP with the FIFO size of the endpoint
+		 * to disable double buffering mode.
+		 */
+		if (musb->double_buffer_not_ok)
+			musb_writew(regs, MUSB_TXMAXP, hw_ep->max_packet_sz_tx);
+		else
+			musb_writew(regs, MUSB_TXMAXP, musb_ep->packet_sz
+					| (musb_ep->hb_mult << 11));
+
+		csr = MUSB_TXCSR_MODE | MUSB_TXCSR_CLRDATATOG;
 		if (musb_readw(regs, MUSB_TXCSR)
 				& MUSB_TXCSR_FIFONOTEMPTY)
 			csr |= MUSB_TXCSR_FLUSHFIFO;
@@ -1524,57 +1601,66 @@ static int musb_gadget_enable(struct usb_ep *ep,
 			csr |= MUSB_TXCSR_P_ISO;
 
 		/* set twice in case of double buffering */
-		dumpTime(funcWritew, epnum);
 		musb_writew(regs, MUSB_TXCSR, csr);
 		/* REVISIT may be inappropriate w/o FIFONOTEMPTY ... */
-		dumpTime(funcWritew, epnum);
 		musb_writew(regs, MUSB_TXCSR, csr);
 
 	} else {
-		u16 int_rxe = musb_readw(mbase, MUSB_INTRRXE);
 
 		if (hw_ep->is_shared_fifo)
 			musb_ep->is_in = 0;
 		if (musb_ep->is_in)
 			goto fail;
-		if (tmp > hw_ep->max_packet_sz_rx)
-			goto fail;
 
-		int_rxe |= (1 << epnum);
-		dumpTime(funcWritew, epnum);
-		musb_writew(mbase, MUSB_INTRRXE, int_rxe);
-		dumpTime(funcWritew, epnum);
-		musb_writew(regs, MUSB_RXMAXP, tmp);
+		if (tmp > hw_ep->max_packet_sz_rx) {
+			DBG(0, "packet size beyond hardware FIFO size\n");
+			goto fail;
+		}
+
+		musb->intrrxe |= (1 << epnum);
+		musb_writew(mbase, MUSB_INTRRXE, musb->intrrxe);
+
+		/* REVISIT if can_bulk_combine() use by updating "tmp"
+		 * likewise high bandwidth periodic rx
+		 */
+		/* Set RXMAXP with the FIFO size of the endpoint
+		 * to disable double buffering mode.
+		 */
+		if (musb->double_buffer_not_ok)
+			musb_writew(regs, MUSB_RXMAXP, hw_ep->max_packet_sz_tx);
+		else
+			musb_writew(regs, MUSB_RXMAXP, musb_ep->packet_sz
+					| (musb_ep->hb_mult << 11));
 
 		/* force shared fifo to OUT-only mode */
 		if (hw_ep->is_shared_fifo) {
 			csr = musb_readw(regs, MUSB_TXCSR);
 			csr &= ~(MUSB_TXCSR_MODE | MUSB_TXCSR_TXPKTRDY);
-			dumpTime(funcWritew, epnum);
 			musb_writew(regs, MUSB_TXCSR, csr);
 		}
-/*don't flush fifo when enable , because sometimes usb will receive packets before ep enabled. when
-flush fifo here will lost those packets. We will flush fifo during disabe ep*/
-/*		csr = MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_CLRDATATOG;
+		/* don't flush fifo when enable, because sometimes usb
+		 * will receive packets before ep enabled. when flush fifo
+		 * here will lost those packets. We will flush fifo during
+		 * disabe ep */
+#if 0
+		csr = MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_CLRDATATOG;
 		if (musb_ep->type == USB_ENDPOINT_XFER_ISOC)
 			csr |= MUSB_RXCSR_P_ISO;
 		else if (musb_ep->type == USB_ENDPOINT_XFER_INT)
-			csr |= MUSB_RXCSR_DISNYET;*/
+			csr |= MUSB_RXCSR_DISNYET;
 
 		/* set twice in case of double buffering */
-/*		musb_writew(regs, MUSB_RXCSR, csr);
-		musb_writew(regs, MUSB_RXCSR, csr);*/
-
+		musb_writew(regs, MUSB_RXCSR, csr);
+		musb_writew(regs, MUSB_RXCSR, csr);
+#endif
 	}
 
-
 	fifo_setup(musb,musb_ep);
-
 
 	/* NOTE:  all the I/O code _should_ work fine without DMA, in case
 	 * for some reason you run out of channels here.
 	 */
-	if (musb->dma_controller && musb_ep->type != USB_ENDPOINT_XFER_INT) { //interrupt mode ep don't use dma
+	if (is_dma_capable() && musb->dma_controller && musb_ep->type != USB_ENDPOINT_XFER_INT) { //interrupt mode ep don't use dma
 		struct dma_controller	*c = musb->dma_controller;
 
 		musb_ep->dma = c->channel_alloc(c, hw_ep,
@@ -1597,7 +1683,9 @@ flush fifo here will lost those packets. We will flush fifo during disabe ep*/
 			musb_ep->is_in ? "IN" : "OUT",
 			musb_ep->dma ? "dma, " : "",
 			musb_ep->packet_sz);
-	DBG(2,"MUSB: ep rx inte is%x tx inte is %x\n",musb_readw(mbase,MUSB_INTRRXE),musb_readw(mbase,MUSB_INTRTXE));
+
+	schedule_work(&musb->irq_work);
+
 fail:
 	spin_unlock_irqrestore(&musb->lock, flags);
 	return status;
@@ -1618,55 +1706,38 @@ static int musb_gadget_disable(struct usb_ep *ep)
 	musb_ep = to_musb_ep(ep);
 	musb = musb_ep->musb;
 	epnum = musb_ep->current_epnum;
-	if(musb_ep->is_in && ep_in_list[epnum])
-		epio = ep_in_list[epnum]->regs;
-	else if (!musb_ep->is_in&&ep_out_list[epnum])
-		epio = ep_out_list[epnum]->regs;
-	else
-		//epio = musb->endpoints[epnum].regs;
-	{
-		DBG(0,"EP %d is not used\n",epnum);
-		return status;
-	}
+	epio = musb->endpoints[epnum].regs;
 
 	spin_lock_irqsave(&musb->lock, flags);
-	if(musb->power)
-	{
-		musb_ep_select(musb->mregs, epnum);
+	musb_ep_select(musb->mregs, epnum);
 
-		/* zero the endpoint sizes */
-		if (musb_ep->is_in) {
-			u16 int_txe = musb_readw(musb->mregs, MUSB_INTRTXE);
-			int_txe &= ~(1 << epnum);
-			dumpTime(funcWritew, epnum);
-			musb_writew(musb->mregs, MUSB_INTRTXE, int_txe);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_TXMAXP, 0);
-		} else {
-			u16 int_rxe = musb_readw(musb->mregs, MUSB_INTRRXE);
-			u16 csr;
-			int_rxe &= ~(1 << epnum);
-			dumpTime(funcWritew, epnum);
-			musb_writew(musb->mregs, MUSB_INTRRXE, int_rxe);
+	/* zero the endpoint sizes */
+	if (musb_ep->is_in) {
+		musb->intrtxe &= ~(1 << epnum);
+		musb_writew(musb->mregs, MUSB_INTRTXE, musb->intrtxe);
+		musb_writew(epio, MUSB_TXMAXP, 0);
+	} else {
+		u16 csr;
+		musb->intrrxe &= ~(1 << epnum);
+		musb_writew(musb->mregs, MUSB_INTRRXE, musb->intrrxe);
 
-/*flush fifo here*/
-			csr = MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_CLRDATATOG;
+		/* flush fifo here */
+		csr = MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_CLRDATATOG;
+		/* set twice in case of double buffering */
+		musb_writew(epio, MUSB_RXCSR, csr);
+		musb_writew(epio, MUSB_RXCSR, csr);
 
-			/* set twice in case of double buffering */
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXMAXP, 0);
-		}
-
-		musb_ep->desc = NULL;
-
-		/* abort all pending DMA and requests */
-		nuke(musb_ep, -ESHUTDOWN);
-
+		musb_writew(epio, MUSB_RXMAXP, 0);
 	}
+
+	musb_ep->desc = NULL;
+	musb_ep->end_point.desc = NULL;
+
+	/* abort all pending DMA and requests */
+	nuke(musb_ep, -ESHUTDOWN);
+
+	schedule_work(&musb->irq_work);
+
 	spin_unlock_irqrestore(&(musb->lock), flags);
 
 	DBG(2, "%s\n", musb_ep->end_point.name);
@@ -1681,18 +1752,18 @@ static int musb_gadget_disable(struct usb_ep *ep)
 struct usb_request *musb_alloc_request(struct usb_ep *ep, gfp_t gfp_flags)
 {
 	struct musb_ep		*musb_ep = to_musb_ep(ep);
+	/* struct musb		*musb = musb_ep->musb; */
 	struct musb_request	*request = NULL;
 
 	request = kzalloc(sizeof *request, gfp_flags);
-	if (request) {
-		INIT_LIST_HEAD(&request->request.list);
-		request->request.dma = DMA_ADDR_INVALID;
-		request->epnum = musb_ep->current_epnum;
-		request->ep = musb_ep;
-	}else
-	{
-		DBG(0,"alloc request error\n");
+	if (!request) {
+		DBG(0, "not enough memory\n");
+		return NULL;
 	}
+
+	request->request.dma = DMA_ADDR_INVALID;
+	request->epnum = musb_ep->current_epnum;
+	request->ep = musb_ep;
 
 	return &request->request;
 }
@@ -1720,7 +1791,7 @@ struct free_record {
  */
 void musb_ep_restart(struct musb *musb, struct musb_request *req)
 {
-	DBG(3, "<== %s request %p len %u on hw_ep%d\n",
+	DBG(2, "<== %s request %p len %u on hw_ep%d\n",
 		req->tx ? "TX/IN" : "RX/OUT",
 		&req->request, req->request.length, req->epnum);
 
@@ -1739,6 +1810,9 @@ static int musb_gadget_queue(struct usb_ep *ep, struct usb_request *req,
 	struct musb		*musb;
 	int			status = 0;
 	unsigned long		lockflags;
+	//__ADB_DEBUG__ start
+	int adbStatus = 0;
+	//__ADB_DEBUG__ end
 
 	if (!ep || !req)
 		return -EINVAL;
@@ -1754,8 +1828,15 @@ static int musb_gadget_queue(struct usb_ep *ep, struct usb_request *req,
 	if (request->ep != musb_ep)
 		return -EINVAL;
 
-	DBG(2, "<== to %s request=%p\n", ep->name, req);
+	//__ADB_DEBUG__ start
+	if(bitdebug_enabled == 1){
+		adbStatus = adbDegInfoHandle(ep, req, "musb_gadget_queue");
+		if (-1 != adbStatus)
+			return adbStatus;
+	}
+	//__ADB_DEBUG__ end
 
+	DBG(2, "<== to %s request=%p\n", ep->name, req);
 
 	/* request is mine now... */
 	request->request.actual = 0;
@@ -1763,57 +1844,44 @@ static int musb_gadget_queue(struct usb_ep *ep, struct usb_request *req,
 	request->epnum = musb_ep->current_epnum;
 	request->tx = musb_ep->is_in;
 
+	map_dma_buffer(request, musb, musb_ep);
+
 	spin_lock_irqsave(&musb->lock, lockflags);
-
-//Added Modification for ALPS00255822, bug from WHQL test
-	DBG(1,"%s: <== to %s, musb->dma =0x%p, request->request.dma = 0x%x!! DMA_ADDR_INVALID=0x%x\n", __func__, ep->name, musb_ep->dma, request->request.dma, DMA_ADDR_INVALID);
-	musb_ep->dmaRelease = 0;
-//Added Modification for ALPS00255822, bug from WHQL test
-	/* don't queue if the ep is down */
-	if (musb_ep->dma) {
-		if (request->request.dma == DMA_ADDR_INVALID) {
-			request->request.dma = dma_map_single(
-					musb->controller,
-					request->request.buf,
-					request->request.length,
-					request->tx
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-			request->map_state = MUSB_MAPPED;
-		} else {
-			dma_sync_single_for_device(musb->controller,
-					request->request.dma,
-					request->request.length,
-					request->tx
-						? DMA_TO_DEVICE
-						: DMA_FROM_DEVICE);
-			request->map_state = UN_MAPPED;
-		}
-	} else if (!req->buf) {
-		status = -ENODATA;
-		goto cleanup;
-	} else
-		request->map_state = UN_MAPPED;
-
 
 	/* don't queue if the ep is down */
 	if (!musb_ep->desc) {
-		DBG(0, "req %p queued to %s while ep %s\n",
+		DBG(2, "req %p queued to %s while ep %s\n",
 				req, ep->name, "disabled");
 		status = -ESHUTDOWN;
 		goto cleanup;
 	}
 
 	/* add request to the list */
-	//list_add_tail(&(request->request.list), &(musb_ep->req_list));
 	list_add_tail(&request->list, &musb_ep->req_list);
-/*	if(musb_ep->current_epnum == 3 && !musb_ep->is_in)
-		req_count++;*/
 
+#ifdef RX_DMA_MODE1
+ 	/* it this is the head of the queue, start i/o ... */
+	if (!musb_ep->busy && &request->list == musb_ep->req_list.next) {
+
+		/* In case of RX, if there is no packet pending to be read
+		 * from fifo then wait for next interrupt
+		 */
+		if (!request->tx) {
+			if (!musb_ep->rx_pending) {
+				DBG(2, "No packet pending for %s\n", ep->name);
+				goto cleanup;
+			} else {
+				musb_ep->rx_pending = 0;
+				DBG(2, "Read packet from fifo %s\n", ep->name);
+			}
+		}
+ 		musb_ep_restart(musb, request);
+	}
+#else
 	/* it this is the head of the queue, start i/o ... */
-	//if (!musb_ep->busy && &request->request.list == musb_ep->req_list.next)
 	if (!musb_ep->busy && &request->list == musb_ep->req_list.next)
 		musb_ep_restart(musb, request);
+#endif
 
 cleanup:
 	spin_unlock_irqrestore(&musb->lock, lockflags);
@@ -1824,7 +1892,6 @@ static int musb_gadget_dequeue(struct usb_ep *ep, struct usb_request *request)
 {
 	struct musb_ep		*musb_ep = to_musb_ep(ep);
 	struct musb_request	*req = to_musb_request(request);
-	//struct usb_request	*r;
 	struct musb_request	*r;
 	unsigned long		flags;
 	int			status = 0;
@@ -1836,29 +1903,21 @@ static int musb_gadget_dequeue(struct usb_ep *ep, struct usb_request *request)
 	spin_lock_irqsave(&musb->lock, flags);
 
 	list_for_each_entry(r, &musb_ep->req_list, list) {
-		//if (r == request)
 		if (r == req)
 			break;
 	}
-	//if (r != request) {
 	if (r != req) {
-		DBG(0, "request %p not queued to %s\n", request, ep->name);
+		DBG(2, "request %p not queued to %s\n", request, ep->name);
 		status = -EINVAL;
 		goto done;
 	}
 
 	/* if the hardware doesn't have the request, easy ... */
-	//if (musb_ep->req_list.next != &request->list || musb_ep->busy)
 	if (musb_ep->req_list.next != &req->list || musb_ep->busy)
-	{
-
 		musb_g_giveback(musb_ep, request, -ECONNRESET);
 
-	}
-
-
 	/* ... else abort the dma transfer ... */
-	else if (musb_ep->dma) {
+	else if (is_dma_capable() && musb_ep->dma) {
 		struct dma_controller	*c = musb->dma_controller;
 
 		musb_ep_select(musb->mregs, musb_ep->current_epnum);
@@ -1867,18 +1926,12 @@ static int musb_gadget_dequeue(struct usb_ep *ep, struct usb_request *request)
 		else
 			status = -EBUSY;
 		if (status == 0)
-		{
-
 			musb_g_giveback(musb_ep, request, -ECONNRESET);
-
-		}
-
 	} else {
 		/* NOTE: by sticking to easily tested hardware/driver states,
 		 * we leave counting of in-flight packets imprecise.
 		 */
 		musb_g_giveback(musb_ep, request, -ECONNRESET);
-
 	}
 
 done:
@@ -1886,150 +1939,6 @@ done:
 	return status;
 }
 
-//Added Modification for ALPS00255822, bug from WHQL test
-static int musb_gadget_send_ZLP(struct usb_ep *ep)
-{
-	unsigned long	flags;
-	struct musb	*musb;
-	u8		epnum;
-	struct musb_ep	*musb_ep;
-	void __iomem	*epio;
-	void __iomem	*mbase;
-	int		status = 0;
-	u16			csr;
-
-	DBG(1,"%s: \n", __func__);
-
-	musb_ep = to_musb_ep(ep);
-	musb = musb_ep->musb;
-	epnum = musb_ep->current_epnum;
-
-	DBG(0,"%s: epnum = %d, musb_ep->is_in = %d \n", __func__, epnum, musb_ep->is_in);
-
-	if (!ep)
-		return -EINVAL;
-	mbase = musb->mregs;
-
-	if(musb_ep->is_in && ep_in_list[epnum])
-		epio = ep_in_list[epnum]->regs;
-	else if (!musb_ep->is_in&&ep_out_list[epnum])
-		epio = ep_out_list[epnum]->regs;
-	else
-			//epio = musb->endpoints[epnum].regs;
-	{
-		DBG(0,"%s: EP %d is not used\n", __func__,epnum);
-		return status;
-	}
-
-	DBG(1,"%s: epnum = %d, \n", __func__, epnum);
-
-	spin_lock_irqsave(&musb->lock, flags);
-
-	musb_ep_select(mbase, epnum);
-
-	/* set TxPkyRdy bits */
-
-	DBG(2, "%s: %s: \n", __func__, ep->name);
-	if (musb_ep->is_in) {
-		csr = musb_readw(epio, MUSB_TXCSR);
-		rmb();
-		DBG(2, "%s, line %d: %s: ZLP, csr = 0x%x\n", __func__, __LINE__, ep->name, csr);
-		/*csr &= ~MUSB_TXCSR_P_UNDERRUN;
-		csr |= MUSB_TXCSR_TXPKTRDY;
-		DBG(2, "%s, line %d: %s: ZLP, csr = 0x%x\n", __func__, __LINE__, ep->name, csr);
-		musb_writew(epio, MUSB_TXCSR, csr);*/
-		dumpTime(funcWritew, epnum);
-		musb_writew(epio, MUSB_TXCSR, MUSB_TXCSR_TXPKTRDY);	//sending ZLP
-		wmb();
-	}
-
-	spin_unlock_irqrestore(&musb->lock, flags);
-	return status;
-
-}
-
-static int musb_gadget_dequeue_all(struct usb_ep *ep, struct usb_request *request)
-{
-	unsigned long	flags;
-	struct musb	*musb;
-	u8		epnum;
-	struct musb_ep	*musb_ep;
-	void __iomem	*epio;
-	int		status = 0;
-
-
-	musb_ep = to_musb_ep(ep);
-	musb = musb_ep->musb;
-	epnum = musb_ep->current_epnum;
-
-	DBG(1,"%s: %d \n", __func__, (musb_ep->dmaRelease = 1 ));
-
-	DBG(0,"%s: epnum = %d, musb_ep->is_in = %d \n", __func__, epnum, musb_ep->is_in);
-
-	if(musb_ep->is_in && ep_in_list[epnum])
-		epio = ep_in_list[epnum]->regs;
-	else if (!musb_ep->is_in&&ep_out_list[epnum])
-		epio = ep_out_list[epnum]->regs;
-	else
-		//epio = musb->endpoints[epnum].regs;
-	{
-		DBG(0,"%s: EP %d is not used\n", __func__,epnum);
-		return status;
-	}
-
-	musb_ep->dmaRelease = 1;
-
-	spin_lock_irqsave(&musb->lock, flags);
-	#if 1
-	if(musb->power)
-	{
-		musb_ep_select(musb->mregs, epnum);
-
-		/* zero the endpoint sizes */
-		if (musb_ep->is_in) {
-			u16 int_txe = musb_readw(musb->mregs, MUSB_INTRTXE);
-			int_txe &= ~(1 << epnum);
-			dumpTime(funcWritew, epnum);
-			musb_writew(musb->mregs, MUSB_INTRTXE, int_txe);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_TXMAXP, 0);
-		} else {
-			u16 int_rxe = musb_readw(musb->mregs, MUSB_INTRRXE);
-			u16 csr;
-			int_rxe &= ~(1 << epnum);
-			dumpTime(funcWritew, epnum);
-			musb_writew(musb->mregs, MUSB_INTRRXE, int_rxe);
-
-/*flush fifo here*/
-			csr = MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_CLRDATATOG;
-
-			/* set twice in case of double buffering */
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXMAXP, 0);
-		}
-
-		musb_ep->desc = NULL;
-
-		//Ainge
-		DBG(1,"%s: call nuke_without_delReq to shut down the ep \n", __func__);
-		//Ainge
-
-		/* abort all pending DMA and requests */
-		nuke_without_delReq(musb_ep, -ESHUTDOWN);
-
-	}
-	#endif
-	spin_unlock_irqrestore(&(musb->lock), flags);
-
-	DBG(2, "%s: %s \n", __func__, musb_ep->end_point.name);
-
-	return status;
-}
-//Added Modification for ALPS00255822, bug from WHQL test
 /*
  * Set or clear the halt bit of an endpoint. A halted enpoint won't tx/rx any
  * data but will queue requests.
@@ -2041,7 +1950,7 @@ static int musb_gadget_set_halt(struct usb_ep *ep, int value)
 	struct musb_ep		*musb_ep = to_musb_ep(ep);
 	u8			epnum = musb_ep->current_epnum;
 	struct musb		*musb = musb_ep->musb;
-	void __iomem		*epio; //= musb->endpoints[epnum].regs;
+	void __iomem		*epio = musb->endpoints[epnum].regs;
 	void __iomem		*mbase;
 	unsigned long		flags;
 	u16			csr;
@@ -2052,18 +1961,6 @@ static int musb_gadget_set_halt(struct usb_ep *ep, int value)
 		return -EINVAL;
 	mbase = musb->mregs;
 
-	if(musb_ep->is_in && ep_in_list[epnum])
-		epio = ep_in_list[epnum]->regs;
-	else if (!musb_ep->is_in&&ep_out_list[epnum])
-		epio = ep_out_list[epnum]->regs;
-	else
-			//epio = musb->endpoints[epnum].regs;
-	{
-		DBG(0,"EP %d is not used\n",epnum);
-		return status;
-	}
-
-
 	spin_lock_irqsave(&musb->lock, flags);
 
 	if ((USB_ENDPOINT_XFER_ISOC == musb_ep->type)) {
@@ -2073,7 +1970,6 @@ static int musb_gadget_set_halt(struct usb_ep *ep, int value)
 
 	musb_ep_select(mbase, epnum);
 
-	//request = to_musb_request(next_request(musb_ep));
 	request = next_request(musb_ep);
 	if (value) {
 		if (request) {
@@ -2095,7 +1991,7 @@ static int musb_gadget_set_halt(struct usb_ep *ep, int value)
 		musb_ep->wedged = 0;
 
 	/* set/clear the stall and toggle bits */
-	DBG(0, "%s: %s stall\n", ep->name, value ? "set" : "clear");
+	DBG(2, "%s: %s stall\n", ep->name, value ? "set" : "clear");
 	if (musb_ep->is_in) {
 		csr = musb_readw(epio, MUSB_TXCSR);
 		csr |= MUSB_TXCSR_P_WZC_BITS
@@ -2106,7 +2002,6 @@ static int musb_gadget_set_halt(struct usb_ep *ep, int value)
 			csr &= ~(MUSB_TXCSR_P_SENDSTALL
 				| MUSB_TXCSR_P_SENTSTALL);
 		csr &= ~MUSB_TXCSR_TXPKTRDY;
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_TXCSR, csr);
 	} else {
 		csr = musb_readw(epio, MUSB_RXCSR);
@@ -2118,13 +2013,12 @@ static int musb_gadget_set_halt(struct usb_ep *ep, int value)
 		else
 			csr &= ~(MUSB_RXCSR_P_SENDSTALL
 				| MUSB_RXCSR_P_SENTSTALL);
-		dumpTime(funcWritew, epnum);
 		musb_writew(epio, MUSB_RXCSR, csr);
 	}
 
 	/* maybe start the first request in the queue */
 	if (!musb_ep->busy && !value && request) {
-		DBG(0, "restarting the request\n");
+		DBG(2, "restarting the request\n");
 		musb_ep_restart(musb, request);
 	}
 
@@ -2176,68 +2070,42 @@ static void musb_gadget_fifo_flush(struct usb_ep *ep)
 	struct musb_ep	*musb_ep = to_musb_ep(ep);
 	struct musb	*musb = musb_ep->musb;
 	u8		epnum = musb_ep->current_epnum;
-	void __iomem	*epio ;//musb->endpoints[epnum].regs;
+	void __iomem	*epio = musb->endpoints[epnum].regs;
 	void __iomem	*mbase;
 	unsigned long	flags;
-	u16		csr, int_txe;
+	u16		csr;
 
 	mbase = musb->mregs;
 
-	if(musb_ep->is_in && ep_in_list[epnum])
-		epio = ep_in_list[epnum]->regs;
-	else if (!musb_ep->is_in&&ep_out_list[epnum])
-		epio = ep_out_list[epnum]->regs;
-	else
-			//epio = musb->endpoints[epnum].regs;
-	{
-		DBG(0,"EP %d is not used\n",epnum);
-		return ;
-	}
-
 	spin_lock_irqsave(&musb->lock, flags);
-
+	musb_ep_select(mbase, (u8) epnum);
 
 	/* disable interrupts */
-	if(musb->power)
-	{
-		musb_ep_select(mbase, (u8) epnum);
-		int_txe = musb_readw(mbase, MUSB_INTRTXE);
-		dumpTime(funcWritew, epnum);
-		musb_writew(mbase, MUSB_INTRTXE, int_txe & ~(1 << epnum));
+	musb_writew(mbase, MUSB_INTRTXE, musb->intrtxe & ~(1 << epnum));
 
-		if (musb_ep->is_in) {
-			csr = musb_readw(epio, MUSB_TXCSR);
-			if (csr & MUSB_TXCSR_FIFONOTEMPTY) {
-				csr |= MUSB_TXCSR_FLUSHFIFO | MUSB_TXCSR_P_WZC_BITS;
-
+	if (musb_ep->is_in) {
+		csr = musb_readw(epio, MUSB_TXCSR);
+		if (csr & MUSB_TXCSR_FIFONOTEMPTY) {
+			csr |= MUSB_TXCSR_FLUSHFIFO | MUSB_TXCSR_P_WZC_BITS;
 			/*
 			 * Setting both TXPKTRDY and FLUSHFIFO makes controller
 			 * to interrupt current FIFO loading, but not flushing
 			 * the already loaded ones.
 			 */
-				csr &= ~MUSB_TXCSR_TXPKTRDY;
-
-				dumpTime(funcWritew, epnum);
-				musb_writew(epio, MUSB_TXCSR, csr);
-				/* REVISIT may be inappropriate w/o FIFONOTEMPTY ... */
-				dumpTime(funcWritew, epnum);
-				musb_writew(epio, MUSB_TXCSR, csr);
-			}
-		} else {
-			csr = musb_readw(epio, MUSB_RXCSR);
-			csr |= MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_P_WZC_BITS;
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
-			dumpTime(funcWritew, epnum);
-			musb_writew(epio, MUSB_RXCSR, csr);
+			csr &= ~MUSB_TXCSR_TXPKTRDY;
+			musb_writew(epio, MUSB_TXCSR, csr);
+			/* REVISIT may be inappropriate w/o FIFONOTEMPTY ... */
+			musb_writew(epio, MUSB_TXCSR, csr);
 		}
-
-		/* re-enable interrupt */
-	   dumpTime(funcWritew, epnum);
-	   musb_writew(mbase, MUSB_INTRTXE, int_txe);
-
+	} else {
+		csr = musb_readw(epio, MUSB_RXCSR);
+		csr |= MUSB_RXCSR_FLUSHFIFO | MUSB_RXCSR_P_WZC_BITS;
+		musb_writew(epio, MUSB_RXCSR, csr);
+		musb_writew(epio, MUSB_RXCSR, csr);
 	}
 
+	/* re-enable interrupt */
+	musb_writew(mbase, MUSB_INTRTXE, musb->intrtxe);
 	spin_unlock_irqrestore(&musb->lock, flags);
 }
 
@@ -2252,11 +2120,6 @@ static const struct usb_ep_ops musb_ep_ops = {
 	.set_wedge	= musb_gadget_set_wedge,
 	.fifo_status	= musb_gadget_fifo_status,
 	.fifo_flush	= musb_gadget_fifo_flush
-//Added Modification for ALPS00255822, bug from WHQL test
-	,.dequeue_all = musb_gadget_dequeue_all
-	,.send_ZLP = musb_gadget_send_ZLP
-//Added Modification for ALPS00255822, bug from WHQL test
-
 };
 
 /* ----------------------------------------------------------------------- */
@@ -2268,19 +2131,94 @@ static int musb_gadget_get_frame(struct usb_gadget *gadget)
 	return (int)musb_readw(musb->mregs, MUSB_FRAME);
 }
 
+static int musb_gadget_wakeup(struct usb_gadget *gadget)
+{
+	struct musb	*musb = gadget_to_musb(gadget);
+	void __iomem	*mregs = musb->mregs;
+	unsigned long	flags;
+	int		status = -EINVAL;
+	u8		power, devctl;
+	int		retries;
+
+	spin_lock_irqsave(&musb->lock, flags);
+
+	switch (musb->xceiv->state) {
+	case OTG_STATE_B_PERIPHERAL:
+		/* NOTE:  OTG state machine doesn't include B_SUSPENDED;
+		 * that's part of the standard usb 1.1 state machine, and
+		 * doesn't affect OTG transitions.
+		 */
+		if (musb->may_wakeup && musb->is_suspended)
+			break;
+		goto done;
+	case OTG_STATE_B_IDLE:
+		/* Start SRP ... OTG not required. */
+		devctl = musb_readb(mregs, MUSB_DEVCTL);
+		DBG(2, "Sending SRP: devctl: %02x\n", devctl);
+		devctl |= MUSB_DEVCTL_SESSION;
+		musb_writeb(mregs, MUSB_DEVCTL, devctl);
+		devctl = musb_readb(mregs, MUSB_DEVCTL);
+		retries = 100;
+		while (!(devctl & MUSB_DEVCTL_SESSION)) {
+			devctl = musb_readb(mregs, MUSB_DEVCTL);
+			if (retries-- < 1)
+				break;
+		}
+		retries = 10000;
+		while (devctl & MUSB_DEVCTL_SESSION) {
+			devctl = musb_readb(mregs, MUSB_DEVCTL);
+			if (retries-- < 1)
+				break;
+		}
+
+		spin_unlock_irqrestore(&musb->lock, flags);
+		otg_start_srp(musb->xceiv->otg);
+		spin_lock_irqsave(&musb->lock, flags);
+
+		/* Block idling for at least 1s */
+		musb_platform_try_idle(musb,
+			jiffies + msecs_to_jiffies(1 * HZ));
+
+		status = 0;
+		goto done;
+	default:
+		DBG(2, "Unhandled wake: %s\n",
+			otg_state_string(musb->xceiv->state));
+		goto done;
+	}
+
+	status = 0;
+
+	power = musb_readb(mregs, MUSB_POWER);
+	power |= MUSB_POWER_RESUME;
+	musb_writeb(mregs, MUSB_POWER, power);
+	DBG(2, "issue wakeup\n");
+
+	/* FIXME do this next chunk in a timer callback, no udelay */
+	mdelay(2);
+
+	power = musb_readb(mregs, MUSB_POWER);
+	power &= ~MUSB_POWER_RESUME;
+	musb_writeb(mregs, MUSB_POWER, power);
+done:
+	spin_unlock_irqrestore(&musb->lock, flags);
+	return status;
+}
 
 static int
 musb_gadget_set_self_powered(struct usb_gadget *gadget, int is_selfpowered)
 {
-	return -ENOTSUPP;
+	struct musb	*musb = gadget_to_musb(gadget);
 
+	musb->is_self_powered = !!is_selfpowered;
+	return 0;
 }
 
-static void musb_pullup(struct musb *musb, int is_on)
+static void musb_pullup(struct musb *musb, int is_on, bool usb_in)
 {
-	static int first_enable = 0;
 
-/*	u8 power;
+# if 0
+	u8 power;
 
 	power = musb_readb(musb->mregs, MUSB_POWER);
 	if (is_on)
@@ -2288,41 +2226,34 @@ static void musb_pullup(struct musb *musb, int is_on)
 	else
 		power &= ~MUSB_POWER_SOFTCONN;
 
-	DBG(3, "gadget %s D+ pullup %s\n",
-		musb->gadget_driver->function, is_on ? "on" : "off");
-	musb_writeb(musb->mregs, MUSB_POWER, power);*/
+	/* FIXME if on, HdrcStart; if off, HdrcStop */
 
-	/* This is a workaround to check if need to turn on USB */
-	/* The init.usb.rc would always write enable to 1 when device booting */
-#if 0
-	if (unlikely(first_enable == 0 && is_on)) {
-		first_enable++;
-		if (!is_usb_connected()) {
-		    DBG(0, "no USB cable, don't need to turn on USB\n");
-		    return;
-		}
-	}
+	DBG(2, "gadget D+ pullup %s\n",
+		is_on ? "on" : "off");
+	musb_writeb(musb->mregs, MUSB_POWER, power);
 #else
-	if (!is_usb_connected()&& is_on) {
-		DBG(0, "no USB cable, don't need to turn on USB\n");
-		return;
-	}
-#endif
-	down(&musb->musb_lock);
-
 	DBG(0,"MUSB: gadget pull up %d start\n", is_on);
 
-	if (is_on)
+	if (!usb_in && is_on) {
+		DBG(0, "no USB cable, don't need to turn on USB\n");
+        #ifdef MTK_ALPS_BOX_SUPPORT    //because 8127 box have no charger IC
+        musb_start(musb);    //default usb device mode
+        #endif
+	} else if (musb->is_host) {
+		DBG(0, "USB is host, don't need to control USB\n");
+	} else if (is_on) {
 		musb_start(musb);
-	else
-		musb_stop(musb);
+	} else {
+        #ifndef MTK_ALPS_BOX_SUPPORT    //because 8127 box have no charger IC
+        musb_stop(musb);
+        #endif
+	}
 
 	DBG(0,"MUSB: gadget pull up %d end\n", is_on);
-
-	up(&musb->musb_lock);
+#endif
 }
 
-
+#if 0
 static int musb_gadget_vbus_session(struct usb_gadget *gadget, int is_active)
 {
 	DBG(2, "<= %s =>\n", __func__);
@@ -2332,49 +2263,70 @@ static int musb_gadget_vbus_session(struct usb_gadget *gadget, int is_active)
 	 * though that can clear it), just musb_pullup().
 	 */
 
-	return -ENOTSUPP;
+	return -EINVAL;
 }
-
+#endif
 
 static int musb_gadget_vbus_draw(struct usb_gadget *gadget, unsigned mA)
 {
-	return -ENOTSUPP;
+	struct musb	*musb = gadget_to_musb(gadget);
 
+	if (!musb->xceiv->set_power)
+		return -EOPNOTSUPP;
+	return usb_phy_set_power(musb->xceiv, mA);
 }
 
 static int musb_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {
 	struct musb	*musb = gadget_to_musb(gadget);
-	unsigned long	flags;
+	/* unsigned long	flags; */
+    bool usb_in;
+
+	DBG(0,"is_on=%d, softconnect=%d ++\n", is_on, musb->softconnect);
 
 	is_on = !!is_on;
+
+	/* only set once when user space function is ready */
+	if (is_on && !musb->is_ready) {
+		musb->is_ready = true;
+	}
+
+	pm_runtime_get_sync(musb->controller);
+
+    /* NOTE: pmic would enable irq internally */
+    usb_in = usb_cable_connected();
 
 	/* NOTE: this assumes we are sensing vbus; we'd rather
 	 * not pullup unless the B-session is active.
 	 */
-	spin_lock_irqsave(&musb->lock, flags);
+
+	/* Remove spin_lock to prevent dead lock */
+	/* spin_lock_irqsave(&musb->lock, flags);*/
 	if (is_on != musb->softconnect) {
 		musb->softconnect = is_on;
-		spin_unlock_irqrestore(&musb->lock, flags);
-		musb_pullup(musb, is_on);
-		DBG(0,"musb pullup %d\n", is_on);
-		spin_lock_irqsave(&musb->lock, flags);
-	}else
-		DBG(1,"MUSB:%s is_on = %d,softconnect = %d\n",__func__,is_on,musb->softconnect);
-	spin_unlock_irqrestore(&musb->lock, flags);
+		musb_pullup(musb, is_on, usb_in);
+	}
+	/* spin_unlock_irqrestore(&musb->lock, flags); */
 
-	musb->is_ready = is_on;
+	pm_runtime_put(musb->controller);
 
 	return 0;
 }
 
+static int musb_gadget_start(struct usb_gadget *g,
+		struct usb_gadget_driver *driver);
+static int musb_gadget_stop(struct usb_gadget *g,
+		struct usb_gadget_driver *driver);
+
 static const struct usb_gadget_ops musb_gadget_operations = {
 	.get_frame		= musb_gadget_get_frame,
-	.wakeup			= NULL,
+	.wakeup			= musb_gadget_wakeup,
 	.set_selfpowered	= musb_gadget_set_self_powered,
-	.vbus_session		= musb_gadget_vbus_session,
-	.vbus_draw		= musb_gadget_vbus_draw,
+	/* .vbus_session		= musb_gadget_vbus_session, */
+	 .vbus_draw		= musb_gadget_vbus_draw,
 	.pullup			= musb_gadget_pullup,
+	.udc_start		= musb_gadget_start,
+	.udc_stop		= musb_gadget_stop,
 };
 
 /* ----------------------------------------------------------------------- */
@@ -2385,21 +2337,20 @@ static const struct usb_gadget_ops musb_gadget_operations = {
  * about there being only one external upstream port.  It assumes
  * all peripheral ports are external...
  */
-static struct musb *the_gadget;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 static void musb_gadget_release(struct device *dev)
 {
 	/* kref_put(WHAT) */
-	dev_dbg(dev, "%s\n", __func__);
 }
+#endif
 
-
-static void __init
+static void
 init_peripheral_ep(struct musb *musb, struct musb_ep *ep, u8 epnum, int is_in)
 {
 	struct musb_hw_ep	*hw_ep = musb->endpoints + epnum;
 
-//	memset(ep, 0, sizeof *ep);
+	//memset(ep, 0, sizeof *ep);
 
 	ep->current_epnum = epnum;
 	ep->musb = musb;
@@ -2408,7 +2359,7 @@ init_peripheral_ep(struct musb *musb, struct musb_ep *ep, u8 epnum, int is_in)
 
 	INIT_LIST_HEAD(&ep->req_list);
 
-	sprintf(ep->name, "ep%d%s-%s", epnum,
+	snprintf(ep->name, sizeof(ep->name), "ep%d%s-%s", epnum,
 			(!epnum || hw_ep->is_shared_fifo) ? "" : (
 				is_in ? "in" : "out"),({ char *mode;
 		switch (hw_ep->ep_mode) {
@@ -2439,13 +2390,13 @@ init_peripheral_ep(struct musb *musb, struct musb_ep *ep, u8 epnum, int is_in)
  * Initialize the endpoints exposed to peripheral drivers, with backlinks
  * to the rest of the driver state.
  */
-static inline void __init musb_g_init_endpoints(struct musb *musb)
+static inline void musb_g_init_endpoints(struct musb *musb)
 {
 	u8			epnum;
 	struct musb_hw_ep	*hw_ep;
 	unsigned		count = 0;
 
-	/* intialize endpoint list just once */
+	/* initialize endpoint list just once */
 	INIT_LIST_HEAD(&(musb->g.ep_list));
 
 	for (epnum = 0, hw_ep = musb->endpoints;
@@ -2472,146 +2423,125 @@ static inline void __init musb_g_init_endpoints(struct musb *musb)
 /* called once during driver setup to initialize and link into
  * the driver model; memory is zeroed.
  */
-int __init musb_gadget_setup(struct musb *musb)
+int musb_gadget_setup(struct musb *musb)
 {
 	int status;
+
 	/* REVISIT minor race:  if (erroneously) setting up two
 	 * musb peripherals at the same time, only the bus lock
 	 * is probably held.
 	 */
-	if (the_gadget)
-		return -EBUSY;
-	the_gadget = musb;
 
 	musb->g.ops = &musb_gadget_operations;
 	musb->g.max_speed = USB_SPEED_HIGH;
 	musb->g.speed = USB_SPEED_UNKNOWN;
 
 	/* this "gadget" abstracts/virtualizes the controller */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	dev_set_name(&musb->g.dev, "gadget");
 	musb->g.dev.parent = musb->controller;
 	musb->g.dev.dma_mask = musb->controller->dma_mask;
 	musb->g.dev.release = musb_gadget_release;
+#endif
 	musb->g.name = musb_driver_name;
 
-//	if (is_otg_enabled(musb))
-//		musb->g.is_otg = 1;
+	musb->g.is_otg = 1;
 
 	musb_g_init_endpoints(musb);
 
 	musb->is_active = 0;
-
+	musb_platform_try_idle(musb, 0);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	status = device_register(&musb->g.dev);
-	if (status != 0){
+	if (status != 0) {
 		put_device(&musb->g.dev);
-		the_gadget = NULL;
+		return status;
 	}
+#endif
+	status = usb_add_gadget_udc(musb->controller, &musb->g);
+	if (status)
+		goto err;
+
+	return 0;
+err:
+	musb->g.dev.parent = NULL;
+	device_unregister(&musb->g.dev);
 	return status;
 }
 
 void musb_gadget_cleanup(struct musb *musb)
 {
-	if (musb != the_gadget)
-		return;
-
-	device_unregister(&musb->g.dev);
-	the_gadget = NULL;
+	usb_del_gadget_udc(&musb->g);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
+	if (musb->g.dev.parent)
+		device_unregister(&musb->g.dev);
+#endif
 }
 
-
-int usb_gadget_probe_driver(struct usb_gadget_driver *driver,
-		int (*bind)(struct usb_gadget *))
+/*
+ * Register the gadget driver. Used by gadget drivers when
+ * registering themselves with the controller.
+ *
+ * -EINVAL something went wrong (not driver)
+ * -EBUSY another gadget is already using the controller
+ * -ENOMEM no memory to perform the operation
+ *
+ * @param driver the gadget driver
+ * @return <0 if error, 0 if everything is fine
+ */
+static int musb_gadget_start(struct usb_gadget *g,
+		struct usb_gadget_driver *driver)
 {
-	struct musb		*musb = the_gadget;
+	struct musb		*musb = gadget_to_musb(g);
+	struct usb_otg		*otg = musb->xceiv->otg;
+	struct usb_hcd		*hcd = musb_to_hcd(musb);
 	unsigned long		flags;
-	int			retval = -EINVAL;
+	int			retval = 0;
+	DBG(0, "musb_gadget_start\n");
 
-	if (!driver
-			|| !bind || !driver->setup)
-	{
-		goto err0;
+	if (driver->max_speed < USB_SPEED_HIGH) {
+		retval = -EINVAL;
+		goto err;
 	}
 
-	/* driver must be initialized to support peripheral mode */
-	if (!musb) {
-		DBG(0, "%s, no dev??\n", __func__);
-		retval = -ENODEV;
-		goto err0;
-	}
+	pm_runtime_get_sync(musb->controller);
 
-	//pm_runtime_get_sync(musb->controller);
 	DBG(2, "registering driver %s\n", driver->function);
-	//spin_lock_irqsave(&musb->lock, flags);
 
-	if (musb->gadget_driver) {
-		dev_dbg(musb->controller, "%s is already bound to %s\n",
-				musb_driver_name,
-				musb->gadget_driver->driver.name);
-		retval = -EBUSY;
-		goto err0;
-	}
-
-	spin_lock_irqsave(&musb->lock, flags);
+	musb->softconnect = 0;
 	musb->gadget_driver = driver;
-	musb->g.dev.driver = &driver->driver;
-	driver->driver.bus = NULL;
-	musb->softconnect = 1;
-	spin_unlock_irqrestore(&musb->lock, flags);
-
-	retval = bind(&musb->g);
-	if (retval) {
-		DBG(0, "bind to driver %s failed --> %d\n",
-					driver->driver.name, retval);
-		goto err1;
-	}
 
 	spin_lock_irqsave(&musb->lock, flags);
+	musb->is_active = 1;
 
-	//musb->is_active = 1;
-	//musb->is_ready = TRUE;
-
+	otg_set_peripheral(otg, &musb->g);
+	musb->xceiv->state = OTG_STATE_B_IDLE;
 	spin_unlock_irqrestore(&musb->lock, flags);
 
-	/*
-	 * FIXME this ignores the softconnect flag.  Drivers are
-	 * allowed hold the peripheral inactive until for example
-	 * userspace hooks up printer hardware or DSP codecs, so
-	 * hosts only see fully functional devices.
-	 */
+	/* REVISIT:  funcall to other code, which also
+	* handles power budgeting ... this way also
+	* ensures HdrcStart is indirectly called.
+	*/
+	retval = usb_add_hcd(hcd, 0, 0);
+	if (retval < 0) {
+		DBG(2, "add_hcd failed, %d\n", retval);
+		goto err;
+	}
 
-	if (is_otg_enabled(musb)) {
-		struct usb_hcd	*hcd = musb_to_hcd(musb);
-
-		DBG(3, "OTG startup...\n");
-
-		/* REVISIT:  funcall to other code, which also
-		 * handles power budgeting ... this way also
-		 * ensures HdrcStart is indirectly called.
-		 */
-		retval = usb_add_hcd(musb_to_hcd(musb), -1, 0);
-		if (retval < 0) {
-			DBG(0, "add_hcd failed, %d\n", retval);
-			goto err2;
-		}
+	if ((musb->xceiv->last_event == USB_EVENT_ID)
+					&& otg->set_vbus)
+			otg_set_vbus(otg, 1);
 
 		hcd->self.uses_pio_for_control = 1;
-	}
+
+	if (musb->xceiv->last_event == USB_EVENT_NONE)
+		pm_runtime_put(musb->controller);
 
 	return 0;
 
-err2:
-	if (!is_otg_enabled(musb))
-		musb_stop(musb);
-
-err1:
-	musb->gadget_driver = NULL;
-	musb->g.dev.driver = NULL;
-
-err0:
+err:
 	return retval;
 }
-EXPORT_SYMBOL(usb_gadget_probe_driver);
-
 
 static void stop_activity(struct musb *musb, struct usb_gadget_driver *driver)
 {
@@ -2627,7 +2557,7 @@ static void stop_activity(struct musb *musb, struct usb_gadget_driver *driver)
 	/* deactivate the hardware */
 	if (musb->softconnect) {
 		musb->softconnect = 0;
-		musb_pullup(musb, 0);
+        musb_pullup(musb, 0, false);
 	}
 	musb_stop(musb);
 
@@ -2648,10 +2578,6 @@ static void stop_activity(struct musb *musb, struct usb_gadget_driver *driver)
 					nuke(&hw_ep->ep_out, -ESHUTDOWN);
 			}
 		}
-
-		spin_unlock(&musb->lock);
-		driver->disconnect(&musb->g);
-		spin_lock(&musb->lock);
 	}
 }
 
@@ -2661,58 +2587,47 @@ static void stop_activity(struct musb *musb, struct usb_gadget_driver *driver)
  *
  * @param driver the gadget driver to unregister
  */
-int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
+static int musb_gadget_stop(struct usb_gadget *g,
+		struct usb_gadget_driver *driver)
 {
+	struct musb	*musb = gadget_to_musb(g);
 	unsigned long	flags;
-	//int		retval = 0;
-	struct musb	*musb = the_gadget;
 
-	if (!driver || !driver->unbind || !musb)
-		return -EINVAL;
+	if (musb->xceiv->last_event == USB_EVENT_NONE)
+		pm_runtime_get_sync(musb->controller);
 
-	if (!musb->gadget_driver)
-		return -EINVAL;
-
-	/* REVISIT always use otg_set_peripheral() here too;
+	/*
+	 * REVISIT always use otg_set_peripheral() here too;
 	 * this needs to shut down the OTG engine.
 	 */
 
 	spin_lock_irqsave(&musb->lock, flags);
 
-//	if (musb->gadget_driver == driver) {
+	musb_hnp_stop(musb);
 
+	(void) musb_gadget_vbus_draw(&musb->g, 0);
 
-		stop_activity(musb, driver);
+	musb->xceiv->state = OTG_STATE_UNDEFINED;
+	stop_activity(musb, driver);
+	otg_set_peripheral(musb->xceiv->otg, NULL);
 
-		spin_unlock_irqrestore(&musb->lock, flags);
-		driver->unbind(&musb->g);
-		spin_lock_irqsave(&musb->lock, flags);
+	DBG(2, "unregistering driver %s\n", driver->function);
 
-		musb->gadget_driver = NULL;
-		musb->g.dev.driver = NULL;
-
-		musb->is_active = 0;
-//	} else
-//		retval = -EINVAL;
+	musb->is_active = 0;
+	musb_platform_try_idle(musb, 0);
 	spin_unlock_irqrestore(&musb->lock, flags);
 
-//	if (is_otg_enabled(musb) && retval == 0) {
-	if (is_otg_enabled(musb)) {
-		usb_remove_hcd(musb_to_hcd(musb));
-		/* FIXME we need to be able to register another
-		 * gadget driver here and have everything work;
-		 * that currently misbehaves.
-		 */
-	}
+	usb_remove_hcd(musb_to_hcd(musb));
+	/*
+	 * FIXME we need to be able to register another
+	 * gadget driver here and have everything work;
+	 * that currently misbehaves.
+	 */
 
-	if (!is_otg_enabled(musb))
-		musb_stop(musb);
+	pm_runtime_put(musb->controller);
 
-//	return retval;
 	return 0;
 }
-EXPORT_SYMBOL(usb_gadget_unregister_driver);
-
 
 /* ----------------------------------------------------------------------- */
 
@@ -2720,7 +2635,23 @@ EXPORT_SYMBOL(usb_gadget_unregister_driver);
 
 void musb_g_resume(struct musb *musb)
 {
-
+	musb->is_suspended = 0;
+	switch (musb->xceiv->state) {
+	case OTG_STATE_B_IDLE:
+		break;
+	case OTG_STATE_B_WAIT_ACON:
+	case OTG_STATE_B_PERIPHERAL:
+		musb->is_active = 1;
+		if (musb->gadget_driver && musb->gadget_driver->resume) {
+			spin_unlock(&musb->lock);
+			musb->gadget_driver->resume(&musb->g);
+			spin_lock(&musb->lock);
+		}
+		break;
+	default:
+		WARNING("unhandled RESUME transition (%s)\n",
+				otg_state_string(musb->xceiv->state));
+	}
 }
 
 /* called when SOF packets stop for 3+ msec */
@@ -2729,69 +2660,80 @@ void musb_g_suspend(struct musb *musb)
 	u8	devctl;
 
 	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
-	DBG(3, "devctl %02x\n", devctl);
+	DBG(0, "devctl %02x\n", devctl);
 
-
-	musb->is_suspended = 1;
-	if (musb->gadget_driver && musb->gadget_driver->suspend) {
-		spin_unlock(&musb->lock);
-		musb->gadget_driver->suspend(&musb->g);
-		spin_lock(&musb->lock);
+	switch (musb->xceiv->state) {
+	case OTG_STATE_B_IDLE:
+		if ((devctl & MUSB_DEVCTL_VBUS) == MUSB_DEVCTL_VBUS)
+			musb->xceiv->state = OTG_STATE_B_PERIPHERAL;
+		break;
+	case OTG_STATE_B_PERIPHERAL:
+		musb->is_suspended = 1;
+		if (musb->gadget_driver && musb->gadget_driver->suspend) {
+			spin_unlock(&musb->lock);
+			musb->gadget_driver->suspend(&musb->g);
+			spin_lock(&musb->lock);
+		}
+		musb_sync_with_bat(musb,USB_SUSPEND); // announce to the battery
+		break;
+	default:
+		/* REVISIT if B_HOST, clear DEVCTL.HOSTREQ;
+		 * A_PERIPHERAL may need care too
+		 */
+		WARNING("unhandled SUSPEND transition (%s)\n",
+				otg_state_string(musb->xceiv->state));
 	}
-
-	musb_sync_with_bat(musb,USB_SUSPEND); // announce to the battery
-	wake_unlock(&musb->usb_lock);
-	wake_lock_timeout(&musb->usb_lock, 5 * HZ);
 }
 
+/* Called during SRP */
+void musb_g_wakeup(struct musb *musb)
+{
+	musb_gadget_wakeup(&musb->g);
+}
 
 /* called when VBUS drops below session threshold, and in other cases */
 void musb_g_disconnect(struct musb *musb)
 {
+	void __iomem	*mregs = musb->mregs;
+	u8	devctl = musb_readb(mregs, MUSB_DEVCTL);
+
+	DBG(2, "devctl %02x\n", devctl);
+
+	/* clear HR */
+	musb_writeb(mregs, MUSB_DEVCTL, devctl & MUSB_DEVCTL_SESSION);
+
+	/* don't draw vbus until new b-default session */
+	(void) musb_gadget_vbus_draw(&musb->g, 0);
+
 	musb->g.speed = USB_SPEED_UNKNOWN;
 	if (musb->gadget_driver && musb->gadget_driver->disconnect) {
-		DBG(0,"MUSB: call gadget disconnect \n");
 		spin_unlock(&musb->lock);
 		musb->gadget_driver->disconnect(&musb->g);
 		spin_lock(&musb->lock);
 	}
 
-	musb->is_active = 0;
-	wake_unlock(&musb->usb_lock);
-}
-
-void musb_gadget_stop(struct musb *musb)
-{
-	int i = 0;
-	struct usb_ep* ep = NULL;
-
-	dumpTime(funcWriteb, 0);
-	musb_writeb(musb->mregs,MUSB_FADDR,0);
-
-	musb->next_ep_num_in = 1;
-	musb->next_ep_num_out = 1;
-	musb->get_desc_cmd = false;
-	musb->fifo_addr = FIFO_START_ADDR;
-	while(i<MUSB_C_NUM_EPS)
-	{
-		if(ep_in_list[i]!=NULL)
-		{
-			DBG(0,"ep in list %d\n",i);
-			ep = &ep_in_list[i]->ep_in.end_point;
-			ep->ops->fifo_flush(ep); // flush fifo fisrt
-			ep->ops->disable(ep); // then disable ep and will release dma
-		}
-		if(ep_out_list[i]!=NULL)
-		{
-			DBG(0,"ep out list %d\n",i);
-			ep = &ep_out_list[i]->ep_out.end_point;
-			ep->ops->fifo_flush(ep); // flush fifo fisrt
-			ep->ops->disable(ep); // then disable ep and will release dma
-		}
-	//	ep_in_list[i] = NULL;
-	//	ep_out_list[i] = NULL;
-		i++;
+	switch (musb->xceiv->state) {
+	default:
+		DBG(2, "Unhandled disconnect %s, setting a_idle\n",
+			otg_state_string(musb->xceiv->state));
+		musb->xceiv->state = OTG_STATE_A_IDLE;
+		MUSB_HST_MODE(musb);
+		break;
+	case OTG_STATE_A_PERIPHERAL:
+		musb->xceiv->state = OTG_STATE_A_WAIT_BCON;
+		MUSB_HST_MODE(musb);
+		break;
+	case OTG_STATE_B_WAIT_ACON:
+	case OTG_STATE_B_HOST:
+	case OTG_STATE_B_PERIPHERAL:
+	case OTG_STATE_B_IDLE:
+		musb->xceiv->state = OTG_STATE_B_IDLE;
+		break;
+	case OTG_STATE_B_SRP_INIT:
+		break;
 	}
+
+	musb->is_active = 0;
 }
 
 void musb_g_reset(struct musb *musb)
@@ -2799,13 +2741,12 @@ __releases(musb->lock)
 __acquires(musb->lock)
 {
 	void __iomem	*mbase = musb->mregs;
-//	u8		devctl = musb_readb(mbase, MUSB_DEVCTL);
+	u8		devctl = musb_readb(mbase, MUSB_DEVCTL);
 	u8		power;
 
-	DBG(2, "<== %s addr=%x driver '%s'\n",
-			(musb->is_host)
-				? "Host" : "Device",
-			musb_readb(mbase, MUSB_FADDR),
+	DBG(2, "<== %s driver '%s'\n",
+			(devctl & MUSB_DEVCTL_BDEVICE)
+				? "B-Device" : "A-Device",
 			musb->gadget_driver
 				? musb->gadget_driver->driver.name
 				: NULL
@@ -2813,10 +2754,39 @@ __acquires(musb->lock)
 
 	if(musb->test_mode == 0)
 		musb_sync_with_bat(musb,USB_UNCONFIGURED);
+
 	/* report disconnect, if we didn't already (flushing EP state) */
-	if (musb->g.speed != USB_SPEED_UNKNOWN){
+	if (musb->g.speed != USB_SPEED_UNKNOWN)
 		musb_g_disconnect(musb);
-	}
+
+	/* clear HR */
+	else if (devctl & MUSB_DEVCTL_HR)
+		musb_writeb(mbase, MUSB_DEVCTL, MUSB_DEVCTL_SESSION);
+
+	/* active wake lock */
+	if (!wake_lock_active(&musb->usb_lock))
+		wake_lock(&musb->usb_lock);
+
+	musb_platform_reset(musb);
+	musb_generic_disable(musb);
+
+	musb->intrtxe = 0x1;
+	musb_writew(mbase,MUSB_INTRTXE, musb->intrtxe); //enable ep0 interrupt
+	musb_writeb(mbase,MUSB_INTRUSBE,MUSB_INTR_SUSPEND
+					| MUSB_INTR_RESUME
+					| MUSB_INTR_RESET
+					| MUSB_INTR_DISCONNECT);
+
+	/* what speed did we negotiate? */
+	power = musb_readb(mbase, MUSB_POWER);
+	musb->g.speed = (power & MUSB_POWER_HSMODE)
+			? USB_SPEED_HIGH : USB_SPEED_FULL;
+
+	/* clear address */
+	musb_writeb(musb->mregs,MUSB_FADDR,0);
+
+	/* reset fifo size */
+	musb->fifo_addr = FIFO_START_ADDR;
 
 	/* start in USB_STATE_DEFAULT */
 	musb->is_active = 1;
@@ -2830,23 +2800,17 @@ __acquires(musb->lock)
 	musb->g.a_alt_hnp_support = 0;
 	musb->g.a_hnp_support = 0;
 
-	spin_unlock(&musb->lock);
-	musb_gadget_stop(musb);
+	/* Normal reset, as B-Device;
+	 * or else after HNP, as A-Device
+	 */
+	if (devctl & MUSB_DEVCTL_BDEVICE) {
+		musb->xceiv->state = OTG_STATE_B_PERIPHERAL;
+		musb->g.is_a_peripheral = 0;
+	} else {
+		musb->xceiv->state = OTG_STATE_A_PERIPHERAL;
+		musb->g.is_a_peripheral = 1;
+	}
 
-	musb->g.ep0->ops->fifo_flush(musb->g.ep0);
-	spin_lock(&musb->lock);
-
-	musb_platform_reset(musb);
-	wake_lock(&musb->usb_lock);
-	musb_generic_disable(musb);
-	dumpTime(funcWritew, 0);
-	musb_writew(mbase,MUSB_INTRTXE,0x1); //enable ep0 interrupt
-	dumpTime(funcWriteb, 0);
-	musb_writeb(mbase,MUSB_INTRUSBE,MUSB_INTR_SUSPEND | MUSB_INTR_RESUME | MUSB_INTR_RESET | MUSB_INTR_DISCONNECT);
-
-	/* what speed did we negotiate? */
-	power = musb_readb(mbase, MUSB_POWER);
-	musb->g.speed = (power & MUSB_POWER_HSMODE)
-			? USB_SPEED_HIGH : USB_SPEED_FULL;
-	DBG(2,"MUSB: gadget reset power reigister is %x\n",power);
+	/* start with default limits on VBUS power draw */
+	(void) musb_gadget_vbus_draw(&musb->g, 8);
 }

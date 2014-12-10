@@ -15,6 +15,13 @@
 static SECCFG_VER seccfg_ver       = SECCFG_V1;
 
 /******************************************************************************
+ *  EXTERNAL FUNCTION
+ ******************************************************************************/
+extern void sec_update_lks(unsigned char tr, unsigned char dn);
+
+void __attribute__((weak)) sec_update_lks(unsigned char tr, unsigned char dn){}
+
+/******************************************************************************
  *  SECCFG VERSION
  ******************************************************************************/
 SECCFG_VER get_seccfg_ver (void)
@@ -23,7 +30,10 @@ SECCFG_VER get_seccfg_ver (void)
     {
         case SECCFG_V1:
         case SECCFG_V1_2:
+            sec_update_lks(seccfg.v1.sw_sec_lock_try, seccfg.v1.sw_sec_lock_done);
+            return seccfg_ver;
         case SECCFG_V3:
+            sec_update_lks(seccfg.v3.sw_sec_lock_try, seccfg.v3.sw_sec_lock_done);
             return seccfg_ver;
         default:
             SEC_ASSERT(0);
@@ -38,8 +48,12 @@ void set_seccfg_ver (SECCFG_VER val)
     {
         case SECCFG_V1: 
         case SECCFG_V1_2:
+            sec_update_lks(seccfg.v1.sw_sec_lock_try, seccfg.v1.sw_sec_lock_done);
+            seccfg_ver = val; 
+            break;            
         case SECCFG_V3:
         case SECCFG_UNSET:
+            sec_update_lks(seccfg.v3.sw_sec_lock_try, seccfg.v3.sw_sec_lock_done);
             seccfg_ver = val; 
             break;            
         default:

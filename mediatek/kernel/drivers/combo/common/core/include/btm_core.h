@@ -93,8 +93,9 @@ INT32 stp_btm_notify_coredump_timeout_wq(MTKSTP_BTM_T *stp_btm);
 INT32 stp_btm_notify_wmt_dmp_wq(MTKSTP_BTM_T *stp_btm);
 INT32 stp_btm_deinit(MTKSTP_BTM_T *stp_btm);
 INT32 stp_btm_reset_btm_wq(MTKSTP_BTM_T *stp_btm);
+INT32 stp_btm_sort_btm_wq(MTKSTP_BTM_T *stp_btm);
 INT32 stp_notify_btm_dump(MTKSTP_BTM_T *stp_btm);
-
+INT32 stp_notify_btm_do_fw_assert(MTKSTP_BTM_T *stp_btm);
 
 
 MTKSTP_BTM_T *stp_btm_init(void);

@@ -247,7 +247,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	sk->sk_gso_type = SKB_GSO_TCPV4;
 	sk_setup_caps(sk, &rt->dst);
 
-  printk(KERN_INFO "net_sock IPV4 socket[%lu] sport:%lu \n", SOCK_INODE(sk->sk_socket)->i_ino, ntohs(inet->inet_sport));
+        printk(KERN_INFO "[socket_conn]IPV4 socket[%lu] sport:%u \n", SOCK_INODE(sk->sk_socket)->i_ino, ntohs(inet->inet_sport));
 	if (!tp->write_seq)
 		tp->write_seq = secure_tcp_sequence_number(inet->inet_saddr,
 							   inet->inet_daddr,
@@ -679,10 +679,11 @@ static void tcp_v4_send_reset(struct sock *sk, struct sk_buff *skb)
 	arg.csumoffset = offsetof(struct tcphdr, check) / 2;
 	arg.flags = (sk && inet_sk(sk)->transparent) ? IP_REPLY_ARG_NOSRCCHECK : 0;
 	/* When socket is gone, all binding information is lost.
-	 * routing might fail in this case. using iif for oif to
-	 * make sure we can deliver it
+	 * routing might fail in this case. No choice here, if we choose to force
+	 * input interface, we will misroute in case of asymmetric route.
 	 */
-	arg.bound_dev_if = sk ? sk->sk_bound_dev_if : inet_iif(skb);
+	if (sk)
+		arg.bound_dev_if = sk->sk_bound_dev_if;
 
 	net = dev_net(skb_dst(skb)->dev);
 	arg.tos = ip_hdr(skb)->tos;
@@ -974,7 +975,7 @@ int tcp_md5_do_add(struct sock *sk, const union tcp_md5_addr *addr,
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct tcp_md5sig_info *md5sig;
 
-	key = tcp_md5_do_lookup(sk, (union tcp_md5_addr *)&addr, AF_INET);
+	key = tcp_md5_do_lookup(sk, addr, family);
 	if (key) {
 		/* Pre-existing entry - just update that one. */
 		memcpy(key->key, newkey, newkeylen);
@@ -1019,7 +1020,7 @@ int tcp_md5_do_del(struct sock *sk, const union tcp_md5_addr *addr, int family)
 	struct tcp_md5sig_key *key;
 	struct tcp_md5sig_info *md5sig;
 
-	key = tcp_md5_do_lookup(sk, (union tcp_md5_addr *)&addr, AF_INET);
+	key = tcp_md5_do_lookup(sk, addr, family);
 	if (!key)
 		return -ENOENT;
 	hlist_del_rcu(&key->node);
@@ -1524,10 +1525,8 @@ exit:
 	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENDROPS);
 	return NULL;
 put_and_exit:
-	tcp_clear_xmit_timers(newsk);
-	tcp_cleanup_congestion_control(newsk);
-	bh_unlock_sock(newsk);
-	sock_put(newsk);
+	inet_csk_prepare_forced_close(newsk);
+	tcp_done(newsk);
 	goto exit;
 }
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
@@ -1884,6 +1883,7 @@ static int tcp_v4_init_sock(struct sock *sk)
 
 	icsk->icsk_rto = TCP_TIMEOUT_INIT;
 	icsk->icsk_MaxRto= 0;
+	icsk->icsk_MMSRB = 0;
 	tp->mdev = TCP_TIMEOUT_INIT;
 
 	/* So many TCP implementations out there (incorrectly) count the
@@ -1992,6 +1992,63 @@ void tcp_v4_destroy_sock(struct sock *sk)
 	sock_release_memcg(sk);
 }
 EXPORT_SYMBOL(tcp_v4_destroy_sock);
+
+void tcp_v4_handle_retrans_time_by_uid(struct uid_err uid_e)
+{
+    unsigned int bucket;
+    uid_t skuid = (uid_t)(uid_e.appuid);
+	struct inet_connection_sock *icsk = NULL;//inet_csk(sk);
+
+
+    for (bucket = 0; bucket < tcp_hashinfo.ehash_mask; bucket++) {
+        struct hlist_nulls_node *node;
+        struct sock *sk;
+        spinlock_t *lock = inet_ehash_lockp(&tcp_hashinfo, bucket);
+    
+        spin_lock_bh(lock);
+        sk_nulls_for_each(sk, node, &tcp_hashinfo.ehash[bucket].chain) {
+    
+            if (sysctl_ip_dynaddr && sk->sk_state == TCP_SYN_SENT)
+                continue;
+            if (sock_flag(sk, SOCK_DEAD))
+                continue;
+    
+            if(sk->sk_socket){
+                if(SOCK_INODE(sk->sk_socket)->i_uid != skuid)
+                    continue;
+                else
+                    printk("[mmspb] tcp_v4_handle_retrans_time_by_uid socket uid(%d) match!",
+                        SOCK_INODE(sk->sk_socket)->i_uid);
+            } else{
+                continue;
+	    }
+
+                sock_hold(sk);
+                spin_unlock_bh(lock);
+    
+                local_bh_disable();
+                bh_lock_sock(sk);
+
+                // update sk time out value
+		icsk = inet_csk(sk);
+		printk("[mmspb] tcp_v4_handle_retrans_time_by_uid update timer\n");
+					
+		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, jiffies + 2);
+		icsk->icsk_rto = TCP_RTO_MIN * 30;	
+		icsk->icsk_MMSRB = 1;
+				
+                bh_unlock_sock(sk);
+                local_bh_enable();
+		spin_lock_bh(lock);
+                sock_put(sk);
+
+            }
+            spin_unlock_bh(lock);
+        }
+
+}
+
+
 /*
  * tcp_v4_nuke_addr_by_uid - destroy all sockets of spcial uid
  */

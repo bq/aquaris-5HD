@@ -316,19 +316,19 @@ static struct thermal_zone_device_ops mtktspa_dev_ops = {
  * cooling device callback functions (mtktspa_cooling_sysrst_ops)
  * 1 : ON and 0 : OFF
  */
-static int sysrst_get_max_state(struct thermal_cooling_device *cdev,
+static int tspa_sysrst_get_max_state(struct thermal_cooling_device *cdev,
          unsigned long *state)
 {        
 	*state = 1;    
 	return 0;
 }
-static int sysrst_get_cur_state(struct thermal_cooling_device *cdev,
+static int tspa_sysrst_get_cur_state(struct thermal_cooling_device *cdev,
          unsigned long *state)
 {        
 	*state = cl_dev_sysrst_state;
 	return 0;
 }
-static int sysrst_set_cur_state(struct thermal_cooling_device *cdev,
+static int tspa_sysrst_set_cur_state(struct thermal_cooling_device *cdev,
          unsigned long state)
 {
 	cl_dev_sysrst_state = state;
@@ -347,9 +347,9 @@ static int sysrst_set_cur_state(struct thermal_cooling_device *cdev,
 
 /* bind fan callbacks to fan device */
 static struct thermal_cooling_device_ops mtktspa_cooling_sysrst_ops = {
-	.get_max_state = sysrst_get_max_state,
-	.get_cur_state = sysrst_get_cur_state,
-	.set_cur_state = sysrst_set_cur_state,
+	.get_max_state = tspa_sysrst_get_max_state,
+	.get_cur_state = tspa_sysrst_get_cur_state,
+	.set_cur_state = tspa_sysrst_set_cur_state,
 };
 
 int mtktspa_register_thermal(void);
@@ -481,6 +481,8 @@ int mtktspa_register_thermal(void)
     /* trips */
 	thz_dev = mtk_thermal_zone_device_register("mtktspa", num_trip, NULL,
 		&mtktspa_dev_ops, 0, 0, 0, interval*1000);
+
+    mtk_mdm_set_md1_signal_period(interval);
 
 	return 0;
 }

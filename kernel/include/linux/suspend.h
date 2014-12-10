@@ -318,6 +318,7 @@ extern int hibernate(void);
 #ifdef CONFIG_MTK_HIBERNATION
 extern int pre_hibernate(void);
 extern int mtk_hibernate(void);
+extern int mtk_hibernate_abort(void);
 #endif
 extern bool system_entering_hibernation(void);
 extern bool system_hibernating(void);
@@ -456,6 +457,9 @@ extern int toi_running;
 
 #define test_action_state(bit) (test_bit(bit, &toi_bkd.toi_action))
 extern int try_tuxonice_hibernate(void);
+#ifdef CONFIG_MTK_HIBERNATION
+extern int toi_abort_hibernate(void);
+#endif
 
 #else /* !CONFIG_TOI */
 
@@ -467,6 +471,9 @@ extern int try_tuxonice_hibernate(void);
 
 static inline int try_tuxonice_hibernate(void) { return 0; }
 #define test_action_state(bit) (0)
+#ifdef CONFIG_MTK_HIBERNATION
+static inline int toi_abort_hibernate(void) { return 0; }
+#endif
 
 #endif /* CONFIG_TOI */
 

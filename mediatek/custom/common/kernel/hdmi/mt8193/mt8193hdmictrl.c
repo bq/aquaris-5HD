@@ -1,4 +1,9 @@
 #ifdef MTK_MT8193_HDMI_SUPPORT
+#include <mach/devs.h>
+#include <mach/mt_typedefs.h>
+#include <mach/mt_gpio.h>
+#include <mach/mt_pm_ldo.h>
+#include "mach/mt_boot.h"
 
 #include "mt8193hdmictrl.h"
 #include "mt8193_iic.h"
@@ -14,6 +19,8 @@ static u8 _bAcpType = 0;
 static u8 _bAcpData[16]={0};
 static u8 _bIsrc1Data[16]={0};
 static u32 _u4NValue=0;
+extern u8 _bflagvideomute;
+extern u8 _bflagaudiomute;
 
  static const char* szHdmiResStr[HDMI_VIDEO_RESOLUTION_NUM] =
 {
@@ -413,7 +420,7 @@ void MuteHDMIAudio(void)
 void vBlackHDMIOnly(void)
 {
   MT8193_DRV_FUNC();
-  
+  if(get_boot_mode() != FACTORY_BOOT) 
   *(unsigned int*)(0xf400f0b4) = 0x51;
 }
 
@@ -435,12 +442,19 @@ void vTxSignalOnOff(u8 bOn)
  
   if(bOn)
   {
-	vWriteHdmiSYSMsk(HDMI_SYS_AMPCTRL,RG_SET_DTXST,RG_SET_DTXST);
+	vWriteHdmiSYSMsk(HDMI_SYS_AMPCTRL,0,RG_SET_DTXST);
 	//the 5ms delay time after pll setting , resolve CTS 7-6 can't find trigger and result fail
 	mdelay(5);
-	vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL7,TX_DRV_ENABLE,TX_DRV_ENABLE_MSK);
+	
 	vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL6,0,ABIST_MODE_SET_MSK);
 	vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL6,0,ABIST_MODE_EN|ABIST_LV_EN);
+
+	udelay(20);
+	vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL2,0, POW_HDMITX|POW_PLL_L);
+	udelay(20);
+    vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL2,POW_HDMITX, POW_HDMITX|POW_PLL_L);	
+    udelay(20);
+    vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL2,POW_HDMITX|POW_PLL_L, POW_HDMITX|POW_PLL_L);
   }
   else
   {
@@ -486,7 +500,7 @@ void vWriteHdmiIntMask(u8 bMask)
 void vUnBlackHDMIOnly(void)
 {
   MT8193_DRV_FUNC();
-  vWriteHdmiDGIMsk(fifo_ctrl, 0, fifo_reset_sel|fifo_reset_on|sw_rst);
+  if(get_boot_mode() != FACTORY_BOOT) 
   *(unsigned int*)(0xf400f0b4) = 0x0;
 }
 void UnMuteHDMIAudio(void)
@@ -511,10 +525,10 @@ void vTmdsOnOffAndResetHdcp(u8 fgHdmiTmdsEnable)
   else
   {
     vHDMIAVMute();
-    mdelay(1);
-    vHDCPReset();
+    mdelay(2);
     vTxSignalOnOff(SV_OFF);
-	mdelay(100);
+    vHDCPReset();
+	mdelay(10);
   }
 }
 
@@ -551,6 +565,8 @@ void vSetHDMITxPLL(u8 bResIndex, u8 bdeepmode)
   u8 u4Feq=0;
   MT8193_PLL_FUNC();
   
+  vWriteHdmiDGIMsk(dgi0_anaif_ctrl1, dgi1_pad_clk_en, anaif_dig1_clk_sel|dgi1_pad_clk_en|clk_sel_tv_mode|data_in_tv_mode|dgi1_clk_pad_sel_tv_mode|tv_mode_clk_en);
+  
   if((bResIndex==HDMI_VIDEO_720x480p_60Hz)||(bResIndex==HDMI_VIDEO_720x576p_50Hz))
    u4Feq = 0; //27M
   else if((bResIndex==HDMI_VIDEO_1920x1080p_60Hz)||(bResIndex==HDMI_VIDEO_1920x1080p_50Hz))
@@ -580,10 +596,7 @@ void vSetHDMITxPLL(u8 bResIndex, u8 bdeepmode)
    vWriteHdmiSYS(HDMI_SYS_PLLCTRL3,(HDMI_PLL_SETTING_X_1_5[u4Feq][1])|(HDMI_PLL_SETTING_X_1_5[u4Feq][2]<<8)|(HDMI_PLL_SETTING_X_1_5[u4Feq][3]<<16)|(HDMI_PLL_SETTING_X_1_5[u4Feq][4]<<24));      
   }
   vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL6, RG_CK148M_EN, RG_CK148M_EN);
-  
-  vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL2,POW_HDMITX, POW_HDMITX|POW_PLL_L);	
-  udelay(20);
-  vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL2,POW_HDMITX|POW_PLL_L, POW_HDMITX|POW_PLL_L);	
+  	
 
 }
 
@@ -652,7 +665,7 @@ void vSetHDMITxPLLTrigger(void)
   udelay(20);
   
   vWriteHdmiSYS(HDMI_SYS_PLLCTRL2, 0x00300094);	//later, toggle 0x0f20[12] =1
-  vWriteHdmiSYS(HDMI_SYS_PLLCTRL7, 0x11ff0000); 
+  vWriteHdmiSYS(HDMI_SYS_PLLCTRL7, 0x31ff0000); 
 }
 
 void vChangeVpll(u8 bRes, u8 bdeepmode)
@@ -680,7 +693,9 @@ void vResetHDMI(BYTE bRst)
 void vHDMIAVUnMute(void)
 {
   MT8193_AUDIO_FUNC();
+  if(_bflagvideomute==FALSE) 
   vUnBlackHDMIOnly();
+  if(_bflagaudiomute==FALSE) 
   UnMuteHDMIAudio();
 }
 
@@ -689,14 +704,13 @@ void vHDMIVideoOutput(u8 ui1Res, u8 ui1ColorSpace)
    MT8193_VIDEO_FUNC();
 
    vWriteHdmiDGIMsk(fifo_ctrl, sw_rst, sw_rst);
-   vWriteHdmiDGIMsk(dgi0_anaif_ctrl1, dgi1_pad_clk_en, anaif_dig1_clk_sel|dgi1_pad_clk_en|clk_sel_tv_mode|data_in_tv_mode|dgi1_clk_pad_sel_tv_mode|tv_mode_clk_en);
    vWriteHdmiDGIMsk(dgi1_clk_rst_ctrl, dgi1_clk_out_enable|dgi1_clk_in_inv_enable|dgi1_clk_in_enable, dgi1_clk_out_enable|dgi1_clk_in_inv_enable|dgi1_clk_in_enable);
    vWriteHdmiDGIMsk(data_out_ctrl, fall_use_fall, fall_use_fall|rise_use_fall);
    vWriteHdmiDGIMsk(fifo_ctrl, (0x40<<0), rd_start);
    vWriteHdmiDGIMsk(fifo_ctrl, fifo_reset_on, fifo_reset_sel|fifo_reset_on);
    vWriteHdmiDGIMsk(dec_ctl, dgi1_on, dgi1_on);
    vWriteHdmiDGIMsk(ctrl_422_444, (CBCR_PRELOAD[ui1Res]<<8), rg_cbcr_preload);
-   
+
    if(ui1ColorSpace==HDMI_YCBCR_444)
    {
      vWriteHdmiDGIMsk(ctrl_422_444, rpt_422_444, rpt_422_444|bypass_422_444);
@@ -711,8 +725,8 @@ void vHDMIVideoOutput(u8 ui1Res, u8 ui1ColorSpace)
    }
    else if(ui1ColorSpace==HDMI_RGB)
    {
-     vWriteHdmiDGIMsk(ctrl_422_444, 0, rpt_422_444|bypass_422_444);
-     vWriteHdmiDGIMsk(data_out_ctrl, (0x2<<0)|(0x0<<2)|(0x0<<4), y_out_delay|c1_out_delay|c2_out_delay);
+     vWriteHdmiDGIMsk(ctrl_422_444, rpt_422_444, rpt_422_444|bypass_422_444);
+     vWriteHdmiDGIMsk(data_out_ctrl, (0x1<<0)|(0x1<<2)|(0x0<<4), y_out_delay|c1_out_delay|c2_out_delay);
 	 vWriteHdmiDGIMsk(dgi1_yuv2rgb_ctr, rg_yuv709_rgb|rg_yuv2rgb_en, rg_yuv709_rgb|rg_yuv2rgb_en);
    }
    else
@@ -812,10 +826,15 @@ void vHDMIResetGenReg(u8 ui1resindex, u8 ui1colorspace)
   vHDMIVideoOutput(ui1resindex, ui1colorspace);
   vResetHDMI(0);
   vEnableNotice(TRUE);
-  vWriteHdmiIntMask(0xfe);
+  vWriteHdmiIntMask(0xff);
   vSetHDMIDataEnable(ui1resindex);
   vSetHDMISyncDelay(ui1resindex);
+  
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == TRUE)
   vEnableHdmiMode(TRUE);
+  else
+  vEnableHdmiMode(FALSE);
+  
   vEnableNCTSAutoWrite();
   vHDMISettingColorSpace(ui1colorspace);
 }
@@ -1097,6 +1116,7 @@ void vHwNCTSOnOff(u8 bHwNctsOn)
 {
   u8 bData;	
   MT8193_AUDIO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   bData=bReadByteHdmiGRL(GRL_CTS_CTRL);
   
   if(bHwNctsOn == TRUE)
@@ -1325,6 +1345,7 @@ void vHwSet_Hdmi_I2S_C_Status (u8 *prLChData, u8 *prRChData)
 {
   u8 bData;
   MT8193_AUDIO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   bData = prLChData[0];
 
   vWriteByteHdmiGRL(GRL_I2S_C_STA0, bData);   
@@ -1421,6 +1442,7 @@ void vHalSendAudioInfoFrame(u8 bData1,u8 bData2,u8 bData4,u8 bData5)
   u8 bAUDIO_CHSUM;
   u8 bData=0;
   MT8193_AUDIO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   vWriteHdmiGRLMsk(GRL_CTRL, 0, CTRL_AUDIO_EN);
   vWriteByteHdmiGRL(GRL_INFOFRM_VER, AUDIO_VERS);
   vWriteByteHdmiGRL(GRL_INFOFRM_TYPE, AUDIO_TYPE);
@@ -1454,6 +1476,7 @@ void vHalSendAudioInfoFrame(u8 bData1,u8 bData2,u8 bData4,u8 bData5)
 void vSendAudioInfoFrame(void)
 {
   MT8193_AUDIO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   _bAudInfoFm[0] = 0x01;
   _bAudInfoFm[2] = 0x00;
   _bAudInfoFm[1]=0;
@@ -1467,7 +1490,7 @@ void vChgHDMIAudioOutput(u8 ui1hdmifs, u8 ui1resindex, u8 bdeepmode)
   u32 ui4Index;
   
   MT8193_AUDIO_FUNC();
-  
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   MuteHDMIAudio(); 
   vAudioPacketOff(TRUE);
   vSetHDMIAudioIn();
@@ -1488,6 +1511,7 @@ void vChgHDMIAudioOutput(u8 ui1hdmifs, u8 ui1resindex, u8 bdeepmode)
 void vDisableGamut(void)
 {
   MT8193_AUDIO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   vWriteHdmiGRLMsk(GRL_ACP_ISRC_CTRL, 0, GAMUT_EN);
 }  
 
@@ -1497,6 +1521,7 @@ void vHalSendAVIInfoFrame(u8 *pr_bData)
   u8 bData1=0, bData2=0, bData3=0, bData4=0, bData5=0;
   u8 bData;
   MT8193_VIDEO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   bData1= *pr_bData;
   bData2= *(pr_bData+1);
   bData3= *(pr_bData+2);
@@ -1535,7 +1560,7 @@ void vHalSendAVIInfoFrame(u8 *pr_bData)
 void vSendAVIInfoFrame(u8 ui1resindex, u8 ui1colorspace)
 {
   MT8193_VIDEO_FUNC();
-  
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   if(ui1colorspace == HDMI_YCBCR_444)
   {
     _bAviInfoFm[0]=0x40;
@@ -1586,6 +1611,8 @@ void vHalSendSPDInfoFrame(u8 *pr_bData)
   u8 i=0;
 
   MT8193_VIDEO_FUNC();
+  
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
   vWriteHdmiGRLMsk(GRL_CTRL, 0, CTRL_SPD_EN);
   vWriteByteHdmiGRL(GRL_INFOFRM_VER, SPD_VERS);
   vWriteByteHdmiGRL(GRL_INFOFRM_TYPE, SPD_TYPE);
@@ -1613,6 +1640,7 @@ void vSend_AVUNMUTE(void)
 {
   u8 bData;
   MT8193_VIDEO_FUNC();
+  if(i4SharedInfo(SI_EDID_VSDB_EXIST) == FALSE) return;
 
   bData=bReadByteHdmiGRL(GRL_CFG4);
   bData |= CFG4_AV_UNMUTE_EN;//disable original mute
@@ -1634,8 +1662,12 @@ void vChgHDMIVideoResolution(u8 ui1resindex, u8 ui1colorspace, u8 ui1hdmifs, u8 
   MT8193_VIDEO_FUNC();
 
   vHDMIAVMute();
+  vTxSignalOnOff(SV_ON);
   vHDMIResetGenReg(ui1resindex, ui1colorspace);
 
+  vWriteHdmiDGIMsk(dgi1_yuv2rgb_ctr, 0, fifo_write_en);
+  mdelay(20);
+  
   vChgHDMIAudioOutput(ui1hdmifs,  ui1resindex, bdeepmode);
   for(u4Index=0;u4Index<5;u4Index++)
   {
@@ -1646,6 +1678,11 @@ void vChgHDMIVideoResolution(u8 ui1resindex, u8 ui1colorspace, u8 ui1hdmifs, u8 
    vSendAVIInfoFrame(ui1resindex,  ui1colorspace);
    vHalSendSPDInfoFrame(&_bSpdInf[0]);
    vSend_AVUNMUTE();
+
+   vWriteHdmiDGIMsk(fifo_ctrl, 0, fifo_reset_sel|fifo_reset_on|sw_rst);
+   vWriteHdmiDGIMsk(dgi1_yuv2rgb_ctr, fifo_write_en, fifo_write_en);
+
+   vWriteHdmiSYSMsk(HDMI_SYS_PLLCTRL7,TX_DRV_ENABLE,TX_DRV_ENABLE_MSK);
 }
 
 void vChgtoSoftNCTS(u8 ui1resindex, u8 ui1audiosoft, u8 ui1hdmifs, u8 bdeepmode)

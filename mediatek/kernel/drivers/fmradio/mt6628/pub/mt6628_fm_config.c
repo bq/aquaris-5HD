@@ -48,6 +48,7 @@ static fm_s32 MT6628fm_cust_config_print(fm_cust_cfg *cfg)
     WCN_DBG(FM_NTC | MAIN, "de_emphasis:\t%d\n", cfg->rx_cfg.deemphasis);
     WCN_DBG(FM_NTC | MAIN, "osc_freq:\t%d\n", cfg->rx_cfg.osc_freq);
 
+    WCN_DBG(FM_NTC | MAIN, "aud path[%d]I2S state[%d]mode[%d]rate[%d]\n", cfg->aud_cfg.aud_path,cfg->aud_cfg.i2s_info.status,cfg->aud_cfg.i2s_info.mode,cfg->aud_cfg.i2s_info.rate);
     return 0;
 }
 
@@ -122,6 +123,31 @@ static fm_s32 MT6628fm_cust_config_default(fm_cust_cfg *cfg)
     cfg->rx_cfg.deemphasis = FM_RX_DEEMPHASIS_MT6628;
 	cfg->rx_cfg.osc_freq = FM_RX_OSC_FREQ_MT6628;
 
+#ifdef MTK_MERGE_INTERFACE_SUPPORT
+    cfg->aud_cfg.aud_path = FM_AUD_MRGIF;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_OFF;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_SLAVE;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_44K;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_IO;
+#elif defined FM_DIGITAL_INPUT
+    cfg->aud_cfg.aud_path = FM_AUD_I2S;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_OFF;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_SLAVE;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_44K;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_IO;
+#elif defined FM_ANALOG_INPUT
+    cfg->aud_cfg.aud_path = FM_AUD_ANALOG;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_STATE_ERR;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_MODE_ERR;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_SR_ERR;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_ERR;
+#else
+    cfg->aud_cfg.aud_path = FM_AUD_ERR;
+    cfg->aud_cfg.i2s_info.status = FM_I2S_STATE_ERR;
+    cfg->aud_cfg.i2s_info.mode = FM_I2S_MODE_ERR;
+    cfg->aud_cfg.i2s_info.rate = FM_I2S_SR_ERR;
+    cfg->aud_cfg.i2s_pad = FM_I2S_PAD_ERR;
+#endif
     return 0;
 }
 

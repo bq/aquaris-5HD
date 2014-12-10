@@ -1756,7 +1756,16 @@ wlanAdapterStart (
 #else
         prAdapter->u4PowerMode = ENUM_PSP_CONTINUOUS_ACTIVE;
 #endif
+        {/*CR:WCNAE00007101*/
+            struct net_device *prDev = prAdapter->prGlueInfo->prDevHandler;
 
+            if (prDev != NULL) {
+                glBusSetIrq(prDev, NULL, prAdapter->prGlueInfo );
+            }
+            else {
+                printk(KERN_INFO "Skip glBusSetIrq because of the prDev\n");
+            }
+        }        
         nicConfigPowerSaveProfile(
             prAdapter,
             NETWORK_TYPE_AIS_INDEX, //FIXIT
@@ -1771,6 +1780,25 @@ wlanAdapterStart (
         wlanLoadManufactureData(prAdapter, prRegInfo);
 #endif
 
+#ifdef MTK_TC1_FEATURE// 1 //keep alive packet time change from default 30secs to 20secs. //TC01//
+{
+	CMD_SW_DBG_CTRL_T rCmdSwCtrl;
+	rCmdSwCtrl.u4Id = 0x90100000;
+	rCmdSwCtrl.u4Data = 20;
+	//printk( "wlanAdapterStart Keepaliveapcket 0x%x, %d\n", rCmdSwCtrl.u4Id, rCmdSwCtrl.u4Data);
+	wlanSendSetQueryCmd(prAdapter,
+		CMD_ID_SW_DBG_CTRL,
+		TRUE,
+		FALSE,
+		FALSE,
+		NULL,
+		NULL,
+		sizeof(CMD_SW_DBG_CTRL_T),
+		(PUINT_8)(&rCmdSwCtrl),
+		NULL,
+		0);
+}
+#endif
 #if (defined(MT5931) && (!CFG_SUPPORT_BCM_BWCS))
         //Enable DPD calibration.
         rBwcsPta.u.aucBTPParams[0] = 0x00;

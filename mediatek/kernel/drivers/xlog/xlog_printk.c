@@ -1,4 +1,4 @@
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/bug.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -11,13 +11,16 @@ int __xlog_output(int level, const char *tag, const char *fmt, va_list args)
 {
 	int r;
 	const char *level_str;
+    char printk_string[1024];
+    int plen;
 
 	if (!tag) 
 		return -1;
 
+#ifdef HAVE_XLOG_FEATURE
 	if (!xLog_isOn(tag, level)) 
 		return -1;
-
+#endif
 	switch (level) {
 	case ANDROID_LOG_VERBOSE:
 		level_str = KERN_DEBUG;
@@ -48,10 +51,14 @@ int __xlog_output(int level, const char *tag, const char *fmt, va_list args)
 		break;
 	}
 
-	printk("%s[%s] ", level_str, tag);
+	//printk("%s[%s] ", level_str, tag);
 
-	r = vprintk(fmt, args);
+	//r = vprintk(fmt, args);
+    plen = snprintf(printk_string, sizeof(printk_string) - 1, "%s[%s] ", level_str, tag);
+    vsnprintf(printk_string + plen, sizeof(printk_string) - plen - 1, fmt, args);
 
+    r = printk("%s", printk_string);
+    
 	if (level == ANDROID_LOG_FATAL) {
 		BUG();
 	}

@@ -411,11 +411,11 @@ static int EEPROM_Open(struct inode * a_pstInode, struct file * a_pstFile)
     }
     spin_unlock(&g_EEPROMLock);
 
-    if(TRUE != hwPowerOn(MT65XX_POWER_LDO_VCAMA, VOL_2800, "S24CS64A"))
-    {
-        EEPROMDB("[EEPROM] Fail to enable analog gain\n");
-        return -EIO;
-    }
+    //if(TRUE != hwPowerOn(MT65XX_POWER_LDO_VCAMA, VOL_2800, "S24CS64A"))
+    //{
+    //    EEPROMDB("[EEPROM] Fail to enable analog gain\n");
+    //    return -EIO;
+    //}
 
     return 0;
 }

@@ -9,13 +9,11 @@
  * -------
  *
  ****************************************************************************/
-
 #include <linux/module.h>
 #include <linux/poll.h>
-#include <ccci.h>
 #include <linux/uaccess.h>
 #include <asm/io.h>
-#include <ccci_common.h>
+#include <ccci.h>
 
 #define local_AP_id_2_unify_id(id) local_xx_id_2_unify_id(id,1)
 #define local_MD_id_2_unify_id(id) local_xx_id_2_unify_id(id,0)
@@ -89,42 +87,46 @@ static void ipc_call_back_func(MD_CALL_BACK_QUEUE *queue,unsigned long data)
 
 	switch (data)
 	{
-	case CCCI_MD_EXCEPTION:
-	case CCCI_MD_RESET :
-		if (ctl_b->md_is_ready)
-		{
+		case CCCI_MD_EXCEPTION:
 			ctl_b->md_is_ready=0;
-			CCCI_IPC_MSG(ctl_b->m_md_id, "MD exception call chain !\n");
-			for (i=0;i<MAX_NUM_IPC_TASKS; i++)
+			CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "MD exception call chain !\n");
+			break;
+			
+		case CCCI_MD_RESET:
+			//if (ctl_b->md_is_ready)
 			{
-				tsk=ctl_b->ipc_task+i;
-				spin_lock_irqsave(&tsk->lock, flags);
-				list_for_each_entry_safe(item,n,&tsk->recv_list,list)
+				ctl_b->md_is_ready=0;
+				CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "MD reset call chain !\n");
+				for (i=0;i<MAX_NUM_IPC_TASKS; i++)
 				{
-					release_recv_item(item);
+					tsk=ctl_b->ipc_task+i;
+					spin_lock_irqsave(&tsk->lock, flags);
+					list_for_each_entry_safe(item,n,&tsk->recv_list,list)
+					{
+						release_recv_item(item);
+					}
+					spin_unlock_irqrestore(&tsk->lock, flags);
+					//__wake_up(&tsk->write_wait_queue, TASK_NORMAL, 0, (void*)POLLERR);
+					//__wake_up(&tsk->read_wait_queue, TASK_NORMAL, 0, (void*)POLLERR);
 				}
-				spin_unlock_irqrestore(&tsk->lock, flags);
-				//__wake_up(&tsk->write_wait_queue, TASK_NORMAL, 0, (void*)POLLERR);
-				//__wake_up(&tsk->read_wait_queue, TASK_NORMAL, 0, (void*)POLLERR);
+				spin_lock_irqsave(&ctl_b->ccci_ipc_wr_lock, flags);
+				ctl_b->ipc_mem->buffer.buff_wr.tx_offset=0;
+				ctl_b->ipc_mem->buffer.buff_wr.rx_offset=0;
+				spin_unlock_irqrestore(&ctl_b->ccci_ipc_wr_lock, flags);
+
+				spin_lock_irqsave(&ctl_b->ccci_ipc_rd_lock, flags);
+				ctl_b->ipc_mem->buffer.buff_rd.tx_offset=0;
+				ctl_b->ipc_mem->buffer.buff_rd.rx_offset=0;
+				spin_unlock_irqrestore(&ctl_b->ccci_ipc_rd_lock, flags);
+
 			}
-			spin_lock_irqsave(&ctl_b->ccci_ipc_wr_lock, flags);
-			ctl_b->ipc_mem->buffer.buff_wr.tx_offset=0;
-			ctl_b->ipc_mem->buffer.buff_wr.rx_offset=0;
-			spin_unlock_irqrestore(&ctl_b->ccci_ipc_wr_lock, flags);
+			break;
 
-			spin_lock_irqsave(&ctl_b->ccci_ipc_rd_lock, flags);
-			ctl_b->ipc_mem->buffer.buff_rd.tx_offset=0;
-			ctl_b->ipc_mem->buffer.buff_rd.rx_offset=0;
-			spin_unlock_irqrestore(&ctl_b->ccci_ipc_rd_lock, flags);
-
-		}
-		break;
-
-	case CCCI_MD_BOOTUP:
-		ctl_b->md_is_ready=1;
-		wake_up_all(&ctl_b->poll_md_queue_head);
-		CCCI_IPC_MSG(ctl_b->m_md_id, "MD boot up successfully.\n");
-		break;
+		case CCCI_MD_BOOTUP:
+			ctl_b->md_is_ready=1;
+			wake_up_all(&ctl_b->poll_md_queue_head);
+			CCCI_IPC_MSG(ctl_b->m_md_id, "MD boot up successfully.\n");
+			break;
 
 	}
 
@@ -144,39 +146,40 @@ static IPC_MSGSVC_TASKMAP_T ipc_msgsvc_maptbl[] =
 void find_task_to_clear(IPC_TASK task_table[], unsigned int to_id)
 {
 	IPC_TASK		*task=NULL;
-	int				i;
+	int				i, tmp;
 	ipc_ctl_block_t	*ctl_b = (ipc_ctl_block_t*)(container_of(task_table, ipc_ctl_block_t, ipc_task[0]));
 
 	for (i=0;i<MAX_NUM_IPC_TASKS;i++)
 	{
 		if (task_table[i].to_id==to_id)
 		{
-			CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "find_task_to_clear task->to_id(%d : %d)\n", task_table[i].to_id, i);
+			CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "%s: task->to_id(%d:%d)\n", __FUNCTION__, i, task_table[i].to_id);
 			
 			if (task==NULL)  
 			{	
 				task=ctl_b->ipc_task+i;
-				continue ;
+				tmp=i;
+				continue;
 			}
 			if (time_after(task->jiffies,task_table[i].jiffies))
 			{
-				task=task_table+i;
-			}
-			else if  (task->jiffies==task_table[i].jiffies)
-			{
-				CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "[Error]Wrong time stamp, it's a BUG ?? .\n");
-			}
+				task=task_table+i;				
+				CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "%s: select task->to_id(%d:%d)\n", __FUNCTION__, i, task_table[i].to_id);
+			} else if  (task->jiffies==task_table[i].jiffies) {
+				CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "[Error]Wrong time stamp(%ld, %ld), select task->to_id(%d:%d)\n", 
+					task->jiffies, task_table[i].jiffies, tmp, task->to_id);
+			}			
 		}
 	}
 
 	if (task==NULL)
 	{
-		CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "Wrong MD  ID(%d) to clear for next recv.\n",to_id);
-		return ;
+		CCCI_MSG_INF(ctl_b->m_md_id, "ipc", "Wrong MD ID(%d) to clear for next recv.\n",to_id);
+		return;
 	}
-	CCCI_IPC_MSG(ctl_b->m_md_id, "wake up task:%d \n",task-ctl_b->ipc_task);
+	CCCI_IPC_MSG(ctl_b->m_md_id, "wake up task:%d \n", task-ctl_b->ipc_task);
 	clear_bit(CCCI_TASK_PENDING,&task->flag);
-	wake_up_poll(&task->write_wait_queue,POLLOUT);
+	wake_up_poll(&task->write_wait_queue, POLLOUT);
 }
 
 static IPC_MSGSVC_TASKMAP_T *local_xx_id_2_unify_id(uint32 local_id,int AP)
@@ -197,6 +200,7 @@ static IPC_MSGSVC_TASKMAP_T *local_xx_id_2_unify_id(uint32 local_id,int AP)
 static IPC_MSGSVC_TASKMAP_T *unify_xx_id_2_local_id(uint32 unify_id,int AP)
 {
 	int i;
+	
 	if (!(AP?(unify_id&AP_UNIFY_ID_FLAG):!(unify_id&AP_UNIFY_ID_FLAG)))
 		return NULL;
 
@@ -268,16 +272,16 @@ void *read_from_ring_buffer(int md_id, ipc_ilm_t *ilm, BUFF *buff_rd, int *len)
 	if(data_size == 0)
 		CCCI_IPC_MSG(md_id, "data_size=0, read(%d)", read);
 	else if (data_size < 0) {
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]wrong data_size: %d", data_size);
+		CCCI_MSG_INF(md_id, "ipc", "[Error]wrong data_size: %d", data_size);
 		return NULL;
 	}
 	
 	CCCI_IPC_MSG(md_id, "tx_offset=%d, rx_offset=%d\n", write, read);
 	
-	data=(uint8 *)kmalloc(data_size+sizeof(ipc_ilm_t),GFP_ATOMIC);
+	data=(uint8 *)kmalloc(data_size+sizeof(ipc_ilm_t), GFP_ATOMIC);
 	if (data==NULL) 
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "kmalloc for read ilm fail!\n");
+		CCCI_MSG_INF(md_id, "ipc", "kmalloc for read ilm fail!\n");
 		ret=NULL;
 		goto out;
 	}
@@ -312,7 +316,7 @@ void *read_from_ring_buffer(int md_id, ipc_ilm_t *ilm, BUFF *buff_rd, int *len)
 	*len=real_size+sizeof(ipc_ilm_t);
 
 	if(real_size>data_size)
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]wrong real_size(%d)>data_size(%d)", real_size, data_size);		
+		CCCI_MSG_INF(md_id, "ipc", "[Error]wrong real_size(%d)>data_size(%d)", real_size, data_size);		
 
 out:
 	spin_unlock_irqrestore(&ctl_b->ccci_ipc_rd_lock, flag);
@@ -325,38 +329,38 @@ out:
 static void recv_item(int md_id, unsigned int addr, unsigned int len, IPC_TASK *task, BUFF *buff_rd)
 {
 	ipc_ctl_block_t	*ctl_b = ipc_ctl_block[md_id];
-	ipc_ilm_t		*ilm=(ipc_ilm_t *)((uint32)ctl_b->ipc_mem+(addr - ctl_b->ccci_ipc_smem_base_phy));
+	ipc_ilm_t		*ilm=(ipc_ilm_t *)((uint32)ctl_b->ipc_mem+(addr - ctl_b->ccci_ipc_smem_base_phy + get_md2_ap_phy_addr_fixed()));
 	CCCI_RECV_ITEM	*item ;
 	unsigned long flags;
 
 	if(len!=sizeof(ipc_ilm_t))
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]Wrong msg len: sizeof(ipc_ilm_t)=%d,len=%d\n", sizeof(ipc_ilm_t), len);
+		CCCI_MSG_INF(md_id, "ipc", "[Error]Wrong msg len: sizeof(ipc_ilm_t)=%d,len=%d\n", sizeof(ipc_ilm_t), len);
 
 	CCCI_IPC_MSG(md_id, "Recv item Physical_Addr:%x Virtual_Addr:%p Len:%d.\n", addr, ilm, len);
 
-	if (addr > ctl_b->ccci_ipc_smem_base_phy + offset_of(CCCI_IPC_MEM, ilm_md) + sizeof(ipc_ilm_t)*MAX_NUM_IPC_TASKS_MD)
+	if (addr > ctl_b->ccci_ipc_smem_base_phy - get_md2_ap_phy_addr_fixed() + offset_of(CCCI_IPC_MEM, ilm_md) + sizeof(ipc_ilm_t)*MAX_NUM_IPC_TASKS_MD)
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]Wrong physical address(%x)\n", addr);
+		CCCI_MSG_INF(md_id, "ipc", "[Error]Wrong physical address(%x)\n", addr);
 		return ;
 	}
 	
 	item=kmalloc(sizeof(CCCI_RECV_ITEM),GFP_ATOMIC);
 	if (item==NULL)
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "kmalloc for recv_item fail!\n");
+		CCCI_MSG_INF(md_id, "ipc", "kmalloc for recv_item fail!\n");
 		goto out;
 	}
 	
 	if (ilm->local_para_ptr){
 		if((uint32)ilm->local_para_ptr<(uint32)ctl_b->ccci_ipc_rd_buffer_phy ||
 			(uint32)ilm->local_para_ptr>=(uint32)ctl_b->ccci_ipc_rd_buffer_phy+CCCI_IPC_BUFFER_SIZE)
-			CCCI_DBG_MSG(md_id, "ipc", "[Error]wrong ilm->local_para_ptr address(%p)", ilm->local_para_ptr);
+			CCCI_MSG_INF(md_id, "ipc", "[Error]wrong ilm->local_para_ptr address(%p)", ilm->local_para_ptr);
 	}
 
 	if (ilm->peer_buff_ptr){
 		if((uint32)ilm->peer_buff_ptr<(uint32)ctl_b->ccci_ipc_rd_buffer_phy ||
 		   (uint32)ilm->peer_buff_ptr>=(uint32)ctl_b->ccci_ipc_rd_buffer_phy+CCCI_IPC_BUFFER_SIZE)
-			CCCI_DBG_MSG(md_id, "ipc", "[Error]wrong ilm->peer_buff_ptr address(%p)", ilm->peer_buff_ptr);
+			CCCI_MSG_INF(md_id, "ipc", "[Error]wrong ilm->peer_buff_ptr address(%p)", ilm->peer_buff_ptr);
 	}
 	CCCI_IPC_MSG(md_id, "recv ilm->local_para_ptr(%p), ilm->peer_buff_ptr(%p)\n", ilm->local_para_ptr, ilm->peer_buff_ptr);
 	
@@ -364,7 +368,7 @@ static void recv_item(int md_id, unsigned int addr, unsigned int len, IPC_TASK *
 	item->data=(uint8 *)read_from_ring_buffer(md_id, ilm, buff_rd, &item->len);
 	if (item->data==NULL)
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "read ipc rx data fail\n");
+		CCCI_MSG_INF(md_id, "ipc", "read ipc rx data fail\n");
 		goto out1;
 	}
 
@@ -397,17 +401,18 @@ static int write_to_ring_buffer(int md_id, uint8 *data, int count, IPC_TASK *tas
 								(peer_buff_struct*)((uint32)data+(local_para?local_para->msg_len:0)):NULL;
 	ipc_ctl_block_t		*ctl_b = ipc_ctl_block[md_id];
 
-	CCCI_IPC_MSG(md_id, "local_para_struct addr=%p peer_buff_struct addr=%p.\n",local_para,peer_buff);
+
+	CCCI_IPC_MSG(md_id, "local_para_struct addr=%p peer_buff_struct addr=%p\n",local_para,peer_buff);
 	if ((local_para?local_para->msg_len:0)+(peer_buff?peer_buff->pdu_len:0)!=count)
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]Count is not equal(%x != %x ) !\n",
+		CCCI_MSG_INF(md_id, "ipc", "[Error]Count is not equal(%x != %x ) !\n",
 			(local_para?local_para->msg_len:0)+(peer_buff?peer_buff->pdu_len:0),count);
 		return -EINVAL;
 	}
 
 	if ((local_para?local_para->ref_count!=1:0)||(peer_buff?peer_buff->ref_count!=1:0))
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]ref count !=1 .\n");
+		CCCI_MSG_INF(md_id, "ipc", "[Error]ref count !=1 .\n");
 		return -EINVAL;
 	}
 
@@ -417,7 +422,6 @@ static int write_to_ring_buffer(int md_id, uint8 *data, int count, IPC_TASK *tas
 	read=ipc_buffer->rx_offset;
 	size=ipc_buffer->size;
 	copy=0;
-	CCCI_IPC_MSG(md_id, "tx_offset=%d rx_offset=%d .\n",write,read);
 
 	if (read < write) {
 		free=size-(write-read);
@@ -431,7 +435,8 @@ static int write_to_ring_buffer(int md_id, uint8 *data, int count, IPC_TASK *tas
 	}
 
 	if (count>free)	{
-		CCCI_DBG_MSG(md_id, "ipc", "[Error]memory isn't enough, data_len(%x)>free_len(%x)\n", count, free);
+		CCCI_MSG_INF(md_id, "ipc", "[Error]memory isn't enough, data_len(%d)>free_len(%d, %d, %d)\n", 
+			count, free, write, read);
 		ret=-E2BIG;
 		goto out;
 	}
@@ -474,19 +479,19 @@ static void ccci_ipc_callback(void *private)
 
 	while(get_logic_ch_data(ch_info, &msg)) {
 		if (msg.channel==CCCI_IPC_RX_ACK||msg.channel==CCCI_IPC_TX) {
-			CCCI_DBG_MSG(md_id, "ipc", "[Error]invalid ipc rx channel(%d)!\n", msg.channel);
+			CCCI_MSG_INF(md_id, "ipc", "[Error]invalid ipc rx channel(%d)!\n", msg.channel);
 		}
 
 		if (msg.channel==CCCI_IPC_RX) {
-			CCCI_IPC_MSG(md_id, "CCCI_IPC_RX callback,Unify AP id(%x) \n", msg.reserved);
+			CCCI_IPC_MSG(md_id, "CCCI_IPC_RX:Unify AP id(%x) \n", msg.reserved);
 			if ((id_map=unify_AP_id_2_local_id(msg.reserved))==NULL)
 			{
-				CCCI_DBG_MSG(md_id, "ipc", "[Error]Wrong Unify AP id(%x)@RX\n", msg.reserved);
+				CCCI_MSG_INF(md_id, "ipc", "[Error]Wrong Unify AP id(%x)@RX\n", msg.reserved);
 				return;
 			}
 			
 			task=((ipc_ctl_block_t *)(ch_info->m_owner))->ipc_task+id_map->task_id;
-			recv_item(md_id, msg.addr,msg.len,task,&ctl_b->ipc_mem->buffer.buff_rd);
+			recv_item(md_id, msg.addr, msg.len, task, &ctl_b->ipc_mem->buffer.buff_rd);
 			ccci_ipc_ack(md_id, CCCI_IPC_RX_ACK, IPC_MSGSVC_RVC_DONE, msg.reserved);
 		}
 
@@ -494,14 +499,14 @@ static void ccci_ipc_callback(void *private)
 			CCCI_IPC_MSG(md_id, "CCCI_IPC_TX_ACK: Unify MD ID(%x)\n", msg.reserved);
 			if ((id_map=unify_MD_id_2_local_id(msg.reserved))==NULL)
 			{
-				CCCI_DBG_MSG(md_id, "ipc", "[Error]Wrong AP Unify id (%d)@Tx ack.\n",msg.reserved);
+				CCCI_MSG_INF(md_id, "ipc", "[Error]Wrong AP Unify id (%d)@Tx ack.\n",msg.reserved);
 				return;
 			}
 			
 			find_task_to_clear(ctl_b->ipc_task, id_map->task_id);
 
 			if(msg.id!=IPC_MSGSVC_RVC_DONE)
-				CCCI_DBG_MSG(md_id, "ipc", "[Error]Not write mailbox id: %d\n", msg.id);
+				CCCI_MSG_INF(md_id, "ipc", "[Error]Not write mailbox id: %d\n", msg.id);
 		}
 	}
 }
@@ -518,7 +523,7 @@ static void ipc_task_init(int md_id, IPC_TASK *task,ipc_ilm_t *ilm)
 	task->fasync = NULL;
 	task->ilm_p = ilm;
 	task->time_out = -1;
-	task->ilm_phy_addr = ctl_b->ccci_ipc_smem_base_phy 
+	task->ilm_phy_addr = ctl_b->ccci_ipc_smem_base_phy - get_md2_ap_phy_addr_fixed()
 						+ offset_of(CCCI_IPC_MEM, ilm) +(uint32)ilm-(uint32)(ctl_b->ipc_mem->ilm);
 	task->to_id = -1;
 
@@ -549,7 +554,7 @@ static int ccci_ipc_open(struct inode *inode, struct file *file)
 		CCCI_MSG_INF(md_id, "ipc", "[Error]Wrong minor num %d.\n",index);
 		return -EINVAL;
 	}
-	CCCI_IPC_MSG(md_id, "register task:%d.\n",index);
+	CCCI_DBG_MSG(md_id, "ipc", "%s: register task%d\n", __FUNCTION__, index);
 	nonseekable_open(inode,file);
 	file->private_data = ctl_b->ipc_task+index;
 	atomic_inc(&((ctl_b->ipc_task+index)->user));
@@ -566,6 +571,7 @@ static ssize_t ccci_ipc_read(struct file *file, char *buf, size_t count, loff_t 
 	unsigned long	flags;
 
 	ctl_b = (ipc_ctl_block_t *)task->owner;
+	
 retry:
 	spin_lock_irqsave(&task->lock, flags);
 	if (ctl_b->md_is_ready == 0)
@@ -597,7 +603,7 @@ retry:
 
 	if (recv_data->len > count)
 	{
-		CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "[Error]Recv buff is too small(count=%d data_len=%d)!\n", \
+		CCCI_MSG_INF(ctl_b->m_md_id, "ipc", "[Error]Recv buff is too small(count=%d data_len=%d)!\n", \
 								count,recv_data->len);
 		ret = -E2BIG;
 		goto out_unlock;	
@@ -636,27 +642,27 @@ static ssize_t ccci_ipc_write(struct file *file, const char __user *buf, size_t 
 
 	if (count < sizeof(ipc_ilm_t))
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "%s: [Error]Write len(%d) < ipc_ilm_t\n", __FUNCTION__, count);
+		CCCI_MSG_INF(md_id, "ipc", "%s: [Error]Write len(%d) < ipc_ilm_t\n", __FUNCTION__, count);
 		ret = -EINVAL;
 		goto out;
 	}
 
-	ilm = kmalloc(count,GFP_KERNEL);
+	ilm = kmalloc(count, GFP_KERNEL);
 	if (ilm == NULL)
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "%s: kmalloc fail!\n", __FUNCTION__);
+		CCCI_MSG_INF(md_id, "ipc", "%s: kmalloc fail!\n", __FUNCTION__);
 		ret = -ENOMEM;
 		goto out;
 	}
-	if (copy_from_user(ilm,buf,count))
+	if (copy_from_user(ilm, buf, count))
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "%s: copy_from_user fail!\n", __FUNCTION__);
+		CCCI_MSG_INF(md_id, "ipc", "%s: copy_from_user fail!\n", __FUNCTION__);
 		ret = -EFAULT;
 		goto out_free;
 	}
 	if ((id_map = local_MD_id_2_unify_id(ilm->dest_mod_id)) == NULL)
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "%s: [Error]Invalid Dest MD id (%d)\n", __FUNCTION__, ilm->dest_mod_id);
+		CCCI_MSG_INF(md_id, "ipc", "%s: [Error]Invalid Dest MD id (%d)\n", __FUNCTION__, ilm->dest_mod_id);
 		ret = -EINVAL;
 		goto out_free;
 	}
@@ -668,8 +674,7 @@ static ssize_t ccci_ipc_write(struct file *file, const char __user *buf, size_t 
 		{
 			ret = -EBUSY;
 			goto  out_free;
-		}
-		else if (wait_event_interruptible_exclusive(task->write_wait_queue,
+		} else if (wait_event_interruptible_exclusive(task->write_wait_queue,
 				!test_and_set_bit(CCCI_TASK_PENDING,&task->flag)||ctl_b->md_is_ready==0) == -ERESTARTSYS)
 		{
 			ret = -EINTR;
@@ -688,27 +693,27 @@ static ssize_t ccci_ipc_write(struct file *file, const char __user *buf, size_t 
 	task->jiffies = jiffies;
 	*task->ilm_p = *ilm;
 	task->to_id = ilm->dest_mod_id;
-
-	CCCI_DBG_MSG(md_id, "ipc", "%s: task->to_id(%d), data size(%d)\n", __FUNCTION__, task->to_id, count);
 	task->ilm_p->src_mod_id = task - ctl_b->ipc_task;
-	CCCI_IPC_MSG(md_id, "%s: msg_id=%x, len=%x .\n", __FUNCTION__, ilm->msg_id, count);
-	
+
+	CCCI_DBG_MSG(md_id, "ipc", "%s: src=%d, dst=%d, data_len=%d\n", __FUNCTION__, 
+		task->ilm_p->src_mod_id, task->to_id, count);
+
 	if (count > sizeof(ipc_ilm_t))
 	{
 		if (write_to_ring_buffer(md_id, (uint8*)(ilm+1), count-sizeof(ipc_ilm_t), 
-					task,&ctl_b->ipc_mem->buffer.buff_wr) != count-sizeof(ipc_ilm_t))
+					task, &ctl_b->ipc_mem->buffer.buff_wr) != count-sizeof(ipc_ilm_t))
 		{
-			CCCI_DBG_MSG(md_id, "ipc", "[Error]write_to_ring_buffer fail!\n");
+			CCCI_MSG_INF(md_id, "ipc", "[Error]write_to_ring_buffer fail!\n");
 			clear_bit(CCCI_TASK_PENDING, &task->flag);
 			ret = -EAGAIN;
 			goto out_free;
 		}
 	}
 
-	ret = ccci_ipc_write_stream(md_id, CCCI_IPC_TX,task->ilm_phy_addr,sizeof(ipc_ilm_t),id_map->extq_id);
+	ret = ccci_ipc_write_stream(md_id, CCCI_IPC_TX, task->ilm_phy_addr, sizeof(ipc_ilm_t), id_map->extq_id);
 	if (ret != sizeof(ccci_msg_t))
 	{
-		CCCI_DBG_MSG(md_id, "ipc", "%s: ccci_ipc_write_stream fail: %d\n", __FUNCTION__, ret);
+		CCCI_MSG_INF(md_id, "ipc", "%s: ccci_ipc_write_stream fail: %d\n", __FUNCTION__, ret);
 		clear_bit(CCCI_TASK_PENDING, &task->flag);
 		ret = -EAGAIN;
 		goto out_free;
@@ -753,7 +758,7 @@ static long ccci_ipc_ioctl( struct file *file, unsigned int cmd, unsigned long a
 			{
 				interruptible_sleep_on(&ctl_b->poll_md_queue_head);
 				if (signal_pending(current)) {
-					CCCI_DBG_MSG(ctl_b->m_md_id, "ipc", "Got signal @ WAIT_MD_READY\n");
+					CCCI_MSG_INF(ctl_b->m_md_id, "ipc", "Got signal @ WAIT_MD_READY\n");
 					ret = -EINTR;
 				}
 			}
@@ -783,7 +788,8 @@ static int ccci_ipc_release(struct inode *inode, struct file *file)
 		spin_unlock_irqrestore(&task->lock, flags);
 	}
 	clear_bit(CCCI_TASK_PENDING, &task->flag);
-
+	CCCI_DBG_MSG(0, "ipc", "%s\n", __FUNCTION__);
+	
 	return 0;
 }
 
@@ -862,9 +868,9 @@ int __init ccci_ipc_init(int md_id)
 	ctl_b->start_minor = minor;
 	ccci_ipc_base_req(md_id, (int*)(&ctl_b->ipc_mem),&ctl_b->ccci_ipc_smem_base_phy,&ctl_b->ccci_ipc_smem_size);
 
-	ctl_b->ccci_ipc_wr_buffer_phy = ctl_b->ccci_ipc_smem_base_phy \
+	ctl_b->ccci_ipc_wr_buffer_phy = ctl_b->ccci_ipc_smem_base_phy - get_md2_ap_phy_addr_fixed() \
 									+offset_of(CCCI_IPC_MEM,buffer.buff_wr.buffer);
-	ctl_b->ccci_ipc_rd_buffer_phy = ctl_b->ccci_ipc_smem_base_phy \
+	ctl_b->ccci_ipc_rd_buffer_phy = ctl_b->ccci_ipc_smem_base_phy - get_md2_ap_phy_addr_fixed() \
 									+offset_of(CCCI_IPC_MEM,buffer.buff_rd.buffer);
 	//CCCI_MSG_INF(md_id, "ipc", "ccci_ipc_wr_buffer_phy: %#x, ccci_ipc_buffer_phy_rd: %#x.\n",
 	//								ctl_b->ccci_ipc_wr_buffer_phy, ctl_b->ccci_ipc_rd_buffer_phy);

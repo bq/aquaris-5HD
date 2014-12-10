@@ -19,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/highmem.h>
 #include <linux/perf_event.h>
+#include <linux/aee.h>
 
 #include <asm/exception.h>
 #include <asm/pgtable.h>
@@ -27,8 +28,6 @@
 #include <asm/tlbflush.h>
 
 #include "fault.h"
-
-extern void aee_stop_nested_panic(struct pt_regs *regs);
 
 #ifdef CONFIG_MMU
 
@@ -278,10 +277,10 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		local_irq_enable();
 
 	/*
-	 * If we're in an interrupt or have no user
+	 * If we're in an interrupt, or have no irqs, or have no user
 	 * context, we must not take the fault..
 	 */
-	if (in_atomic() || !mm)
+	if (in_atomic() || irqs_disabled() || !mm)
 		goto no_context;
 
 	/*
@@ -554,6 +553,7 @@ do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		thread->cpu_excp++;
 		if (thread->cpu_excp == 1) {
 			thread->regs_on_excp = (void *)regs;
+			aee_excp_regs = (void*)regs;
 		}
 		/*
 		 * NoteXXX: The data abort exception may happen twice

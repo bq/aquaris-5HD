@@ -7,7 +7,8 @@
 typedef enum{
     HACC_USER1 = 0,
     HACC_USER2,
-    HACC_USER3
+    HACC_USER3,
+    HACC_USER4
 } HACC_USER;
 
 // ========================================================

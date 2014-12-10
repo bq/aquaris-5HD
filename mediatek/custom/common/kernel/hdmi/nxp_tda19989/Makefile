@@ -2,6 +2,8 @@
 #
 # Makefile for MT6516 video driver.
 #
+ifeq ($(MTK_HDMI_SUPPORT),yes)
+ifeq ($(CUSTOM_KERNEL_HDMI),nxp_tda19989)
 ccflags-y += -I$(MTK_PATH_PLATFORM)/drivers/hdmitx/  \
              -I$(MTK_PATH_SOURCE)/drivers/hdmitx/	\
 			 -I$(MTK_PATH_PLATFORM)/drivers/video/  \
@@ -19,5 +21,7 @@ obj-y += 						\
 	tmbslTDA9989_Misc.o			\
 	tmdlHdmiTx.o				\
 	tmdlHdmiTx_cfg.o			\
-	I2C_api.o					\
-
+	I2C_api.o
+endif
+endif
+obj-y += dummy.o

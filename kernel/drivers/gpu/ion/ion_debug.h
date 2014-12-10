@@ -1,7 +1,14 @@
 #include <linux/ion_debugger.h>
 #include <linux/ion_debugger_kernel.h>
-#define OBJECT_TABLE_SIZE      1543
+#include <linux/atomic.h>
 
+#define OBJECT_TABLE_SIZE      1543
+#define BACKTRACE_LEVEL 10
+#define ION_DEBUG_INFO 7
+#define ION_DEBUG_TRACE 5
+#define ION_DEBUG_WARN 3
+#define ION_DEBUG_ERROR 1
+#define MAX_MEMORY_USAGE 0xF00000
 // for BT
 typedef struct ObjectEntry{
     size_t slot;
@@ -33,8 +40,9 @@ typedef struct {
 struct ion_process_record *ion_get_inuse_process_usage_record2(void);
 int record_ion_info(int from_kernel,ion_sys_record_t *param);
 unsigned int get_kernel_backtrace(unsigned long *backtrace);
+unsigned int get_kernel_backtrace_show(unsigned long *backtrace);
 void get_kernel_symbol(unsigned long *backtrace,unsigned int numEntries, unsigned int *kernel_symbol);
 char *get_userString_from_hashTable(char *string_name,unsigned int len);
 char *get_kernelString_from_hashTable(char *string_name,unsigned int len);
-char *get_string(char *string_name,unsigned int len,StringTable *table);
+char *get_string(char *string_name,unsigned int len,StringTable *table,struct mutex *string_mutex);
 char *ion_get_backtrace_info(struct ion_record_basic_info *tracking_info,char *backtrace_string,unsigned int backtrace_string_len, unsigned int backtrace_index,unsigned int show_backtrace_type);

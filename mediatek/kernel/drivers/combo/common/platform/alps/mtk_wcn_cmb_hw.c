@@ -43,6 +43,8 @@
 #define DFT_OFF_STABLE_TIME 10
 #define DFT_ON_STABLE_TIME 30
 
+#define MT6630_SW_STRAP_SUPPORT
+
 /*******************************************************************************
 *                             D A T A   T Y P E S
 ********************************************************************************
@@ -144,31 +146,51 @@ mtk_wcn_cmb_hw_pwr_on (VOID)
 
     /*1. pull high LDO to supply power to chip*/
     iRet += wmt_plat_gpio_ctrl(PIN_LDO, PIN_STA_OUT_H);
-    osal_msleep(gPwrSeqTime.ldoStableTime);
+    osal_sleep_ms(gPwrSeqTime.ldoStableTime);
 
     /* 2. export RTC clock to chip*/
     if (_pwr_first_time) {
         /* rtc clock should be output all the time, so no need to enable output again*/
         iRet += wmt_plat_gpio_ctrl(PIN_RTC, PIN_STA_INIT);
-        osal_msleep(gPwrSeqTime.rtcStableTime);
+        osal_sleep_ms(gPwrSeqTime.rtcStableTime);
         WMT_INFO_FUNC("CMB-HW, rtc clock exported\n");
     }
 
-    /*3. set UART Tx/Rx to UART mode*/
+	/*3. set UART Tx/Rx to UART mode*/
     iRet += wmt_plat_gpio_ctrl(PIN_UART_GRP, PIN_STA_INIT);
-
+	
+#ifdef MT6630_SW_STRAP_SUPPORT
+	switch (wmt_plat_get_comm_if_type())
+	{
+		case STP_UART_IF_TX:
+			iRet += wmt_plat_gpio_ctrl(PIN_UART_RX, PIN_STA_OUT_H);
+			break;
+		case STP_SDIO_IF_TX:
+			iRet += wmt_plat_gpio_ctrl(PIN_UART_RX, PIN_STA_IN_NP);
+			break;
+		default:
+			WMT_ERR_FUNC("not supported common interface\n");
+			break;
+	}   
+#endif
     /*4. PMU->output low, RST->output low, sleep off stable time*/
     iRet += wmt_plat_gpio_ctrl(PIN_PMU, PIN_STA_OUT_L);
     iRet += wmt_plat_gpio_ctrl(PIN_RST, PIN_STA_OUT_L);
-    osal_msleep(gPwrSeqTime.offStableTime);
+    osal_sleep_ms(gPwrSeqTime.offStableTime);
 
     /*5. PMU->output high, sleep rst stable time*/
     iRet += wmt_plat_gpio_ctrl(PIN_PMU, PIN_STA_OUT_H);
-    osal_msleep(gPwrSeqTime.rstStableTime);
+    osal_sleep_ms(gPwrSeqTime.rstStableTime);
 
     /*6. RST->output high, sleep on stable time*/
     iRet += wmt_plat_gpio_ctrl(PIN_RST, PIN_STA_OUT_H);
-    osal_msleep(gPwrSeqTime.onStableTime);
+    osal_sleep_ms(gPwrSeqTime.onStableTime);
+
+#ifdef MT6630_SW_STRAP_SUPPORT
+	/*set UART Tx/Rx to UART mode*/
+	iRet += wmt_plat_gpio_ctrl(PIN_UART_RX, PIN_STA_MUX);
+#endif
+
 
     /*7. set audio interface to CMB_STUB_AIF_1, BT PCM ON, I2S OFF*/
     /* BT PCM bus default mode. Real control is done by audio */
@@ -195,19 +217,39 @@ mtk_wcn_cmb_hw_rst (VOID)
 {
     INT32 iRet = 0;
     WMT_INFO_FUNC("CMB-HW, hw_rst start, eirq should be disabled before this step\n");
+#ifdef MT6630_SW_STRAP_SUPPORT
+		switch (wmt_plat_get_comm_if_type())
+		{
+			case STP_UART_IF_TX:
+				iRet += wmt_plat_gpio_ctrl(PIN_UART_RX, PIN_STA_OUT_H);
+				break;
+			case STP_SDIO_IF_TX:
+				iRet += wmt_plat_gpio_ctrl(PIN_UART_RX, PIN_STA_IN_NP);
+				break;
+			default:
+				WMT_ERR_FUNC("not supported common interface\n");
+				break;
+		}
+#endif
 
     /*1. PMU->output low, RST->output low, sleep off stable time*/
     iRet += wmt_plat_gpio_ctrl(PIN_PMU, PIN_STA_OUT_L);
     iRet += wmt_plat_gpio_ctrl(PIN_RST, PIN_STA_OUT_L);
-    osal_msleep(gPwrSeqTime.offStableTime);
+    osal_sleep_ms(gPwrSeqTime.offStableTime);
 
     /*2. PMU->output high, sleep rst stable time*/
     iRet += wmt_plat_gpio_ctrl(PIN_PMU, PIN_STA_OUT_H);
-    osal_msleep(gPwrSeqTime.rstStableTime);
+    osal_sleep_ms(gPwrSeqTime.rstStableTime);
 
     /*3. RST->output high, sleep on stable time*/
     iRet += wmt_plat_gpio_ctrl(PIN_RST, PIN_STA_OUT_H);
-    osal_msleep(gPwrSeqTime.onStableTime);
+    osal_sleep_ms(gPwrSeqTime.onStableTime);
+
+#ifdef MT6630_SW_STRAP_SUPPORT
+	/*set UART Tx/Rx to UART mode*/
+	iRet += wmt_plat_gpio_ctrl(PIN_UART_RX, PIN_STA_MUX);
+#endif
+
     WMT_INFO_FUNC("CMB-HW, hw_rst finish, eirq should be enabled after this step\n");
     return 0;
 }

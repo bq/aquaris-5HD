@@ -42,31 +42,6 @@ enum {
     mt6620_E2
 };
 
-/*enum {
-    FM_LONG_ANA = 0,
-    FM_SHORT_ANA
-};*/
-enum {
-    MT6620_I2S_ON = 0,
-    MT6620_I2S_OFF
-};
-
-enum {
-    MT6620_I2S_MASTER = 0,
-    MT6620_I2S_SLAVE
-};
-
-enum {
-    MT6620_I2S_32K = 0,
-    MT6620_I2S_44K,
-    MT6620_I2S_48K
-};
-
-struct mt6620_fm_i2s_info {
-    fm_s32 status;
-    fm_s32 mode;
-    fm_s32 rate;
-};
 struct mt6620_fm_softmute_tune_cqi_t 
 {  
 	fm_u16 ch;				//current frequency

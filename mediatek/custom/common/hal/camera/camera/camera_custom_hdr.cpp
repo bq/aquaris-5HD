@@ -427,7 +427,7 @@ MVOID getHDRExpSetting(const HDRExpSettingInputParam_T& rInput, HDRExpSettingOut
 
 //#if (ENABLE_HDR_AE_DEBUG_INFO)
 // Save HDR AE debug info to a file.
-    char value[32] = {'\0'};
+    char value[PROPERTY_VALUE_MAX] = {'\0'};
     property_get("mediatek.hdr.debug", value, "0");
     int hdr_debug_mode = atoi(value) || CUST_HDR_DEBUG;
 	if(hdr_debug_mode) {

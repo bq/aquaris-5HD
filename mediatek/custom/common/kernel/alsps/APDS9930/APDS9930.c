@@ -27,19 +27,9 @@
 #include <linux/platform_device.h>
 #include <asm/atomic.h>
 
-#if 0
-#include <mach/mt6577_devs.h>
-#include <mach/mt6577_typedefs.h>
-#include <mach/mt6577_gpio.h>
-#include <mach/mt6577_pm_ldo.h>
-#endif
-
-#if 1
-//#include <mach/mt_devs.h>
 #include <mach/mt_typedefs.h>
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
-#endif
 
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
 
@@ -50,6 +40,7 @@
 #include <cust_eint.h>
 #include <cust_alsps.h>
 #include "APDS9930.h"
+#include <linux/sched.h>
 /******************************************************************************
  * configuration
 *******************************************************************************/
@@ -70,15 +61,14 @@
 /******************************************************************************
  * extern functions
 *******************************************************************************/
-	extern void mt65xx_eint_unmask(unsigned int line);
-	extern void mt65xx_eint_mask(unsigned int line);
-	extern void mt65xx_eint_set_polarity(kal_uint8 eintno, kal_bool ACT_Polarity);
-	extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
-	extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
-	extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
-										 kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
-										 kal_bool auto_umask);
-	
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
+
 /*----------------------------------------------------------------------------*/
 static struct i2c_client *APDS9930_i2c_client = NULL;
 /*----------------------------------------------------------------------------*/
@@ -106,6 +96,7 @@ static struct APDS9930_priv *g_APDS9930_ptr = NULL;
 
 static struct PS_CALI_DATA_STRUCT ps_cali={0,0,0};
 static int intr_flag_value = 0;
+static unsigned long long int_top_time = 0;
 /*----------------------------------------------------------------------------*/
 typedef enum {
     CMC_BIT_ALS    = 1,
@@ -147,6 +138,7 @@ struct APDS9930_priv {
     u16         als_value_num;
     u32         als_level[C_CUST_ALS_LEVEL-1];
     u32         als_value[C_CUST_ALS_LEVEL];
+	int			ps_cali;
 
     atomic_t    als_cmd_val;    /*the cmd value can't be read, stored in ram*/
     atomic_t    ps_cmd_val;     /*the cmd value can't be read, stored in ram*/
@@ -343,28 +335,28 @@ static long APDS9930_enable_ps(struct i2c_client *client, int enable)
 			}
 			/*fix bug*/
 			databuf[0] = APDS9930_CMM_INT_LOW_THD_LOW;	
-			databuf[1] = (u8)(750 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low)) & 0x00FF);
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = APDS9930_CMM_INT_LOW_THD_HIGH;	
-			databuf[1] = (u8)((750 & 0xFF00) >> 8);
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_low)) & 0xFF00) >> 8);
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = APDS9930_CMM_INT_HIGH_THD_LOW;	
-			databuf[1] = (u8)(900 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high)) & 0x00FF);
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = APDS9930_CMM_INT_HIGH_THD_HIGH;	
-			databuf[1] = (u8)((900 & 0xFF00) >> 8);;
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_high)) & 0xFF00) >> 8);;
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
@@ -510,7 +502,7 @@ void APDS9930_eint_func(void)
 	{
 		return;
 	}
-	//APS_LOG(" debug eint function performed!\n");
+	int_top_time = sched_clock();
 	schedule_work(&obj->eint_work);
 }
 
@@ -527,12 +519,10 @@ int APDS9930_setup_eint(struct i2c_client *client)
 	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, TRUE);
 	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
-	mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, APDS9930_eint_func, 0);
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, APDS9930_eint_func, 0);
 
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
+	mt_eint_unmask(CUST_EINT_ALS_NUM);  
     return 0;
 }
 
@@ -622,28 +612,28 @@ static int APDS9930_init_client(struct i2c_client *client)
 		else
 		{
 			databuf[0] = APDS9930_CMM_INT_LOW_THD_LOW;	
-			databuf[1] = (u8)(750 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low)) & 0x00FF);
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = APDS9930_CMM_INT_LOW_THD_HIGH;	
-			databuf[1] = (u8)((750 & 0xFF00) >> 8);
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_low)) & 0xFF00) >> 8);
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = APDS9930_CMM_INT_HIGH_THD_LOW;	
-			databuf[1] = (u8)(900 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high)) & 0x00FF);
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = APDS9930_CMM_INT_HIGH_THD_HIGH;	
-			databuf[1] = (u8)((900 & 0xFF00) >> 8);;
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_high)) & 0xFF00) >> 8);;
 			res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
 			if(res <= 0)
 			{
@@ -890,8 +880,9 @@ static int APDS9930_get_als_value(struct APDS9930_priv *obj, u16 als)
 /*----------------------------------------------------------------------------*/
 long APDS9930_read_ps(struct i2c_client *client, u16 *data)
 {
-	//struct APDS9930_priv *obj = i2c_get_clientdata(client);	
+	struct APDS9930_priv *obj = i2c_get_clientdata(client);	
 	u8 buffer[2];
+	u16 temp_data;
 	long res = 0;
 
 	if(client == NULL)
@@ -907,8 +898,13 @@ long APDS9930_read_ps(struct i2c_client *client, u16 *data)
 		goto EXIT_ERR;
 	}
 	
-	*data = buffer[0] | (buffer[1]<<8);
+	temp_data = buffer[0] | (buffer[1]<<8);
 	//APS_LOG("yucong APDS9930_read_ps ps_data=%d, low:%d  high:%d", *data, buffer[0], buffer[1]);
+	if(temp_data < obj->ps_cali)
+		*data = 0;
+	else
+		*data = temp_data - obj->ps_cali;
+	return 0;	
 	return 0;    
 
 EXIT_ERR:
@@ -1018,7 +1014,8 @@ static void APDS9930_eint_work(struct work_struct *work)
 		APDS9930_read_ps(obj->client, &obj->ps);
 		APDS9930_read_als_ch0(obj->client, &obj->als);
 		APS_LOG("APDS9930_eint_work rawdata ps=%d als_ch0=%d!\n",obj->ps,obj->als);
-		
+		APS_LOG("APDS9930 int top half time = %lld\n", int_top_time);
+
 		if(obj->als > 40000)
 			{
 			APS_LOG("APDS9930_eint_work ALS too large may under lighting als_ch0=%d!\n",obj->als);
@@ -1147,11 +1144,11 @@ static void APDS9930_eint_work(struct work_struct *work)
 	}
 	
 	APDS9930_clear_intr(obj->client);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM); 
+	mt_eint_unmask(CUST_EINT_ALS_NUM); 
 	return;
 	EXIT_ERR:
 	APDS9930_clear_intr(obj->client);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM); 
+	mt_eint_unmask(CUST_EINT_ALS_NUM); 
 	APS_ERR("i2c_transfer error = %d\n", res);
 	return;
 }
@@ -1178,6 +1175,45 @@ static int APDS9930_release(struct inode *inode, struct file *file)
 	file->private_data = NULL;
 	return 0;
 }
+/*----------------------------------------------------------------------------*/
+static int set_psensor_threshold(struct i2c_client *client)
+{
+	struct APDS9930_priv *obj = i2c_get_clientdata(client);
+	u8 databuf[3];    
+	int res = 0;
+	APS_ERR("set_psensor_threshold function high: 0x%x, low:0x%x\n",atomic_read(&obj->ps_thd_val_high),atomic_read(&obj->ps_thd_val_low));
+
+	databuf[0] = APDS9930_CMM_INT_LOW_THD_LOW;	
+	databuf[1] = (u8)(atomic_read(&obj->ps_thd_val_low) & 0x00FF);
+	res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res <= 0)
+	{
+		return -1;
+	}
+	databuf[0] = APDS9930_CMM_INT_LOW_THD_HIGH; 
+	databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low) & 0xFF00) >> 8);
+	res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res <= 0)
+	{
+		return -1;
+	}
+	databuf[0] = APDS9930_CMM_INT_HIGH_THD_LOW; 
+	databuf[1] = (u8)(atomic_read(&obj->ps_thd_val_high) & 0x00FF);
+	res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res <= 0)
+	{
+		return -1;
+	}
+	databuf[0] = APDS9930_CMM_INT_HIGH_THD_HIGH;	
+	databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high) & 0xFF00) >> 8);;
+	res = APDS9930_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res <= 0)
+	{
+		return -1;
+	}
+
+	return 0;
+}
 
 /*----------------------------------------------------------------------------*/
 static long APDS9930_unlocked_ioctl(struct file *file, unsigned int cmd,
@@ -1190,6 +1226,8 @@ static long APDS9930_unlocked_ioctl(struct file *file, unsigned int cmd,
 	int dat;
 	uint32_t enable;
 	int ps_result;
+	int ps_cali;
+	int threshold[2];
 
 	switch (cmd)
 	{
@@ -1338,6 +1376,69 @@ static long APDS9930_unlocked_ioctl(struct file *file, unsigned int cmd,
 				goto err_out;
 			}			   
 			break;
+
+			case ALSPS_IOCTL_CLR_CALI:
+				if(copy_from_user(&dat, ptr, sizeof(dat)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				if(dat == 0)
+					obj->ps_cali = 0;
+				break;
+
+			case ALSPS_IOCTL_GET_CALI:
+				ps_cali = obj->ps_cali ;
+				if(copy_to_user(ptr, &ps_cali, sizeof(ps_cali)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
+
+			case ALSPS_IOCTL_SET_CALI:
+				if(copy_from_user(&ps_cali, ptr, sizeof(ps_cali)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+
+				obj->ps_cali = ps_cali;
+				break;
+
+			case ALSPS_SET_PS_THRESHOLD:
+				if(copy_from_user(threshold, ptr, sizeof(threshold)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				APS_ERR("%s set threshold high: 0x%x, low: 0x%x\n", __func__, threshold[0],threshold[1]); 
+				atomic_set(&obj->ps_thd_val_high,  (threshold[0]+obj->ps_cali));
+				atomic_set(&obj->ps_thd_val_low,  (threshold[1]+obj->ps_cali));//need to confirm
+
+				set_psensor_threshold(obj->client);
+				
+				break;
+				
+			case ALSPS_GET_PS_THRESHOLD_HIGH:
+				threshold[0] = atomic_read(&obj->ps_thd_val_high) - obj->ps_cali;
+				APS_ERR("%s get threshold high: 0x%x\n", __func__, threshold[0]); 
+				if(copy_to_user(ptr, &threshold[0], sizeof(threshold[0])))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
+				
+			case ALSPS_GET_PS_THRESHOLD_LOW:
+				threshold[0] = atomic_read(&obj->ps_thd_val_low) - obj->ps_cali;
+				APS_ERR("%s get threshold low: 0x%x\n", __func__, threshold[0]); 
+				if(copy_to_user(ptr, &threshold[0], sizeof(threshold[0])))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
 			/*------------------------------------------------------------------------------------------*/
 		default:
 			APS_ERR("%s not supported = 0x%04x", __FUNCTION__, cmd);
@@ -1730,6 +1831,7 @@ static int APDS9930_i2c_probe(struct i2c_client *client, const struct i2c_device
 	set_bit(CMC_BIT_ALS, &obj->enable);
 	set_bit(CMC_BIT_PS, &obj->enable);
 
+	obj->ps_cali = 0;
 	
 	APDS9930_i2c_client = client;
 	

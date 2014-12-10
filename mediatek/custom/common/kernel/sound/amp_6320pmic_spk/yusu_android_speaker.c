@@ -21,17 +21,6 @@
 #include <linux/delay.h>
 #include "yusu_android_speaker.h"
 
-#if defined(MT6575)
-#include <mach/mt_gpio.h>
-#include <mach/mt_typedefs.h>
-#include <mach/mt_clock_manager.h>
-#include <mach/mt_pmic_feature_api.h>
-#elif defined(MT6577)
-#include <mach/mt_gpio.h>
-#include <mach/mt_typedefs.h>
-#include <mach/mt_clock_manager.h>
-#include <mach/mt_pmic_feature_api.h>
-#endif
 /*****************************************************************************
 *                C O M P I L E R      F L A G S
 ******************************************************************************
@@ -127,7 +116,7 @@ void Sound_Speaker_Turnon(int channel)
 #elif defined(AMP_CLASS_D)
 
 #endif
-    msleep(SPK_WARM_UP_TIME);
+    //msleep(SPK_WARM_UP_TIME);
     gsk_on = true;
 }
 

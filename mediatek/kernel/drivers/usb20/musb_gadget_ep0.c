@@ -37,19 +37,13 @@
 #include <linux/list.h>
 #include <linux/timer.h>
 #include <linux/spinlock.h>
-#include <linux/init.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
 
 #include <linux/musb/musb_core.h>
 
-#include <linux/usb/ch9.h>
-
 /* ep0 is always musb->endpoints[0].ep_in */
 #define	next_ep0_request(musb)	next_in_request(&(musb)->endpoints[0])
-
-struct musb_hw_ep	*ep_in_list[MUSB_C_NUM_EPS] = {NULL};
-struct musb_hw_ep	*ep_out_list[MUSB_C_NUM_EPS] = {NULL};
 
 /*
  * locking note:  we use only the controller lock, for simpler correctness.
@@ -93,7 +87,6 @@ static int service_tx_status_request(
 	case USB_RECIP_DEVICE:
 		result[0] = musb->is_self_powered << USB_DEVICE_SELF_POWERED;
 		result[0] |= musb->may_wakeup << USB_DEVICE_REMOTE_WAKEUP;
-#ifdef CONFIG_USB_MUSB_OTG
 		if (musb->g.is_otg) {
 			result[0] |= musb->g.b_hnp_enable
 				<< USB_DEVICE_B_HNP_ENABLE;
@@ -102,7 +95,6 @@ static int service_tx_status_request(
 			result[0] |= musb->g.a_hnp_support
 				<< USB_DEVICE_A_HNP_SUPPORT;
 		}
-#endif
 		break;
 
 	case USB_RECIP_INTERFACE:
@@ -124,18 +116,14 @@ static int service_tx_status_request(
 		is_in = epnum & USB_DIR_IN;
 		if (is_in) {
 			epnum &= 0x0f;
-		//	ep = &musb->endpoints[epnum].ep_in;
-			ep = &ep_in_list[epnum]->ep_in;
-			regs = ep_in_list[epnum]->regs;
+			ep = &musb->endpoints[epnum].ep_in;
 		} else {
-		//	ep = &musb->endpoints[epnum].ep_out;
-			ep = &ep_out_list[epnum]->ep_out;
-			regs = ep_out_list[epnum]->regs;
+			ep = &musb->endpoints[epnum].ep_out;
 		}
-	//	regs = musb->endpoints[epnum].regs;
-		if (epnum >= MUSB_C_NUM_EPS /*|| !ep->desc*/) {
+		regs = musb->endpoints[epnum].regs;
+
+		if (epnum >= MUSB_C_NUM_EPS || !ep->desc) {
 			handled = -EINVAL;
-			DBG(0,"Get ep%d status error\n",epnum);
 			break;
 		}
 
@@ -218,9 +206,8 @@ static inline void musb_try_b_hnp_enable(struct musb *musb)
 	void __iomem	*mbase = musb->mregs;
 	u8		devctl;
 
-	DBG(1, "HNP: Setting HR\n");
+	DBG(2, "HNP: Setting HR\n");
 	devctl = musb_readb(mbase, MUSB_DEVCTL);
-	dumpTime(funcWriteb, 0);
 	musb_writeb(mbase, MUSB_DEVCTL, devctl | MUSB_DEVCTL_HR);
 }
 
@@ -277,42 +264,26 @@ __acquires(musb->lock)
 				void __iomem		*regs;
 				int			is_in;
 				u16			csr;
-				int 		ep_index;
-
-				DBG(0, "MUSB_ACTION : USB_REQ_CLEAR_FEATURE - USB_RECIP_ENDPOINT\n");
 
 				if (epnum == 0 || epnum >= MUSB_C_NUM_EPS ||
 				    ctrlrequest->wValue != USB_ENDPOINT_HALT)
 					break;
 
-	//			ep = musb->endpoints + epnum;
-	//			regs = ep->regs;
+				ep = musb->endpoints + epnum;
+				regs = ep->regs;
 				is_in = ctrlrequest->wIndex & USB_DIR_IN;
-
 				if (is_in)
-				{
-					ep = ep_in_list[epnum];
 					musb_ep = &ep->ep_in;
-				}
-				else{
-					ep = ep_out_list[epnum];
+				else
 					musb_ep = &ep->ep_out;
-				}
 
 				if (!ep) {
 					ERR("ep %d is null, is_in=%d\n", epnum, is_in);
-					ERR("dump ep address information\n");
-					for (ep_index=1; ep_index < MUSB_C_NUM_EPS; ep_index ++) {
-						ERR("ep_in_%d address = %p", ep_index, ep_in_list[ep_index]);
-						ERR("ep_out_%d address = %p", ep_index, ep_out_list[ep_index]);
-					}
 					break;
 				}
 
-				regs = ep->regs;
-			/*	if (!musb_ep->desc)
+				if (!musb_ep->desc)
 					break;
-					*/
 
 				handled = 1;
 				/* Ignore request if endpoint is wedged */
@@ -327,7 +298,6 @@ __acquires(musb->lock)
 					csr &= ~(MUSB_TXCSR_P_SENDSTALL |
 						 MUSB_TXCSR_P_SENTSTALL |
 						 MUSB_TXCSR_TXPKTRDY);
-					dumpTime(funcWritew, epnum);
 					musb_writew(regs, MUSB_TXCSR, csr);
 				} else {
 					csr  = musb_readw(regs, MUSB_RXCSR);
@@ -335,17 +305,21 @@ __acquires(musb->lock)
 					       MUSB_RXCSR_P_WZC_BITS;
 					csr &= ~(MUSB_RXCSR_P_SENDSTALL |
 						 MUSB_RXCSR_P_SENTSTALL);
-					dumpTime(funcWritew, epnum);
 					musb_writew(regs, MUSB_RXCSR, csr);
-
 				}
+
 				/* Maybe start the first request in the queue */
 				request = next_request(musb_ep);
 				if (!musb_ep->busy && request) {
-					DBG(1, "restarting the request\n");
+					DBG(0, "restarting the request\n");
 					musb_ep_restart(musb, request);
-
+				} else if (!is_in) { //Modification for ALPS00451478 
+					csr  = musb_readw(regs, MUSB_RXCSR);
+					DBG(0, "no more request, clear the RXPKTRDY to avoid error RX FIFO/DMA read!! csr = 0x%x\n", csr);
+					csr &= ~(MUSB_RXCSR_RXPKTRDY);
+					musb_writew(regs, MUSB_RXCSR, csr);
 				}
+				//Modification for ALPS00451478
 
 				/* select ep0 again */
 				musb_ep_select(mbase, 0);
@@ -429,7 +403,6 @@ __acquires(musb->lock)
 					if (handled > 0)
 						musb->test_mode = true;
 					break;
-#ifdef CONFIG_USB_MUSB_OTG
 				case USB_DEVICE_B_HNP_ENABLE:
 					if (!musb->g.is_otg)
 						goto stall;
@@ -446,11 +419,9 @@ __acquires(musb->lock)
 						goto stall;
 					musb->g.a_alt_hnp_support = 1;
 					break;
-#endif
 				case USB_DEVICE_DEBUG_MODE:
 					handled = 0;
 					break;
-
 stall:
 				default:
 					handled = -EINVAL;
@@ -469,38 +440,26 @@ stall:
 				void __iomem		*regs;
 				int			is_in;
 				u16			csr;
-				int 		ep_index;
 
 				if (epnum == 0 || epnum >= MUSB_C_NUM_EPS ||
 				    ctrlrequest->wValue	!= USB_ENDPOINT_HALT)
 					break;
 
-		//		ep = musb->endpoints + epnum;
-		//		regs = ep->regs;
+				ep = musb->endpoints + epnum;
+				regs = ep->regs;
 				is_in = ctrlrequest->wIndex & USB_DIR_IN;
-				if (is_in){
-					ep = ep_in_list[epnum];
+				if (is_in)
 					musb_ep = &ep->ep_in;
-				}
-
-				else{
-					ep = ep_out_list[epnum];
+				else
 					musb_ep = &ep->ep_out;
-				}
 
 				if (!ep) {
 					ERR("ep %d is null, is_in=%d\n", epnum, is_in);
-					ERR("dump ep address information\n");
-					for (ep_index=1; ep_index < MUSB_C_NUM_EPS; ep_index ++) {
-						ERR("ep_in_%d address = %p", ep_index, ep_in_list[ep_index]);
-						ERR("ep_out_%d address = %p", ep_index, ep_out_list[ep_index]);
-					}
 					break;
 				}
 
-				regs = ep->regs;
-			/*	if (!musb_ep->desc)
-					break;*/
+				if (!musb_ep->desc)
+					break;
 
 				musb_ep_select(mbase, epnum);
 				if (is_in) {
@@ -510,7 +469,6 @@ stall:
 					csr |= MUSB_TXCSR_P_SENDSTALL
 						| MUSB_TXCSR_CLRDATATOG
 						| MUSB_TXCSR_P_WZC_BITS;
-					dumpTime(funcWritew, epnum);
 					musb_writew(regs, MUSB_TXCSR, csr);
 				} else {
 					csr = musb_readw(regs, MUSB_RXCSR);
@@ -518,7 +476,6 @@ stall:
 						| MUSB_RXCSR_FLUSHFIFO
 						| MUSB_RXCSR_CLRDATATOG
 						| MUSB_RXCSR_P_WZC_BITS;
-					dumpTime(funcWritew, epnum);
 					musb_writew(regs, MUSB_RXCSR, csr);
 				}
 
@@ -552,7 +509,6 @@ static void ep0_rxstate(struct musb *musb)
 	struct usb_request	*req;
 	u16			count, csr;
 
-	//req = next_ep0_request(musb);
 	request = next_ep0_request(musb);
 	req = &request->request;
 
@@ -592,7 +548,6 @@ static void ep0_rxstate(struct musb *musb)
 		musb->ackpend = 0;
 	}
 	musb_ep_select(musb->mregs, 0);
-	dumpTime(funcWritew, 0);
 	musb_writew(regs, MUSB_CSR0, csr);
 }
 
@@ -605,15 +560,12 @@ static void ep0_rxstate(struct musb *musb)
 static void ep0_txstate(struct musb *musb)
 {
 	void __iomem		*regs = musb->control_ep->regs;
-	//struct usb_request	*request = next_ep0_request(musb);
 	struct musb_request	*req = next_ep0_request(musb);
 	struct usb_request	*request;
-
 	u16			csr = MUSB_CSR0_TXPKTRDY;
 	u8			*fifo_src;
 	u8			fifo_count;
 
-	//if (!request) {
 	if (!req) {
 		/* WARN_ON(1); */
 		DBG(2, "odd; csr0 %04x\n", musb_readw(regs, MUSB_CSR0));
@@ -653,7 +605,6 @@ static void ep0_txstate(struct musb *musb)
 
 	/* send it out, triggering a "txpktrdy cleared" irq */
 	musb_ep_select(musb->mregs, 0);
-	dumpTime(funcWritew, 0);
 	musb_writew(regs, MUSB_CSR0, csr);
 }
 
@@ -666,7 +617,6 @@ static void ep0_txstate(struct musb *musb)
 static void
 musb_read_setup(struct musb *musb, struct usb_ctrlrequest *req)
 {
-	//struct usb_request	*r;
 	struct musb_request	*r;
 	void __iomem		*regs = musb->control_ep->regs;
 
@@ -675,7 +625,7 @@ musb_read_setup(struct musb *musb, struct usb_ctrlrequest *req)
 	/* NOTE:  earlier 2.6 versions changed setup packets to host
 	 * order, but now USB packets always stay in USB byte order.
 	 */
-	DBG(3, "SETUP req%02x.%02x v%04x i%04x l%d\n",
+	DBG(2, "SETUP req%02x.%02x v%04x i%04x l%d\n",
 		req->bRequestType,
 		req->bRequest,
 		le16_to_cpu(req->wValue),
@@ -689,7 +639,6 @@ musb_read_setup(struct musb *musb, struct usb_ctrlrequest *req)
 	/* clean up any leftover transfers */
 	r = next_ep0_request(musb);
 	if (r)
-		//musb_g_ep0_giveback(musb, r);
 		musb_g_ep0_giveback(musb, &r->request);
 
 	/* For zero-data requests we want to delay the STATUS stage to
@@ -708,7 +657,6 @@ musb_read_setup(struct musb *musb, struct usb_ctrlrequest *req)
 		musb->ep0_state = MUSB_EP0_STAGE_ACKWAIT;
 	} else if (req->bRequestType & USB_DIR_IN) {
 		musb->ep0_state = MUSB_EP0_STAGE_TX;
-		dumpTime(funcWritew, 0);
 		musb_writew(regs, MUSB_CSR0, MUSB_CSR0_P_SVDRXPKTRDY);
 		while ((musb_readw(regs, MUSB_CSR0)
 				& MUSB_CSR0_RXPKTRDY) != 0)
@@ -718,53 +666,6 @@ musb_read_setup(struct musb *musb, struct usb_ctrlrequest *req)
 		musb->ep0_state = MUSB_EP0_STAGE_RX;
 }
 
-void map_hw_log_ep(struct musb *musb,struct usb_request *r)
-{
-	u8 *descriptor = (u8*)(r->buf);
-	struct usb_endpoint_descriptor *ep_desc;
-	u8 old_ep_num;
-//	u8 ep_num;
-	u32 buf_length = 0;
-
-	while (buf_length < r->length)
-	{
-		//DBG(0,"xxxxxinto %d request length is %d desc type is %x\n",buf_length,r->length,ep_desc->bDescriptorType);
-	  ep_desc = (struct usb_endpoint_descriptor *)descriptor;
-	 // DBG(0,"xxxxxinto %d request length is %d desc type is %x\n",buf_length,r->length,ep_desc->bDescriptorType);
-	  //DBG(0,"ep_desc length is %x\n",ep_desc->bLength);
-	  if (ep_desc->bDescriptorType == USB_DT_ENDPOINT)
-	  {
-	  	DBG(3,"ep address is %x\n",ep_desc->bEndpointAddress);
-	  	old_ep_num = ep_desc->bEndpointAddress & 0xF;
-		ep_desc->bEndpointAddress &= 0x80;
-		if((ep_desc->bEndpointAddress & 0x80) == USB_DIR_IN)
-		{
-			ep_desc->bEndpointAddress |= musb->next_ep_num_in;
-			DBG(3,"in current epnum is %x\n",musb->endpoints[old_ep_num].ep_in.current_epnum);
-
-			musb->endpoints[old_ep_num].ep_in.current_epnum = musb->next_ep_num_in;
-		//	musb->endpoints[old_ep_num].epnum= musb->next_ep_num_in;
-			DBG(3,"after map ep address is %x, current epnum is %x\n",ep_desc->bEndpointAddress,musb->endpoints[old_ep_num].ep_in.current_epnum);
-			ep_in_list[musb->next_ep_num_in] = &musb->endpoints[old_ep_num];
-			musb->next_ep_num_in++;
-		}else{
-			DBG(3," out current epnum is %x\n",musb->endpoints[old_ep_num].ep_out.current_epnum);
-
-			ep_desc->bEndpointAddress |= musb->next_ep_num_out;
-			musb->endpoints[old_ep_num].ep_out.current_epnum = musb->next_ep_num_out;
-			DBG(3,"after map ep address is %x, current epnum is %x\n",ep_desc->bEndpointAddress,musb->endpoints[old_ep_num].ep_out.current_epnum);
-			ep_out_list[musb->next_ep_num_out] = &musb->endpoints[old_ep_num];
-			musb->next_ep_num_out++;
-		}
-	  }
-	  descriptor += ep_desc->bLength;
-	  buf_length += ep_desc->bLength;
-	}
-	musb->next_ep_num_out = 1;
-	musb->next_ep_num_in = 1;
-}
-
-
 static int
 forward_to_driver(struct musb *musb, const struct usb_ctrlrequest *ctrlrequest)
 __releases(musb->lock)
@@ -772,31 +673,22 @@ __acquires(musb->lock)
 {
 	int retval;
 	int usb_state = 0;
-	u16 w_value = le16_to_cpu(ctrlrequest->wValue);
+	/* u16 w_value = le16_to_cpu(ctrlrequest->wValue); */
 
 	if (!musb->gadget_driver)
 		return -EOPNOTSUPP;
 	spin_unlock(&musb->lock);
-//	DBG(0,"get desc is %d\n",musb->get_desc_cmd);
-	if(ctrlrequest->bRequest == USB_REQ_GET_DESCRIPTOR &&(w_value >> 8 == USB_DT_CONFIG)){
-		musb->get_desc_cmd = true;
-	}
 
 	USB_LOGGER( FORWARD_TO_DRIVER, 	FORWARD_TO_DRIVER, \
 		musb->gadget_driver->driver.name);
 
 	retval = musb->gadget_driver->setup(&musb->g, ctrlrequest);
 
-	if(ctrlrequest->bRequest == USB_REQ_GET_DESCRIPTOR&&(w_value >> 8 == USB_DT_CONFIG)){
-		musb->get_desc_cmd = false;
-	}
     if(ctrlrequest->bRequest == USB_REQ_SET_CONFIGURATION){
-	    if(ctrlrequest->wValue & 0xff){
+        if (ctrlrequest->wValue & 0xff)
 	        usb_state = USB_CONFIGURED;
-	    }
-	    else{
+        else
 	        usb_state = USB_UNCONFIGURED;
-	    }
 	    musb_sync_with_bat(musb,usb_state); // annonce to the battery
    }
 
@@ -821,17 +713,22 @@ irqreturn_t musb_g_ep0_irq(struct musb *musb)
 	csr = musb_readw(regs, MUSB_CSR0);
 	len = musb_readb(regs, MUSB_COUNT0);
 
-	DBG(4, "csr %04x, count %d, myaddr %d, ep0stage %s\n",
-			csr, len,
-			musb_readb(mbase, MUSB_FADDR),
-			decode_ep0stage(musb->ep0_state));
+	DBG(2, "csr %04x, count %d, ep0stage %s\n",
+			csr, len, decode_ep0stage(musb->ep0_state));
 
 	USB_LOGGER( MUSB_G_EP0_IRQ, MUSB_G_EP0_IRQ, csr, len, \
 		musb_readb(mbase, MUSB_FADDR), decode_ep0stage(musb->ep0_state));
 
+	if (csr & MUSB_CSR0_P_DATAEND) {
+		/*
+		 * If DATAEND is set we should not call the callback,
+		 * hence the status stage is not complete.
+		 */
+		return IRQ_HANDLED;
+	}
+
 	/* I sent a stall.. need to acknowledge it now.. */
 	if (csr & MUSB_CSR0_P_SENTSTALL) {
-		dumpTime(funcWritew, 0);
 		musb_writew(regs, MUSB_CSR0,
 				csr & ~MUSB_CSR0_P_SENTSTALL);
 		retval = IRQ_HANDLED;
@@ -841,7 +738,6 @@ irqreturn_t musb_g_ep0_irq(struct musb *musb)
 
 	/* request ended "early" */
 	if (csr & MUSB_CSR0_P_SETUPEND) {
-		dumpTime(funcWritew, 0);
 		musb_writew(regs, MUSB_CSR0, MUSB_CSR0_P_SVDSETUPEND);
 		retval = IRQ_HANDLED;
 		/* Transition into the early status phase */
@@ -893,18 +789,16 @@ irqreturn_t musb_g_ep0_irq(struct musb *musb)
 		 */
 		if (musb->set_address) {
 			musb->set_address = false;
-			dumpTime(funcWriteb, 0);
 			musb_writeb(mbase, MUSB_FADDR, musb->address);
 		}
 
 		/* enter test mode if needed (exit by reset) */
 		else if (musb->test_mode) {
-			DBG(1, "entering TESTMODE\n");
+			DBG(0, "entering TESTMODE\n");
 			musb_sync_with_bat(musb,USB_SUSPEND);
 			if (MUSB_TEST_PACKET == musb->test_mode_nr)
 				musb_load_testpacket(musb);
 
-			dumpTime(funcWriteb, 0);
 			musb_writeb(mbase, MUSB_TESTMODE,
 					musb->test_mode_nr);
 		}
@@ -913,12 +807,10 @@ irqreturn_t musb_g_ep0_irq(struct musb *musb)
 	case MUSB_EP0_STAGE_STATUSOUT:
 		/* end of sequence #1: write to host (TX state) */
 		{
-			//struct usb_request	*req;
 			struct musb_request	*req;
 
 			req = next_ep0_request(musb);
 			if (req)
-				//musb_g_ep0_giveback(musb, req);
 				musb_g_ep0_giveback(musb, &req->request);
 		}
 
@@ -1014,7 +906,7 @@ setup:
 				break;
 			}
 
-			DBG(3, "handled %d, csr %04x, ep0stage %s\n",
+			DBG(2, "handled %d, csr %04x, ep0stage %s\n",
 				handled, csr,
 				decode_ep0stage(musb->ep0_state));
 
@@ -1031,16 +923,14 @@ setup:
 			if (handled < 0) {
 				musb_ep_select(mbase, 0);
 stall:
-				DBG(3, "stall (%d)\n", handled);
+				DBG(2, "stall (%d)\n", handled);
 				musb->ackpend |= MUSB_CSR0_P_SENDSTALL;
 				musb->ep0_state = MUSB_EP0_STAGE_IDLE;
 finish:
-				dumpTime(funcWritew, 0);
 				musb_writew(regs, MUSB_CSR0,
 						musb->ackpend);
 				musb->ackpend = 0;
 			}
-
 		}
 		break;
 
@@ -1054,7 +944,6 @@ finish:
 	default:
 		/* "can't happen" */
 		WARN_ON(1);
-		dumpTime(funcWritew, 0);
 		musb_writew(regs, MUSB_CSR0, MUSB_CSR0_P_SENDSTALL);
 		musb->ep0_state = MUSB_EP0_STAGE_IDLE;
 		break;
@@ -1120,17 +1009,16 @@ musb_g_ep0_queue(struct usb_ep *e, struct usb_request *r, gfp_t gfp_flags)
 		status = 0;
 		break;
 	default:
-		DBG(0, "ep0 request queued in state %d\n",
+		DBG(2, "ep0 request queued in state %d\n",
 				musb->ep0_state);
 		status = -EINVAL;
 		goto cleanup;
 	}
 
 	/* add request to the list */
-	//list_add_tail(&(req->request.list), &(ep->req_list));
 	list_add_tail(&req->list, &ep->req_list);
 
-	DBG(3, "queue to %s (%s), length=%d\n",
+	DBG(2, "queue to %s (%s), length=%d\n",
 			ep->name, ep->is_in ? "IN/TX" : "OUT/RX",
 			req->request.length);
 
@@ -1138,13 +1026,7 @@ musb_g_ep0_queue(struct usb_ep *e, struct usb_request *r, gfp_t gfp_flags)
 
 	/* sequence #1, IN ... start writing the data */
 	if (musb->ep0_state == MUSB_EP0_STAGE_TX)
-	{
-		if(musb->get_desc_cmd == true)
-			map_hw_log_ep(musb,r);
-		//DBG(0,"get desc cmd is %d\n",musb->get_desc_cmd);
 		ep0_txstate(musb);
-	}
-
 
 	/* sequence #3, no-data ... issue IN status */
 	else if (musb->ep0_state == MUSB_EP0_STAGE_ACKWAIT) {
@@ -1152,7 +1034,6 @@ musb_g_ep0_queue(struct usb_ep *e, struct usb_request *r, gfp_t gfp_flags)
 			status = -EINVAL;
 		else {
 			musb->ep0_state = MUSB_EP0_STAGE_STATUSIN;
-			dumpTime(funcWritew, 0);
 			musb_writew(regs, MUSB_CSR0,
 					musb->ackpend | MUSB_CSR0_P_DATAEND);
 			musb->ackpend = 0;
@@ -1164,7 +1045,6 @@ musb_g_ep0_queue(struct usb_ep *e, struct usb_request *r, gfp_t gfp_flags)
 	 * (after SETUP is acked) are racey.
 	 */
 	} else if (musb->ackpend) {
-		dumpTime(funcWritew, 0);
 		musb_writew(regs, MUSB_CSR0, musb->ackpend);
 		musb->ackpend = 0;
 	}
@@ -1226,13 +1106,12 @@ static int musb_g_ep0_halt(struct usb_ep *e, int value)
 	case MUSB_EP0_STAGE_STATUSOUT:	/* control-IN status */
 
 		csr |= MUSB_CSR0_P_SENDSTALL;
-		dumpTime(funcWritew, 0);
 		musb_writew(regs, MUSB_CSR0, csr);
 		musb->ep0_state = MUSB_EP0_STAGE_IDLE;
 		musb->ackpend = 0;
 		break;
 	default:
-		DBG(0, "ep0 can't halt in state %d\n", musb->ep0_state);
+		DBG(2, "ep0 can't halt in state %d\n", musb->ep0_state);
 		status = -EINVAL;
 	}
 
@@ -1240,43 +1119,6 @@ cleanup:
 	spin_unlock_irqrestore(&musb->lock, flags);
 	return status;
 }
-static void musb_g_ep0_fifo_flush(struct usb_ep *ep)
-{
-	struct musb_ep	*musb_ep = to_musb_ep(ep);
-	struct musb	*musb = musb_ep->musb;
-	u8		epnum = musb_ep->current_epnum;
-	void __iomem	*epio = musb->endpoints[epnum].regs;
-	void __iomem	*mbase;
-	unsigned long	flags;
-	u16		csr, int_txe;
-
-	mbase = musb->mregs;
-
-	if(epnum != 0)
-	{
-		DBG(0,"[MUSB]epnum is not 0 when flush ep0 fifo\n");
-		return ;
-	}
-
-	DBG(0, "[MUSB]ep0 fifo flush!\n");
-	spin_lock_irqsave(&musb->lock, flags);
-	musb_ep_select(mbase, (u8) epnum);
-
-	/* disable interrupts */
-	int_txe = musb_readw(mbase, MUSB_INTRTXE);
-	dumpTime(funcWritew, 0);
-	musb_writew(mbase, MUSB_INTRTXE, int_txe & ~(1 << epnum));
-
-	csr = musb_readw(epio, MUSB_CSR0);
-	csr |= MUSB_CSR0_FLUSHFIFO | MUSB_CSR0_P_WZC_BITS;
-	dumpTime(funcWritew, 0);
-	musb_writew(epio,MUSB_CSR0,csr);
-	/* re-enable interrupt */
-	dumpTime(funcWritew, 0);
-	musb_writew(mbase, MUSB_INTRTXE, int_txe);
-	spin_unlock_irqrestore(&musb->lock, flags);
-}
-
 
 const struct usb_ep_ops musb_g_ep0_ops = {
 	.enable		= musb_g_ep0_enable,
@@ -1286,5 +1128,4 @@ const struct usb_ep_ops musb_g_ep0_ops = {
 	.queue		= musb_g_ep0_queue,
 	.dequeue	= musb_g_ep0_dequeue,
 	.set_halt	= musb_g_ep0_halt,
-	.fifo_flush = musb_g_ep0_fifo_flush, //dasfasdf
 };

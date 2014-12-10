@@ -1,23 +1,20 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <ccif.h>
-#include <ccci_cfg.h>
-#include <ccci_layer.h>
 #include <mach/irqs.h>
-#include <ccci_common.h>
+#include <ccif.h>
+#include <ccif.h>
+#include <ccci.h>
 
-
-
-unsigned long long lg_ch_rx_debug_enable[MAX_MD_NUM] = {0ULL, 0ULL};
-unsigned long long lg_ch_tx_debug_enable[MAX_MD_NUM] = {0ULL, 0ULL};
+unsigned long long lg_ch_rx_debug_enable[MAX_MD_NUM];
+unsigned long long lg_ch_tx_debug_enable[MAX_MD_NUM];
 
 static int __init ccci_init(void)
 {
 	int ret = CCCI_ERR_MODULE_INIT_OK;
 	unsigned int md_num = 1;	
 	int i = 0;
-	int md_en[MAX_MD_NUM] = {0, 0};
+	int md_en[MAX_MD_NUM] = {0};
 	
 	//1. Get and set Support MD nmmber
 	md_num = get_md_sys_max_num();
@@ -25,7 +22,7 @@ static int __init ccci_init(void)
 
 	//2. Get and set MD enable table
 	for(i = 0; i < md_num; i++) {
-		if(is_md_enable(i)){
+		if(get_modem_is_enabled(i)){
 			md_en[i] = 1;
 			set_md_enable(i, 1);
 		} else {
@@ -33,6 +30,12 @@ static int __init ccci_init(void)
 			set_md_enable(i, 0);
 		}
 	}
+
+#ifdef ENABLE_CCCI_DRV_BUILDIN
+CCCI_MSG("ccci_init: device_initcall_sync\n");
+#else  // MODULE
+CCCI_MSG("ccci_init: module_init\n");
+#endif
 
 	//3. Init ccci device table	
     ret = init_ccci_dev_node();
@@ -65,7 +68,7 @@ static int __init ccci_init(void)
 		if (ret) {
 			CCCI_MSG_INF(i, "cci", "mk_ccci_dev_node fail: %d\n", ret);
 			ret = -CCCI_ERR_MK_DEV_NODE_FAIL;
-			goto platform_out;
+			goto mk_node_out;
 		} else {
 			CCCI_DBG_MSG(i, "cci", "mk_ccci_dev_node OK!\n");
 		}
@@ -146,11 +149,11 @@ static int __init ccci_init(void)
 		// 4.8 Init ccmni dev
 		ret = ccmni_init(i);
 		if (ret) {
-			CCCI_MSG_INF(i, "cci", "ccmni_init_v1 fail: %d\n", ret);
+			CCCI_MSG_INF(i, "cci", "ccmni_init fail: %d\n", ret);
 			ret = -CCCI_ERR_INIT_CCMNI_FAIL;
 			goto ccmni_out;
 		} else {
-			CCCI_DBG_MSG(i, "cci", "ccmni_init_v1 OK!\n");
+			CCCI_DBG_MSG(i, "cci", "ccmni_init OK!\n");
 		}
 		
 		// 4.9 Init pmic dev
@@ -165,18 +168,18 @@ static int __init ccci_init(void)
 		} else {
 			CCCI_DBG_MSG(i, "cci", "ccci_vir_chrdev_init OK!\n");
 		}
-
-		// 4.11 Register IPO-H call back
-		register_ccci_kern_func_by_md_id(i, ID_IPO_H_RESTORE_CB, ccci_ipo_h_restore);
 		
 		CCCI_MSG_INF(i, "cci", "md initial OK!\n");
 	}
 
 	// 5. Init common section
 	ret = ccci_md_ctrl_common_init();
-	
-	goto out;
-
+	if (ret == 0)
+		goto out;
+	else {
+		i = md_num-1;
+		CCCI_MSG_INF(i, "cci", "ccci_md_ctrl_common_init fail: %d\n", ret);
+	}
 
 virchar_out:
 	ccci_vir_chrdev_exit(i);
@@ -208,8 +211,11 @@ logic_out:
 platform_out:
 	platform_deinit(i);
 	
+mk_node_out:
+	ccci_dev_node_exit(i);
+	
 out:
-	if (i == MD_SYS2) {
+	if ((i == MD_SYS2) && (md_num > MD_SYS2)) {
 		ccci_vir_chrdev_exit(MD_SYS1);
 		ccmni_exit(MD_SYS1);
 		ccci_fs_exit(MD_SYS1);
@@ -220,12 +226,16 @@ out:
 		ccci_md_ctrl_exit(MD_SYS1);
 		ccci_logic_layer_exit(MD_SYS1);
 		platform_deinit(MD_SYS1);
+		ccci_dev_node_exit(MD_SYS1);
 	}
 	
 	if (ret == CCCI_ERR_MODULE_INIT_OK)
 		CCCI_MSG("ccci module init OK\n");
-	else
+	else {		
+		release_ccci_dev_node();
+		ccci_helper_exit();
 		CCCI_MSG("ccci module init fail: %d\n", ret);
+	}
 	
 	return ret;
 }
@@ -240,21 +250,42 @@ static void __exit ccci_exit(void)
 	//2. Init ccci driver for each modem
 	for(i=0; i<md_num; i++)
 	{
-		// 3.1 Init char dev
-		// 3.2 Init tty dev
-		// 3.3 Init ipc dev
-		// 3.4 Init rpc dev
-		// 3.5 Init fs dev
-		// 3.6 Init ccmni dev
-		// 3.7 Init pmic dev
+		// 3.1 de-Init virtual char dev
+		ccci_vir_chrdev_exit(i);
+		// 3.2 de-Init ccmni dev
+		ccmni_exit(i);
+		// 3.3 de-Init fs dev
+		ccci_fs_exit(i);
+		// 3.4 de-Init rpc dev
+		ccci_rpc_exit(i);
+		// 3.5 de-Init ipc dev
+		ccci_ipc_exit(i);
+		// 3.6 de-Init tty dev
+		ccci_tty_exit(i);
+		// 3.7 de-Init char dev
+		ccci_chrdev_exit(i);
 		// 3.8 De-Init md ctrl
-		// 3.9 Init ccci logical layer
+		ccci_md_ctrl_exit(i);
+		// 3.9 de-Init ccci logical layer
 		ccci_logic_layer_exit(i);
-		// 3.10 Power down md sys
+		// 3.10 de-Init ccci platform layer
+		platform_deinit(i);
+		// 3.11 de-Init ccci device node
+		ccci_dev_node_exit(i);
 	}
+	// 3.12 release ccci class
+	release_ccci_dev_node();
+	// 3.13 de-Init ccci helper grobal data
+	ccci_helper_exit();
 }
 
+//  Build-in Modified - S
+#ifdef ENABLE_CCCI_DRV_BUILDIN
+device_initcall_sync(ccci_init);
+#else  // MODULE
 module_init(ccci_init);
+#endif
+//  Build-in Modified - E
 module_exit(ccci_exit);
 
 MODULE_DESCRIPTION("CCIF Driver");

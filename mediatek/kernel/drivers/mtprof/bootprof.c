@@ -3,6 +3,8 @@
 #include <linux/seq_file.h>
 #include <linux/kallsyms.h>
 #include <linux/utsname.h>
+#include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <asm/uaccess.h>
 
 #define SEQ_printf(m, x...)	    \
@@ -38,7 +40,11 @@ int boot_log_count = 0;
 
 static DEFINE_MUTEX(mt_bootprof_lock);
 static int mt_bootprof_enabled = 0;
-static int pl_t = 0, lk_t = 0;
+static int bootprof_lk_t = 0, bootprof_pl_t = 0;
+extern unsigned int gpt_boot_time(void);
+
+module_param_named(pl_t, bootprof_pl_t, int, S_IRUGO | S_IWUSR);
+module_param_named(lk_t, bootprof_lk_t, int, S_IRUGO | S_IWUSR);
 
 /*
  * Ease the printing of nsec fields:
@@ -63,6 +69,8 @@ static unsigned long nsec_low(unsigned long long nsec)
     return do_div(nsec, 1000000);
 }
 #define SPLIT_NS(x) nsec_high(x), nsec_low(x)
+extern int mt_cpufreq_state_set(int enabled);
+static int boot_up = 0;
 
 void log_boot(char *str)
 {
@@ -84,7 +92,17 @@ void log_boot(char *str)
     mutex_unlock(&mt_bootprof_lock);
 }
 
-
+#ifdef CONFIG_MT_PRINTK_UART_CONSOLE
+extern void mt_disable_uart(void);
+static void bootup_finish(void)
+{
+    mt_disable_uart();
+}
+#else
+static void bootup_finish(void)
+{
+}
+#endif
 //extern void (*set_intact_mode)(void);
 static void mt_bootprof_switch(int on)
 {
@@ -95,9 +113,15 @@ static void mt_bootprof_switch(int on)
 		{
 		    mt_bootprof_enabled = 1;
 		}
-		else
-		{
-		    mt_bootprof_enabled = 0;		
+		else 
+		{   // boot up complete
+		    mt_bootprof_enabled = 0;
+			if(boot_up == 0)
+				{
+			mt_cpufreq_state_set(1);
+			boot_up = 1;
+				}
+            bootup_finish();
 		}
     }
     mutex_unlock(&mt_bootprof_lock);
@@ -136,9 +160,11 @@ static int mt_bootprof_show(struct seq_file *m, void *v)
     SEQ_printf(m, "%d	    BOOT PROF (unit:msec)\n", mt_bootprof_enabled);
     SEQ_printf(m, "----------------------------------------\n");
 
-    if (pl_t > 0 && lk_t > 0) {
-        SEQ_printf(m, "%10d        : %s\n", pl_t, "preloader");
-        SEQ_printf(m, "%10d        : %s\n", lk_t, "lk");
+    if (bootprof_pl_t > 0 && bootprof_lk_t > 0) {
+        SEQ_printf(m, "%10d        : %s\n", bootprof_pl_t, "preloader");
+        SEQ_printf(m, "%10d        : %s\n", bootprof_lk_t, "lk");
+		SEQ_printf(m, "%10d        : %s\n", 
+			gpt_boot_time() - bootprof_pl_t - bootprof_lk_t, "lk->Kernel");
         SEQ_printf(m, "----------------------------------------\n");
     }
 
@@ -155,22 +181,6 @@ static int mt_bootprof_open(struct inode *inode, struct file *file)
     return single_open(file, mt_bootprof_show, inode->i_private); 
 } 
 
-static int __init setup_pl_t(char *str)
-{
-    pl_t = simple_strtol(str, NULL, 10);
-    return 1;
-}
-
-__setup("pl_t=", setup_pl_t);
-
-static int __init setup_lk_t(char *str)
-{
-    lk_t = simple_strtol(str, NULL, 10);
-	return 1;
-}
-
-__setup("lk_t=", setup_lk_t);
-
 static const struct file_operations mt_bootprof_fops = { 
     .open = mt_bootprof_open, 
     .write = mt_bootprof_write,
@@ -181,6 +191,7 @@ static const struct file_operations mt_bootprof_fops = {
 static int __init init_boot_prof(void)
 {
     struct proc_dir_entry *pe;
+	mt_cpufreq_state_set(0);
 
     pe = proc_create("bootprof", 0664, NULL, &mt_bootprof_fops);
     if (!pe)

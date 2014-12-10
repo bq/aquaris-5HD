@@ -64,7 +64,6 @@ int spc_test(int code)
 void spc_config(MTK_SPC_CONFIG* pCfg)
 {
     unsigned int regval;
-    int j;
 
     SPCMSG("spc config prot=(%d,%d,%d,%d), start=0x%x, end=0x%x\n",
         pCfg->domain_0_prot,pCfg->domain_1_prot,

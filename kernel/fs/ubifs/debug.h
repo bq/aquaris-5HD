@@ -16,7 +16,7 @@
  * this program; if not, write to the Free Software Foundation, Inc., 51
  * Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  *
- * Authors: Artem Bityutskiy (Битюцкий Артём)
+ * Authors: Artem Bityutskiy (?и???кий ????м)
  *          Adrian Hunter
  */
 
@@ -124,6 +124,10 @@ struct ubifs_debug_info {
 	struct dentry *dfs_chk_lprops;
 	struct dentry *dfs_chk_fs;
 	struct dentry *dfs_tst_rcvry;
+	struct dentry *dfs_lca_debug;
+        struct dentry *dfs_lca_show_tnc;
+        struct dentry *dfs_wbuf_count;
+        struct dentry *dfs_host_wcount;
 };
 
 /**
@@ -143,6 +147,18 @@ struct ubifs_global_debug_info {
 	unsigned int chk_lprops:1;
 	unsigned int chk_fs:1;
 	unsigned int tst_rcvry:1;
+};
+
+/**
+ * ubifs_global_debug_tnc - global (not per-FS) UBIFS debugging tnc information.
+ *
+ */
+struct ubifs_global_debug_tnc {
+    unsigned int total_ubifs_volume;
+    uint32_t total_znode;
+    uint32_t total_tnc_leaf_lens;
+    uint32_t total_clean_znode;
+    uint32_t total_clean_tnc_leaf_lens;
 };
 
 #define ubifs_assert(expr) do {                                                \
@@ -170,7 +186,7 @@ struct ubifs_global_debug_info {
 #define ubifs_dbg_msg(type, fmt, ...) \
 	pr_debug("UBIFS DBG " type ": " fmt "\n", ##__VA_ARGS__)
 
-#define DBG_KEY_BUF_LEN 32
+#define DBG_KEY_BUF_LEN 48
 #define ubifs_dbg_msg_key(type, key, fmt, ...) do {                            \
 	char __tmp_key_buf[DBG_KEY_BUF_LEN];                                   \
 	pr_debug("UBIFS DBG " type ": " fmt "%s\n", ##__VA_ARGS__,             \
@@ -307,11 +323,10 @@ int dbg_check_data_nodes_order(struct ubifs_info *c, struct list_head *head);
 int dbg_check_nondata_nodes_order(struct ubifs_info *c, struct list_head *head);
 
 int dbg_leb_write(struct ubifs_info *c, int lnum, const void *buf, int offs,
-		  int len, int dtype);
-int dbg_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len,
-		   int dtype);
+		  int len);
+int dbg_leb_change(struct ubifs_info *c, int lnum, const void *buf, int len);
 int dbg_leb_unmap(struct ubifs_info *c, int lnum);
-int dbg_leb_map(struct ubifs_info *c, int lnum, int dtype);
+int dbg_leb_map(struct ubifs_info *c, int lnum);
 
 /* Debugfs-related stuff */
 int dbg_debugfs_init(void);
@@ -455,13 +470,11 @@ dbg_check_nondata_nodes_order(struct ubifs_info *c,
 
 static inline int dbg_leb_write(struct ubifs_info *c, int lnum,
 				const void *buf, int offset,
-				int len, int dtype)               { return 0; }
+				int len)                          { return 0; }
 static inline int dbg_leb_change(struct ubifs_info *c, int lnum,
-				 const void *buf, int len,
-				 int dtype)                       { return 0; }
+				 const void *buf, int len)        { return 0; }
 static inline int dbg_leb_unmap(struct ubifs_info *c, int lnum)   { return 0; }
-static inline int dbg_leb_map(struct ubifs_info *c, int lnum,
-			      int dtype)                          { return 0; }
+static inline int dbg_leb_map(struct ubifs_info *c, int lnum)     { return 0; }
 
 static inline int dbg_is_chk_gen(const struct ubifs_info *c)      { return 0; }
 static inline int dbg_is_chk_index(const struct ubifs_info *c)    { return 0; }

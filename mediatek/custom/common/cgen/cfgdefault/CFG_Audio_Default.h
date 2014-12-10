@@ -28,6 +28,7 @@
 #include "../cfgfileinc/CFG_AUDIO_File.h"
 #include "../inc/sph_coeff_record_mode_default.h"
 #include "../inc/sph_coeff_dmnr_default.h"
+#include "../inc/sph_coeff_dmnr_handsfree_default.h"
 #include "../inc/audio_hd_record_custom.h"
 #include "../inc/audio_acf_default.h"
 #include "../inc/audio_hcf_default.h"
@@ -37,6 +38,8 @@
 #include "../inc/audio_hd_record_48k_custom.h"
 #include "../inc/voice_recognition_custom.h"
 #include "../inc/audio_audenh_control_option.h"
+#include "../inc/audio_voip_custom.h"
+#include "../inc/audio_acfsub_default.h"
 
 
 AUDIO_CUSTOM_PARAM_STRUCT speech_custom_default =
@@ -152,6 +155,21 @@ AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_custom_default =
 	BES_LOUDNESS_GAIN_MAP_OUT,
 };
 
+AUDIO_ACF_CUSTOM_PARAM_STRUCT audiosub_custom_default =
+{
+    BES_LOUDNESS_HSF_COEFF_SUB,
+	BES_LOUDNESS_BPF_COEFF_SUB,
+	BES_LOUDNESS_LPF_COEFF_SUB,
+	BES_LOUDNESS_WS_GAIN_MAX_SUB,
+	BES_LOUDNESS_WS_GAIN_MIN_SUB,
+	BES_LOUDNESS_FILTER_FIRST_SUB,
+	BES_LOUDNESS_ATT_TIME_SUB,
+	BES_LOUDNESS_REL_TIME_SUB,
+	BES_LOUDNESS_GAIN_MAP_IN_SUB,
+	BES_LOUDNESS_GAIN_MAP_OUT_SUB,
+};
+
+
 AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_hcf_custom_default =
 {
     BES_LOUDNESS_HCF_HSF_COEFF,
@@ -165,6 +183,20 @@ AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_hcf_custom_default =
 	BES_LOUDNESS_HCF_GAIN_MAP_IN,
 	BES_LOUDNESS_HCF_GAIN_MAP_OUT,
 };
+AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_vibspk_custom_default =
+{
+    BES_LOUDNESS_HSF_COEFF,
+	BES_LOUDNESS_BPF_COEFF,
+	BES_LOUDNESS_LPF_COEFF,
+	BES_LOUDNESS_WS_GAIN_MAX,
+	BES_LOUDNESS_WS_GAIN_MIN,
+	BES_LOUDNESS_FILTER_FIRST,
+	BES_LOUDNESS_ATT_TIME,
+	BES_LOUDNESS_REL_TIME,
+	BES_LOUDNESS_GAIN_MAP_IN,
+	BES_LOUDNESS_GAIN_MAP_OUT,
+};
+
 #else
 AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_custom_default =
 {
@@ -195,6 +227,22 @@ AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_hcf_custom_default =
     BES_LOUDNESS_HCF_GAIN_MAP_IN,
     BES_LOUDNESS_HCF_GAIN_MAP_OUT,
 };
+
+AUDIO_ACF_CUSTOM_PARAM_STRUCT audio_vibspk_custom_default =
+{
+    /* Compensation Filter HSF coeffs: default all pass filter       */
+    /* BesLoudness also uses this coeffs    */
+    BES_LOUDNESS_HSF_COEFF,
+    /* Compensation Filter BPF coeffs: default all pass filter      */
+    BES_LOUDNESS_BPF_COEFF,
+    BES_LOUDNESS_DRC_FORGET_TABLE,
+    BES_LOUDNESS_WS_GAIN_MAX,
+    BES_LOUDNESS_WS_GAIN_MIN,
+    BES_LOUDNESS_FILTER_FIRST,
+    BES_LOUDNESS_GAIN_MAP_IN,
+    BES_LOUDNESS_GAIN_MAP_OUT,
+};
+
 #endif
 
 AUDIO_EFFECT_CUSTOM_PARAM_STRUCT audio_effect_custom_default =
@@ -259,7 +307,12 @@ AUDIO_VOLUME_CUSTOM_STRUCT audio_volume_custom_default =
 AUDIO_CUSTOM_EXTRA_PARAM_STRUCT dual_mic_custom_default =
 {
     DEFAULT_SPEECH_DUAL_MIC_ABF_PARA,
-    DEFAULT_SPEECH_DUAL_MIC_ABFWB_PARA
+    DEFAULT_SPEECH_DUAL_MIC_ABFWB_PARA,
+    DEFAULT_SPEECH_DUAL_MIC_ABF_PARA_LoudSPK,
+    DEFAULT_SPEECH_DUAL_MIC_ABFWB_PARA_LoudSPK,
+    DEFAULT_SPEECH_DUAL_MIC_ABFWB_PARA_VR,
+    DEFAULT_SPEECH_DUAL_MIC_ABFWB_PARA_VOIP,
+    DEFAULT_SPEECH_DUAL_MIC_ABFWB_PARA_VOIP_LoudSPK
 };
 
 AUDIO_GAIN_TABLE_STRUCT Gain_control_table_default ={
@@ -276,7 +329,8 @@ AUDIO_GAIN_TABLE_STRUCT Gain_control_table_default ={
     DEFAULT_FM_GAIN_TABLE_PARA,
     DEFAULT_MICROPHONE_GAIN_TABLE_PARA,
     DEFAULT_SIDETONE_GAIN_TABLE_PARA,
-    DEFAULT_SPEECH_GAIN_TABLE_PARA
+    DEFAULT_SPEECH_GAIN_TABLE_PARA,
+    DEFAULT_SPEECH_WB_GAIN_TABLE_PARA
 };
 
 AUDIO_HD_RECORD_PARAM_STRUCT Hd_Recrod_Par_default = {
@@ -326,6 +380,20 @@ VOICE_RECOGNITION_PARAM_STRUCT Voice_Recognize_Par_default = {
 
 AUDIO_AUDENH_CONTROL_OPTION_STRUCT AUDENH_Control_Option_Par_default = {    
     DEFAULT_AUDIO_AUDENH_CONTROL_OPTION_Coeff
+};
+
+AUDIO_BUFFER_DC_CALIBRATION_STRUCT Audio_Buffer_DC_Calibration_Par_default = {
+    0xFFFF,
+    0,
+    0,
+    0
+};
+
+AUDIO_VOIP_PARAM_STRUCT Audio_VOIP_Par_default = {    
+    DEFAULT_VOIP_SPEECH_COMMON_PARAM,
+    DEFAULT_VOIP_SPEECH_MODE_PARAM,
+    DEFAULT_VOIP_IN_FIR_PARAM,
+    DEFAULT_VOIP_OUT_FIR_PARAM
 };
 
 #endif

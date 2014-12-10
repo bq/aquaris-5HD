@@ -20,9 +20,20 @@
 #include "si_8338_regs.h"
 #include "si_drv_mhl_tx.h"
 #include "si_platform.h"
+#include "smartbook.h"
+#include <linux/hrtimer.h>
+#include <linux/ktime.h>
 #include <mach/mt_gpio.h>
 #include <cust_gpio_usage.h>
 #include <cust_eint.h>
+#include "si_drv_mdt_tx.h"
+#include "si_mdt_inputdev.h"
+#include "hdmitx_i2c.h"
+
+static ktime_t hr_timer_AbortTimer_CHK_ktime;
+unsigned long delay_in_ms;
+#define MS_TO_NS(x)	(x * 1E6L)
+extern struct hrtimer hr_timer_AbortTimer_CHK;
 
 #define SILICON_IMAGE_ADOPTER_ID 322
 #define	POWER_STATE_D3				3
@@ -39,26 +50,26 @@ static	uint8_t	dsHpdStatus = 0;
 #define ReadByteCBUS(offset)         SiiRegRead( TX_PAGE_CBUS | (uint16_t)offset)
 #define	SET_BIT(offset,bitnumber)		SiiRegModify(offset,(1<<bitnumber),(1<<bitnumber))
 #define	CLR_BIT(offset,bitnumber)		SiiRegModify(offset,(1<<bitnumber),0x00)
-#define	DISABLE_DISCOVERY				SiiRegModify(REG_DISC_CTRL1,BIT0,0)
-#define	ENABLE_DISCOVERY				SiiRegModify(REG_DISC_CTRL1,BIT0,BIT0)
-#define STROBE_POWER_ON					SiiRegModify(REG_DISC_CTRL1,BIT1,0)
-#define INTR_1_DESIRED_MASK   (BIT7|BIT6)
-#define	UNMASK_INTR_1_INTERRUPTS		SiiRegWrite(REG_INTR1_MASK, INTR_1_DESIRED_MASK)
-#define	MASK_INTR_1_INTERRUPTS			SiiRegWrite(REG_INTR1_MASK, 0x00)
-#define INTR_2_DESIRED_MASK   (BIT1)
-#define	UNMASK_INTR_2_INTERRUPTS		SiiRegWrite(REG_INTR2_MASK, INTR_2_DESIRED_MASK)
-#define	INTR_4_DESIRED_MASK				(BIT0 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6) 
-#define	UNMASK_INTR_4_INTERRUPTS		SiiRegWrite(REG_INTR4_MASK, INTR_4_DESIRED_MASK)
-#define	MASK_INTR_4_INTERRUPTS			SiiRegWrite(REG_INTR4_MASK, 0x00)
-#define	INTR_5_DESIRED_MASK				(BIT2 | BIT3 | BIT4) 
-#define	UNMASK_INTR_5_INTERRUPTS		SiiRegWrite(REG_INTR5_MASK, INTR_5_DESIRED_MASK)
-#define	MASK_INTR_5_INTERRUPTS			SiiRegWrite(REG_INTR5_MASK, 0x00)
+#define	DISABLE_DISCOVERY				SiiRegModify(TX_PAGE_3 | 0x0010,BIT0,0)
+#define	ENABLE_DISCOVERY				SiiRegModify(TX_PAGE_3 | 0x0010,BIT0,BIT0)
+#define STROBE_POWER_ON					SiiRegModify(TX_PAGE_3 | 0x0010,BIT1,0)
+#define INTR_1_DESIRED_MASK  			(BIT7|BIT6)
+#define	UNMASK_INTR_1_INTERRUPTS		SiiRegWrite(TX_PAGE_L0| 0x0075, INTR_1_DESIRED_MASK)
+#define	MASK_INTR_1_INTERRUPTS			SiiRegWrite(TX_PAGE_L0| 0x0075, 0x00)
+#define INTR_2_DESIRED_MASK   			(BIT1)
+#define	UNMASK_INTR_2_INTERRUPTS		SiiRegWrite(TX_PAGE_L0| 0x0076, INTR_2_DESIRED_MASK)
+#define	INTR_4_DESIRED_MASK				(BIT0 | BIT2 | BIT3 | BIT4 | BIT5 | BIT6)
+#define	UNMASK_INTR_4_INTERRUPTS		SiiRegWrite(TX_PAGE_3 | 0x0022, INTR_4_DESIRED_MASK)
+#define	MASK_INTR_4_INTERRUPTS			SiiRegWrite(TX_PAGE_3 | 0x0022, 0x00)
+#define	INTR_5_DESIRED_MASK				0//(BIT2 | BIT3 | BIT4)
+#define	UNMASK_INTR_5_INTERRUPTS		SiiRegWrite(TX_PAGE_3 | 0x0024, INTR_5_DESIRED_MASK)
+#define	MASK_INTR_5_INTERRUPTS			SiiRegWrite(TX_PAGE_3 | 0x0024, 0x00)
 #define	INTR_CBUS1_DESIRED_MASK			(BIT2 | BIT3 | BIT4 | BIT5 | BIT6)
-#define	UNMASK_CBUS1_INTERRUPTS			SiiRegWrite(REG_CBUS_INTR_ENABLE, INTR_CBUS1_DESIRED_MASK)
-#define	MASK_CBUS1_INTERRUPTS			SiiRegWrite(REG_CBUS_INTR_ENABLE, 0x00)
-#define	INTR_CBUS2_DESIRED_MASK			(BIT2 | BIT3)
-#define	UNMASK_CBUS2_INTERRUPTS			SiiRegWrite(REG_CBUS_MSC_INT2_ENABLE, INTR_CBUS2_DESIRED_MASK)
-#define	MASK_CBUS2_INTERRUPTS			SiiRegWrite(REG_CBUS_MSC_INT2_ENABLE, 0x00)
+#define	UNMASK_CBUS1_INTERRUPTS			SiiRegWrite(TX_PAGE_CBUS | 0x0009, INTR_CBUS1_DESIRED_MASK)
+#define	MASK_CBUS1_INTERRUPTS			SiiRegWrite(TX_PAGE_CBUS | 0x0009, 0x00)
+#define	INTR_CBUS2_DESIRED_MASK			(BIT0 | BIT2 | BIT3)
+#define	UNMASK_CBUS2_INTERRUPTS			SiiRegWrite(TX_PAGE_CBUS | 0x001F, INTR_CBUS2_DESIRED_MASK)
+#define	MASK_CBUS2_INTERRUPTS			SiiRegWrite(TX_PAGE_CBUS | 0x001F, 0x00)
 #define I2C_INACCESSIBLE -1
 #define I2C_ACCESSIBLE 1
 #define SIZE_AVI_INFOFRAME				17
@@ -117,22 +128,28 @@ uint8_t SiiCheckDevice(uint8_t dev)
 }
 void SiiMhlTriggerSoftInt(void)
 {
-    SiiRegBitsSet(REG_INT_CTRL,BIT3,true);
+    SiiRegBitsSet(TX_PAGE_3 | 0x0020,BIT3,true);
 	HalTimerWait(5);
-    SiiRegBitsSet(REG_INT_CTRL,BIT3,false);
+    SiiRegBitsSet(TX_PAGE_3 | 0x0020,BIT3,false);
 }
 #endif 
+
+#ifdef MDT_SUPPORT
+enum mdt_state			g_state_for_mdt = IDLE;
+extern struct msc_request 	g_prior_msc_request;
+#endif
+
 static void Int1Isr(void)
 {
     uint8_t regIntr1;
-    regIntr1 = SiiRegRead(REG_INTR1);
+    regIntr1 = SiiRegRead(TX_PAGE_L0| 0x0071);
     if (regIntr1)
     {
-        SiiRegWrite(REG_INTR1,regIntr1);
+        SiiRegWrite(TX_PAGE_L0| 0x0071,regIntr1);
         if (BIT6 & regIntr1)
         {
             uint8_t cbusStatus;
-        	cbusStatus = SiiRegRead(REG_MSC_REQ_ABORT_REASON);
+        	cbusStatus = SiiRegRead(TX_PAGE_CBUS | 0x000D);
         	TX_DEBUG_PRINT(("Drv: dsHpdStatus =%02X\n", (int) dsHpdStatus));
         	if(BIT6 & (dsHpdStatus ^ cbusStatus))
         	{
@@ -154,10 +171,10 @@ static void Int1Isr(void)
 }
 static	int	Int2Isr( void )
 {
-    if(SiiRegRead(REG_INTR2) & INTR_2_DESIRED_MASK)
+    if(SiiRegRead(TX_PAGE_L0| 0x0072) & INTR_2_DESIRED_MASK)
     {
-        SiiRegWrite(REG_INTR2, INTR_2_DESIRED_MASK);
-        if(SiiRegRead(REG_SYS_STAT) & BIT1)
+        SiiRegWrite(TX_PAGE_L0| 0x0072, INTR_2_DESIRED_MASK);
+        if(SiiRegRead(TX_PAGE_L0 | 0x0009) & BIT1)
         {
             TX_DEBUG_PRINT(("PCLK is STABLE\n"));
             if (tmdsPowRdy)
@@ -171,7 +188,7 @@ static	int	Int2Isr( void )
 }
 bool_t SiiMhlTxChipInitialize ( void )
 {
-    unsigned int initState = 0;
+    unsigned int initState = 0,g_chipRevId=0;
     tmdsPowRdy = false;
     mscCmdInProgress = false;	
     dsHpdStatus = 0;
@@ -187,12 +204,14 @@ bool_t SiiMhlTxChipInitialize ( void )
     //SiiMhlTxHwReset(TX_HW_RESET_PERIOD,TX_HW_RESET_DELAY);  
     //SiiCraInitialize();
 
+   	g_chipRevId = SiiRegRead(TX_PAGE_L0 | 0x04);
+
     initState = (SiiRegRead(TX_PAGE_L0 | 0x03) << 8) | SiiRegRead(TX_PAGE_L0 | 0x02);
-	//TX_DEBUG_PRINT(("Drv: SiiMhlTxChipInitialize: %02X%02x\n",
-//						SiiRegRead(TX_PAGE_L0 | 0x03),
-//						SiiRegRead(TX_PAGE_L0 | 0x02)));
-	
-    TX_DEBUG_PRINT(("Drv: SiiMhlTxChipInitialize: 0x%04X\n", initState));
+    TX_DEBUG_PRINT(("Drv: SiiMhlTxChipInitialize:%04X,g_chipRevId=0x%x\n", initState,g_chipRevId));
+	if((initState&0xFF)!=0x52){
+		SwitchToD3();
+		return false;;
+		}
 	WriteInitialRegisterValues();
 #ifndef __KERNEL__
     SiiOsMhlTxInterruptEnable();
@@ -225,8 +244,36 @@ void 	SiiMhlTxDeviceIsr( void )
 	i=0;
     do
     {
+        TX_DEBUG_PRINT(("Drv: SiiMhlTxDeviceIsr %d \n", fwPowerState));
+#ifdef MDT_SUPPORT
+		if (g_state_for_mdt != IDLE) {
+			//TX_DEBUG_PRINT(("g_state_for_mdt=%d,HalGpioGetTxIntPin22222222222=%d#######################\n",g_state_for_mdt,HalGpioGetTxIntPin()));
+
+		while ((sii8338_irq_for_mdt(&g_state_for_mdt) == MDT_EVENT_HANDLED)||(g_state_for_mdt != WAIT_FOR_REQ_WRT)){
+				//TX_DEBUG_PRINT(("g_state_for_mdt=%d\n",g_state_for_mdt));
+				Int4Isr();
+				if(fwPowerState == POWER_STATE_D3)
+					return;
+				}//&&(SiiRegRead(TX_PAGE_L0| 0x0070)&0x01));//
+					//&&	(HalGpioGetTxIntPin() == MHL_INT_ASSERTED_VALUE));
+			//{
+
+				//TX_DEBUG_PRINT(("g_state_for_mdt=%d,HalGpioGetTxIntPin=%d@@@@@@@@@@@@@@@@@@@@@@\n",g_state_for_mdt,HalGpioGetTxIntPin()));
+			//if (HalGpioGetTxIntPin() != MHL_INT_ASSERTED_VALUE) {
+				//MHL_log_event(IRQ_RECEIVED, 1, HalGpioGetTxIntPin());
+				//if(!(SiiRegRead(TX_PAGE_L0| 0x0070)&0x01))
+				//return;
+			//}
+			//}
+		}
+		//TX_DEBUG_PRINT(("g_state_for_mdt=%d,HalGpioGetTxIntPin3333333333333=%d#######################\n",g_state_for_mdt,HalGpioGetTxIntPin()));
+
+		MHL_log_event(ISR_FULL_BEGIN, 0, HalGpioGetTxIntPin());
+#endif
+
         if( POWER_STATE_D0_MHL != fwPowerState )
         {
+            
             if(I2C_INACCESSIBLE == Int4Isr())
             {
 				TX_DEBUG_PRINT(("Drv: I2C_INACCESSIBLE in Int4Isr in not D0 mode\n"));
@@ -235,6 +282,40 @@ void 	SiiMhlTxDeviceIsr( void )
         }
         else if( POWER_STATE_D0_MHL == fwPowerState )
         {
+
+#if 0
+						TX_DEBUG_PRINT(("********* EXITING ISR *************\n"));
+						TX_DEBUG_PRINT(("Drv: INT1 Status = %02X\n", (int) SiiRegRead((TX_PAGE_L0 | 0x0071))));
+						TX_DEBUG_PRINT(("Drv: INT2 Status = %02X\n", (int) SiiRegRead((TX_PAGE_L0 | 0x0072))));
+						TX_DEBUG_PRINT(("Drv: INT3 Status = %02X\n", (int) SiiRegRead((TX_PAGE_L0 | 0x0073))));
+						TX_DEBUG_PRINT(("Drv: INT4 Status = %02X\n", (int) SiiRegRead(TX_PAGE_3 | 0x0021)));
+						TX_DEBUG_PRINT(("Drv: INT5 Status = %02X\n", (int) SiiRegRead(TX_PAGE_3 | 0x0023)));
+
+
+						TX_DEBUG_PRINT(("Drv: cbusInt Status = %02X\n", (int) SiiRegRead(TX_PAGE_CBUS | 0x0008)));
+
+						TX_DEBUG_PRINT(("Drv: CBUS INTR_2: 0x1E: %02X\n", (int) SiiRegRead(TX_PAGE_CBUS | 0x001E)));
+						TX_DEBUG_PRINT(("Drv: A0 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00A0))));
+						TX_DEBUG_PRINT(("Drv: A1 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00A1))));
+						TX_DEBUG_PRINT(("Drv: A2 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00A2))));
+						TX_DEBUG_PRINT(("Drv: A3 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00A3))));
+
+						TX_DEBUG_PRINT(("Drv: B0 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00B0))));
+						TX_DEBUG_PRINT(("Drv: B1 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00B1))));
+						TX_DEBUG_PRINT(("Drv: B2 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00B2))));
+						TX_DEBUG_PRINT(("Drv: B3 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00B3))));
+
+						TX_DEBUG_PRINT(("Drv: E0 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00E0))));
+						TX_DEBUG_PRINT(("Drv: E1 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00E1))));
+						TX_DEBUG_PRINT(("Drv: E2 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00E2))));
+						TX_DEBUG_PRINT(("Drv: E3 STATUS Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00E3))));
+
+						TX_DEBUG_PRINT(("Drv: F0 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00F0))));
+						TX_DEBUG_PRINT(("Drv: F1 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00F1))));
+						TX_DEBUG_PRINT(("Drv: F2 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00F2))));
+						TX_DEBUG_PRINT(("Drv: F3 INT Set = %02X\n", (int) SiiRegRead((TX_PAGE_CBUS | 0x00F3))));
+						TX_DEBUG_PRINT(("********* END OF EXITING ISR *************\n"));
+	#endif
             if(I2C_INACCESSIBLE == Int4Isr())
             {
            		TX_DEBUG_PRINT(("Drv: I2C_INACCESSIBLE in Int4Isr in D0 mode\n"));
@@ -249,7 +330,7 @@ void 	SiiMhlTxDeviceIsr( void )
         {
     		MhlTxProcessEvents();
         }
-		intMStatus = SiiRegRead(REG_INTR_STATE);	
+		intMStatus = SiiRegRead(TX_PAGE_L0| 0x0070);
 		if(0xFF == intMStatus)
 		{
 			intMStatus = 0;
@@ -295,14 +376,21 @@ void SiiMhlTxDrvTmdsControl (bool_t enable)
 {
 	if (enable)
 	{
+	#ifdef MDT_SUPPORT
+		mdt_init();
+	#endif
         tmdsPowRdy = true;
-	    SiiRegModify(REG_AUDP_TXCTRL, BIT0, SET_BITS);
+	    SiiRegModify(TX_PAGE_L1 | 0x2F, BIT0, SET_BITS);
         if (1)//(SiiVideoInputIsValid())
         {
-    		SiiRegModify(REG_TMDS_CCTRL, TMDS_OE, SET_BITS);
+    		SiiRegModify(TX_PAGE_L0 | 0x0080, BIT4, SET_BITS);
             SendAudioInfoFrame();
             SendAviInfoframe();
             TX_DEBUG_PRINT(("TMDS Output Enabled\n"));
+            //Timon
+            #ifdef MTK_SMARTBOOK_SUPPORT
+            SiiHandshakeCommand(Init);
+            #endif
         }
         else
         {
@@ -311,10 +399,13 @@ void SiiMhlTxDrvTmdsControl (bool_t enable)
 	}
 	else
 	{
-		SiiRegModify(REG_TMDS_CCTRL, TMDS_OE, CLEAR_BITS);
-		SiiRegModify(REG_AUDP_TXCTRL, BIT0, CLEAR_BITS);
+		SiiRegModify(TX_PAGE_L0 | 0x0080, BIT4, CLEAR_BITS);
+		SiiRegModify(TX_PAGE_L1 | 0x2F, BIT0, CLEAR_BITS);
         tmdsPowRdy = false;
 	    TX_DEBUG_PRINT(("TMDS Ouput Disabled\n"));
+#ifdef MDT_SUPPORT
+		mdt_deregister();
+#endif
 	}
 }
 void	SiiMhlTxDrvNotifyEdidChange ( void )
@@ -330,7 +421,7 @@ bool_t SiiMhlTxDrvSendCbusCommand ( cbus_req_t *pReq  )
 	{
 	    TX_DEBUG_PRINT(("Error: fwPowerState: %02X, or CBUS(0x0A):%02X mscCmdInProgress = %d\n",
 			(int) fwPowerState,
-			(int) SiiRegRead(REG_CBUS_BUS_STATUS),
+			(int) SiiRegRead(TX_PAGE_CBUS | 0x000A),
 			(int) mscCmdInProgress));
    		return false;
 	}
@@ -339,19 +430,19 @@ bool_t SiiMhlTxDrvSendCbusCommand ( cbus_req_t *pReq  )
 			(int)pReq->command, 
             (int)((MHL_MSC_MSG == pReq->command)?pReq->payload_u.msgData[0]:pReq->offsetData),
             (int)((MHL_MSC_MSG == pReq->command)?pReq->payload_u.msgData[1]:pReq->payload_u.msgData[0])));
-	SiiRegWrite(REG_MSC_CMD_OR_OFFSET, pReq->offsetData); 	
-	SiiRegWrite(REG_CBUS_PRI_WR_DATA_1ST, pReq->payload_u.msgData[0]);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0013, pReq->offsetData);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0014, pReq->payload_u.msgData[0]);
     startbit = 0x00;
     switch ( pReq->command )
     {
 		case MHL_SET_INT:	
-			startbit = MSC_START_BIT_WRITE_REG;
+			startbit = 0x01 << 3;
 			break;
-        case MHL_WRITE_STAT:	
-            startbit = MSC_START_BIT_WRITE_REG;
+        case MHL_WRITE_STAT:
+            startbit = 0x01 << 3;
             break;
         case MHL_READ_DEVCAP:	
-            startbit = MSC_START_BIT_READ_REG;
+            startbit = 0x01 << 2;
             break;
  		case MHL_GET_STATE:			
 		case MHL_GET_VENDOR_ID:		
@@ -361,31 +452,22 @@ bool_t SiiMhlTxDrvSendCbusCommand ( cbus_req_t *pReq  )
 		case MHL_GET_DDC_ERRORCODE:		
 		case MHL_GET_MSC_ERRORCODE:		
 		case MHL_GET_SC3_ERRORCODE:		
-			SiiRegWrite(REG_MSC_CMD_OR_OFFSET, pReq->command );
-            startbit = MSC_START_BIT_MSC_CMD;
+			SiiRegWrite(TX_PAGE_CBUS | 0x0013, pReq->command );
+            startbit = 0x01 << 0;
             break;
         case MHL_MSC_MSG:
-			SiiRegWrite(REG_CBUS_PRI_WR_DATA_2ND, pReq->payload_u.msgData[1] );
-			SiiRegWrite(REG_MSC_CMD_OR_OFFSET, pReq->command );
-            startbit = MSC_START_BIT_VS_CMD;
+			SiiRegWrite(TX_PAGE_CBUS | 0x0015, pReq->payload_u.msgData[1] );
+			SiiRegWrite(TX_PAGE_CBUS | 0x0013, pReq->command );
+            startbit = 0x01 << 1;
             break;
         case MHL_WRITE_BURST:
-            SiiRegWrite(REG_MSC_WRITE_BURST_LEN, pReq->length -1 );
-            if (NULL == pReq->payload_u.pdatabytes)
-            {
-                TX_DEBUG_PRINT(("\nPut pointer to WRITE_BURST data in req.pdatabytes!!!\n\n"));
-                success = false;
-}
-            else
-            {
-	            uint8_t *pData = pReq->payload_u.pdatabytes;
-                TX_DEBUG_PRINT(("\nWriting data into scratchpad\n\n"));
-	            for ( i = 0; i < pReq->length; i++ )
-				{
-					SiiRegWrite(REG_CBUS_SCRATCHPAD_0 + i, *pData++ );
-				}
-	            startbit = MSC_START_BIT_WRITE_BURST;
-			}
+            SiiRegWrite(TX_PAGE_CBUS | 0x0020, pReq->length -1 );
+            uint8_t *pData = pReq->payload_u.msgData;
+            TX_DEBUG_PRINT(("\nWriting data into scratchpad\n\n"));
+            for ( i = 0; i < pReq->length; i++ ){
+                SiiRegWrite(REG_CBUS_SCRATCHPAD_0 + i, *pData++ );
+            }
+            startbit = MSC_START_BIT_WRITE_BURST;
             break;
         default:
             success = false;
@@ -393,7 +475,7 @@ bool_t SiiMhlTxDrvSendCbusCommand ( cbus_req_t *pReq  )
     }
     if ( success )
     {
-        SiiRegWrite(REG_MSC_COMMAND_START, startbit );
+        SiiRegWrite(TX_PAGE_CBUS | 0x0012, startbit );
     }
     else
     {
@@ -408,35 +490,39 @@ bool_t SiiMhlTxDrvCBusBusy(void)
 static void WriteInitialRegisterValues ( void )
 {
 	TX_DEBUG_PRINT(("WriteInitialRegisterValues\n"));
-	SiiRegWrite(REG_POWER_EN, 0x3F);			
-	SiiRegWrite(REG_MHLTX_CTL6, 0xBC);              
-	SiiRegWrite(REG_MHLTX_CTL2, 0x3C);              
-	SiiRegWrite(REG_MHLTX_CTL4, 0xC8);              
-	SiiRegWrite(REG_MHLTX_CTL7, 0x03);              
-	SiiRegWrite(REG_MHLTX_CTL8, 0x0A);              
-    SiiRegWrite(REG_TMDS_CCTRL, 0x08);              
-	SiiRegWrite(REG_USB_CHARGE_PUMP_MHL, 0x03);     
-	SiiRegWrite(REG_USB_CHARGE_PUMP, 0x8C);         
-	SiiRegWrite(REG_SYS_CTRL1, 0x35);               
-	SiiRegWrite(REG_DISC_CTRL5, 0x57);				
-	SiiRegWrite(REG_DISC_CTRL9, 0x24);				
-	SiiRegWrite(REG_DISC_CTRL1, 0x27);				
-	SiiRegWrite(REG_DISC_CTRL3, 0x86);				
+	SiiRegWrite(TX_PAGE_L1 | 0x003D, 0x3F);
+	SiiRegWrite(TX_PAGE_3 | 0x0035, 0xBC);
+	SiiRegWrite(TX_PAGE_3 | 0x0031, 0x3C);
+	SiiRegWrite(TX_PAGE_3 | 0x0033, 0xC8);
+	SiiRegWrite(TX_PAGE_3 | 0x0036, 0x03);
+	SiiRegWrite(TX_PAGE_3 | 0x0037, 0x0A);
+    SiiRegWrite(TX_PAGE_L0 | 0x0080, 0x08);
+	SiiRegWrite(TX_PAGE_L0 | 0x00F7, 0x03);
+	SiiRegWrite(TX_PAGE_L0 | 0x00F8, 0x8C);
+#ifdef MHL_SET_24PIN_MODE
+	SiiRegWrite(TX_PAGE_L0 | 0x0008, 0x35);
+#else
+	SiiRegWrite(TX_PAGE_L0 | 0x0008, 0x31);
+#endif
+	SiiRegWrite(TX_PAGE_3 | 0x0014, 0x57);
+	SiiRegWrite(TX_PAGE_3 | 0x0018, 0x04);    ////0x24 -->0x4 for some smartbook will disconnect.
+	SiiRegWrite(TX_PAGE_3 | 0x0010, 0x27);
+	SiiRegWrite(TX_PAGE_3 | 0x0012, 0x86);
 	CbusReset();
 	InitCBusRegs();
-    SiiRegModify(REG_LM_DDC, VID_MUTE, SET_BITS);       
-    SiiRegModify(REG_AUDP_TXCTRL, BIT2, SET_BITS);      
+    SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT5, SET_BITS);
+    SiiRegModify(TX_PAGE_L1 | 0x2F, BIT2, SET_BITS);
 }
 static void InitCBusRegs( void )
 {
-	SiiRegWrite(REG_CBUS_CFG, 0xF2); 			
-	SiiRegWrite(REG_CBUS_CTRL1, 0x01);          
-	SiiRegWrite(REG_CBUS_CTRL2, 0x2D);          
-	SiiRegWrite(REG_CBUS_CTRL7, 0x0a); 		    
-	SiiRegWrite(REG_CBUS_DRV_STR0, 0x03); 		
-    SiiRegWrite(REG_MSC_COMP_CTRL , 0x11);      
-	SiiRegWrite(REG_MSC_TIMEOUT_LIMIT, 0x0F);           
-#define DEVCAP_REG(x) (REG_CBUS_DEVICE_CAP_0 | DEVCAP_OFFSET_##x)
+	SiiRegWrite(TX_PAGE_CBUS | 0x0007, 0xF2);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0030, 0x01);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0031, 0x2D);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0036, 0x0a);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0040, 0x03);
+    SiiRegWrite(TX_PAGE_CBUS | 0x002E , 0x11);
+	SiiRegWrite(TX_PAGE_CBUS | 0x0022, 0x0F);
+#define DEVCAP_REG(x) (TX_PAGE_CBUS | 0x0080 | DEVCAP_OFFSET_##x)
 	SiiRegWrite(DEVCAP_REG(DEV_STATE      ) ,DEVCAP_VAL_DEV_STATE       );
 	SiiRegWrite(DEVCAP_REG(MHL_VERSION    ) ,DEVCAP_VAL_MHL_VERSION     );
 	SiiRegWrite(DEVCAP_REG(DEV_CAT        ) ,DEVCAP_VAL_DEV_CAT         );
@@ -457,23 +543,23 @@ static void InitCBusRegs( void )
 static void ForceUsbIdSwitchOpen ( void )
 {
 	DISABLE_DISCOVERY;
-	SiiRegModify(REG_DISC_CTRL6, BIT6, BIT6);				
-	SiiRegWrite(REG_DISC_CTRL3, 0x86);
+	SiiRegModify(TX_PAGE_3 | 0x0015, BIT6, BIT6);
+	SiiRegWrite(TX_PAGE_3 | 0x0012, 0x86);
 }
 static void ReleaseUsbIdSwitchOpen ( void )
 {
-	HalTimerWait(50); 
-	SiiRegModify(REG_DISC_CTRL6, BIT6, 0x00);
+	HalTimerWait(15);
+	SiiRegModify(TX_PAGE_3 | 0x0015, BIT6, 0x00);
 	ENABLE_DISCOVERY;
 }
 void SiiMhlTxDrvProcessRgndMhl( void )
 {
-	SiiRegModify(REG_DISC_CTRL9, BIT0, BIT0);
+	SiiRegModify(TX_PAGE_3 | 0x0018, BIT0, BIT0);
 }
 void ProcessRgnd (void)
 {
 	uint8_t rgndImpedance;
-	rgndImpedance = SiiRegRead(REG_DISC_STAT2) & 0x03;
+	rgndImpedance = SiiRegRead(TX_PAGE_3 | 0x001C) & 0x03;
 	TX_DEBUG_PRINT(("RGND = %02X : \n", (int)rgndImpedance));
 	if (0x02 == rgndImpedance)
 	{
@@ -482,7 +568,7 @@ void ProcessRgnd (void)
 	}
 	else
 	{
-		SiiRegModify(REG_DISC_CTRL9, BIT3, BIT3);	
+		SiiRegModify(TX_PAGE_3 | 0x0018, BIT3, BIT3);
 		TX_DEBUG_PRINT(("(Non-MHL Device)\n"));
 	}
 }
@@ -502,61 +588,49 @@ void	SwitchToD3( void )
 	if(POWER_STATE_D3 != fwPowerState)
 	{
         TX_DEBUG_PRINT(("Switch To D3\n"));
-#ifdef __KERNEL__
-        //HalGpioSetPin(GPIO_M2U_VBUS_CTRL,1);
-#else
-        pinM2uVbusCtrlM = 1;
-#endif
-#if (SYSTEM_BOARD == SB_EPV5_MARK_II)
-        pinMhlConn = 1;
-        pinUsbConn = 0;
-#elif (SYSTEM_BOARD == SB_STARTER_KIT_X01)
-#ifdef __KERNEL__
-        //HalGpioSetPin(GPIO_MHL_USB,1);
-#else
-        pinMhlUsb = 1;
-#endif
-#endif
-		// change TMDS termination to high impedance
-		//bits 1:0 set to 03
 		SiiRegWrite(TX_PAGE_2|0x0001, 0x03);
-		SiiRegWrite(REG_MHLTX_CTL1, 0xD0);
-
-		// clear all interrupt here before go into D3 mode by oscar
-		SiiRegWrite(REG_INTR1,0xFF);
-		SiiRegWrite(REG_INTR2,0xFF);
-		SiiRegWrite(REG_INTR4,0xFF); 
-		SiiRegWrite(REG_INTR5,0xFF);
-		SiiRegWrite(REG_CBUS_INTR_STATUS,0xFF); 
-		SiiRegWrite(REG_CBUS_MSC_INT2_STATUS,0xFF); 
+		SiiRegWrite(TX_PAGE_3 | 0x0030, 0xD0);
 
 
-#ifndef __KERNEL__
-		//if(HalGpioGetPin(pinAllowD3))
-		{
-#endif
+		SiiRegWrite(TX_PAGE_L0| 0x0071,0xFF);
+		SiiRegWrite(TX_PAGE_L0| 0x0072,0xFF);
+		SiiRegWrite(TX_PAGE_3 | 0x0021,0xBF);
+		SiiRegWrite(TX_PAGE_3 | 0x0023,0xFF);
+		SiiRegWrite(TX_PAGE_CBUS | 0x0008,0xFF);
+		SiiRegWrite(TX_PAGE_CBUS | 0x001E,0xFF);
+
+
 		ForceUsbIdSwitchOpen();
 		//HalTimerWait(50);
 		ReleaseUsbIdSwitchOpen();
 
-		//HalTimerWait(50);
-		CLR_BIT(REG_POWER_EN, 0);
+
+		CLR_BIT(TX_PAGE_L1 | 0x003D, 0);
 		CBusQueueReset();
-		fwPowerState = POWER_STATE_D3;
-#ifndef __KERNEL__
-		}/*else
-		{
-            //fwPowerState = POWER_STATE_D0_NO_MHL;
-		}
-		*/
+#ifdef MDT_SUPPORT	//MDT initialization.
+		//SiiRegWrite(TX_PAGE_CBUS | 0x00F0,
+		//MHL_INT_REQ_WRT | MHL_INT_DCAP_CHG);			//	 handle DSCR_CHG as part of REQ_WRT
+
+		g_state_for_mdt = IDLE;
+		g_prior_msc_request.offset	= 0;
+		g_prior_msc_request.first_data	= 0;
 #endif
+		fwPowerState = POWER_STATE_D3;
 	}
 }
 
 void	ForceSwitchToD3( void )
 {
-		//HalTimerWait(50);
-		CLR_BIT(REG_POWER_EN, 0);
+#ifdef MDT_SUPPORT	//MDT initialization.
+	//SiiRegWrite(TX_PAGE_CBUS | 0x00F0,
+	//	MHL_INT_REQ_WRT | MHL_INT_DCAP_CHG);			//	 handle DSCR_CHG as part of REQ_WRT
+
+	g_state_for_mdt = IDLE;
+	g_prior_msc_request.offset	= 0;
+	g_prior_msc_request.first_data	= 0;
+#endif
+
+		CLR_BIT(TX_PAGE_L1 | 0x003D, 0);
 		CBusQueueReset();
 		fwPowerState = POWER_STATE_D3;
 }
@@ -564,7 +638,7 @@ void	ForceSwitchToD3( void )
 static	int	Int4Isr( void )
 {
 	uint8_t int4Status;
-	int4Status = SiiRegRead(REG_INTR4);	
+	int4Status = SiiRegRead(TX_PAGE_3 | 0x0021);
     if(!int4Status)
     {
     }
@@ -585,7 +659,7 @@ static	int	Int4Isr( void )
     	else if(int4Status & BIT3)
     	{
     		TX_DEBUG_PRINT(("uUSB-A type device detected.\n"));
-    		SiiRegWrite(REG_DISC_STAT2, 0x80);	
+    		SiiRegWrite(TX_PAGE_3 | 0x001C, 0x80);
     		SwitchToD3();
 			return I2C_INACCESSIBLE;
         }
@@ -609,58 +683,38 @@ static	int	Int4Isr( void )
             }
         }
     }
-	SiiRegWrite(REG_INTR4, int4Status);	
+	SiiRegWrite(TX_PAGE_3 | 0x0021, int4Status);
 	return I2C_ACCESSIBLE;
 }
 static void Int5Isr (void)
 {
 	uint8_t int5Status;
-	int5Status = SiiRegRead(REG_INTR5);	
+	int5Status = SiiRegRead(TX_PAGE_3 | 0x0023);
 	if (int5Status)
 	{
-#if (SYSTEM_BOARD == SB_STARTER_KIT_X01)
+#if 0//(SYSTEM_BOARD == SB_STARTER_KIT_X01)
     	if((int5Status & BIT3) || (int5Status & BIT2))
     	{
     		TX_DEBUG_PRINT (("** Apply MHL FIFO Reset\n"));
-    		SiiRegModify(REG_SRST, BIT4, SET_BITS);
-    		SiiRegModify(REG_SRST, BIT4, CLEAR_BITS);
+    		SiiRegModify(TX_PAGE_3 | 0x0000, BIT4, SET_BITS);
+    		SiiRegModify(TX_PAGE_3 | 0x0000, BIT4, CLEAR_BITS);
     	}
 #endif
         if (int5Status & BIT4)
         {
     		TX_DEBUG_PRINT (("** PXL Format changed\n"));
-#ifndef __KERNEL__
-            SiiOsBumpMhlTxEvent();
-#else
-            //SiiTriggerExtInt();
-#endif
         }
-    	SiiRegWrite(REG_INTR5, int5Status);	
+    	SiiRegWrite(TX_PAGE_3 | 0x0023, int5Status);
 	}
 }
 static void MhlTxDrvProcessConnection ( void )
 {
-	TX_DEBUG_PRINT (("MHL Cable Connected. CBUS:0x0A = %02X\n", (int) SiiRegRead(REG_CBUS_BUS_STATUS)));
+	TX_DEBUG_PRINT (("MHL Cable Connected. CBUS:0x0A = %02X\n", (int) SiiRegRead(TX_PAGE_CBUS | 0x000A)));
 	if( POWER_STATE_D0_MHL == fwPowerState )
 	{
 		return;
 	}
-#ifdef __KERNEL__
-    //HalGpioSetPin(GPIO_M2U_VBUS_CTRL,0);
-#else
-    pinM2uVbusCtrlM = 0;
-#endif
-#if (SYSTEM_BOARD == SB_EPV5_MARK_II)
-    pinMhlConn = 0;
-    pinUsbConn = 1;
-#elif (SYSTEM_BOARD == SB_STARTER_KIT_X01)
-#ifdef __KERNEL__
-    //HalGpioSetPin(GPIO_MHL_USB,0);
-#else
-    pinMhlUsb = 0;
-#endif
-#endif
-	SiiRegWrite(REG_MHLTX_CTL1, 0x10);
+	SiiRegWrite(TX_PAGE_3 | 0x0030, 0x10);
 	fwPowerState = POWER_STATE_D0_MHL;
 	
 // change TMDS termination to 50 ohm termination(default)
@@ -673,9 +727,9 @@ static void MhlTxDrvProcessConnection ( void )
 static void MhlTxDrvProcessDisconnection ( void )
 {
 	TX_DEBUG_PRINT(("MhlTxDrvProcessDisconnection\n"));
-	SiiRegWrite(REG_INTR4, SiiRegRead(REG_INTR4));
-	dsHpdStatus &= ~BIT6;  
-	SiiRegWrite(REG_MSC_REQ_ABORT_REASON, dsHpdStatus);
+	SiiRegWrite(TX_PAGE_3 | 0x0021, SiiRegRead(TX_PAGE_3 | 0x0021));
+	dsHpdStatus &= ~BIT6;
+	SiiRegWrite(TX_PAGE_CBUS | 0x000D, dsHpdStatus);
 	SiiMhlTxNotifyDsHpdChange(0);
 	if( POWER_STATE_D0_MHL == fwPowerState )
 	{
@@ -687,9 +741,9 @@ void CbusReset (void)
 {
     uint8_t idx;
 	TX_DEBUG_PRINT( ("CBUS reset!!!\n"));
-	SET_BIT(REG_SRST, 3);
+	SET_BIT(TX_PAGE_3 | 0x0000, 3);
 	HalTimerWait(2);
-	CLR_BIT(REG_SRST, 3);
+	CLR_BIT(TX_PAGE_3 | 0x0000, 3);
 	mscCmdInProgress = false;
     UNMASK_INTR_4_INTERRUPTS;
 #if (SYSTEM_BOARD == SB_STARTER_KIT_X01)
@@ -707,60 +761,69 @@ void CbusReset (void)
 		WriteByteCBUS((0xE0 + idx), 0xFF);
 		WriteByteCBUS((0xF0 + idx), 0xFF);
 	}
+#ifdef MDT_SUPPORT	//MDT initialization.
+	SiiRegWrite(TX_PAGE_CBUS | 0x00F0,
+		MHL_INT_REQ_WRT | MHL_INT_DCAP_CHG);			//   handle DSCR_CHG as part of REQ_WRT
+
+	g_state_for_mdt = IDLE;
+	g_prior_msc_request.offset 	= 0;
+	g_prior_msc_request.first_data	= 0;
+#endif
 }
 static uint8_t CBusProcessErrors( uint8_t intStatus )
 {
     uint8_t result          = 0;
     uint8_t abortReason  = 0;
-    intStatus &= (BIT_MSC_ABORT | BIT_MSC_XFR_ABORT | BIT_DDC_ABORT);
+
+	intStatus &= (BIT6 | BIT5 | BIT2);
     if ( intStatus )
     {
-		if( intStatus & BIT_DDC_ABORT )
+		if( intStatus & BIT2 )
 		{
-			abortReason |= SiiRegRead(REG_DDC_ABORT_REASON);
+			abortReason |= SiiRegRead(TX_PAGE_CBUS | 0x000B);
 			TX_DEBUG_PRINT( ("CBUS:: DDC ABORT happened. Clearing 0x0C\n"));
-            SiiRegWrite(REG_DDC_ABORT_REASON, 0xFF);
+            SiiRegWrite(TX_PAGE_CBUS | 0x000B, 0xFF);
 		}
-        if ( intStatus & BIT_MSC_XFR_ABORT )
+        if ( intStatus & BIT5 )
         {
-            abortReason |= SiiRegRead(REG_MSC_REQ_ABORT_REASON );
+            abortReason |= SiiRegRead(TX_PAGE_CBUS | 0x000D );
             TX_DEBUG_PRINT( ("CBUS:: MSC Requester ABORTED. Clearing 0x0D\n"));
-            SiiRegWrite(REG_MSC_REQ_ABORT_REASON , 0xFF);
+            SiiRegWrite(TX_PAGE_CBUS | 0x000D , 0xFF);
         }
-        if ( intStatus & BIT_MSC_ABORT )
+        if ( intStatus & BIT6 )
         {
-            abortReason |= SiiRegRead(REG_MSC_RES_ABORT_REASON );
+            abortReason |= SiiRegRead(TX_PAGE_CBUS | 0x000E );
             TX_DEBUG_PRINT( ("CBUS:: MSC Responder ABORT. Clearing 0x0E\n"));
-            SiiRegWrite(REG_MSC_RES_ABORT_REASON , 0xFF);
+            SiiRegWrite(TX_PAGE_CBUS | 0x000E , 0xFF);
         }
         if ( abortReason & (BIT0|BIT1|BIT2|BIT3|BIT4|BIT7) )
         {
             TX_DEBUG_PRINT( ("CBUS:: Reason for ABORT is ....0x%02X \n", (int)abortReason ));
-            if ( abortReason & CBUSABORT_BIT_REQ_MAXFAIL)
+            if ( abortReason &(0x01 << 0))
             {
                 TX_DEBUG_PRINT( ("Retry threshold exceeded\n"));
             }
-            if ( abortReason & CBUSABORT_BIT_PROTOCOL_ERROR)
+            if ( abortReason & (0x01 << 1))
             {
                 TX_DEBUG_PRINT( ("Protocol Error\n"));
             }
-            if ( abortReason & CBUSABORT_BIT_REQ_TIMEOUT)
+            if ( abortReason & (0x01 << 2))
             {
                 TX_DEBUG_PRINT( ("Translation layer timeout\n"));
             }
-            if ( abortReason & CBUSABORT_BIT_UNDEFINED_OPCODE)
+            if ( abortReason & (0x01 << 3))
             {
                 TX_DEBUG_PRINT( ("Undefined opcode\n"));
             }
-            if ( abortReason & CBUSABORT_BIT_UNDEFINED_OFFSET)
+            if ( abortReason & (0x01 << 4))
             {
                 TX_DEBUG_PRINT( ("Undefined offset\n"));
             }
-            if ( abortReason & CBUSABORT_BIT_PEER_BUSY)
+            if ( abortReason & (0x01 << 5))
             {
                 TX_DEBUG_PRINT( ("Opposite device is busy\n"));
             }
-            if ( abortReason & CBUSABORT_BIT_PEER_ABORTED)
+            if ( abortReason & (0x01 << 7))
             {
 #ifndef __KERNEL__
                 HalTimerSet(TIMER_ABORT, T_ABORT_NEXT);
@@ -772,10 +835,14 @@ static uint8_t CBusProcessErrors( uint8_t intStatus )
                     MscAbortTimer = NULL;
                 }
                 mscAbortFlag = true;
-                SiiOsTimerCreate("Abort Time Out", SiiMhlMscAbortTimerCB, NULL, true,
-                2000, false, &MscAbortTimer);
+               // SiiOsTimerCreate("Abort Time Out", SiiMhlMscAbortTimerCB, NULL, true,
+               // 2000, false, &MscAbortTimer);
+                delay_in_ms = 2000L;
+				hr_timer_AbortTimer_CHK_ktime = ktime_set( 0, MS_TO_NS(delay_in_ms) );
+				printk(KERN_INFO  "Starting timer to fire in hr_timer_AbortTimer_CHK  %ldms (%ld)\n", delay_in_ms, jiffies );
+				hrtimer_start( &hr_timer_AbortTimer_CHK, hr_timer_AbortTimer_CHK_ktime, HRTIMER_MODE_REL );
 #endif
-                TX_DEBUG_PRINT( ("Peer sent an abort, start 2s timer Tabort_next\n"));
+                TX_DEBUG_PRINT( ("Peer sent an abort, start 2s timer abort_next\n"));
             }
         }
     }
@@ -786,7 +853,7 @@ void SiiMhlTxDrvGetScratchPad(uint8_t startReg,uint8_t *pData,uint8_t length)
 int i;
     for (i = 0; i < length;++i,++startReg)
     {
-        *pData++ = SiiRegRead(REG_CBUS_SCRATCHPAD_0 + startReg);
+        *pData++ = SiiRegRead((TX_PAGE_CBUS | 0x00C0) + startReg);
     }
 }
 static void MhlCbusIsr( void )
@@ -794,69 +861,117 @@ static void MhlCbusIsr( void )
 	uint8_t		cbusInt;
 	uint8_t     gotData[4];	
 	uint8_t		i;
-	cbusInt = SiiRegRead(REG_CBUS_MSC_INT2_STATUS);
+	cbusInt = SiiRegRead(TX_PAGE_CBUS | 0x001E);
 	if(cbusInt == 0xFF)
 	{
 		return;
 	}
 	if( cbusInt )
 	{
+#ifdef MTK_SMARTBOOK_SUPPORT
         if ( BIT0 & cbusInt)
         {
             SiiMhlTxMscWriteBurstDone( cbusInt );
         }
+#endif
+         //TX_DEBUG_PRINT(("g_state_for_mdt=%d^^^^^^^^^^^^^^^^^^^^\n",g_state_for_mdt));
+#ifdef MDT_SUPPORT         
+		if((g_state_for_mdt!=WAIT_FOR_WRITE_BURST_COMPLETE)&&(g_state_for_mdt!=WAIT_FOR_REQ_WRT)&&(g_state_for_mdt!=WAIT_FOR_GRT_WRT_COMPLETE))
+		{
+
+		if (BIT0 & cbusInt)
+        {
+            SiiMhlTxMscWriteBurstDone( cbusInt );
+
+			g_state_for_mdt = WAIT_FOR_REQ_WRT;
+			SiiRegWrite(TX_PAGE_CBUS | 0x00A0,
+				(MHL_INT_REQ_WRT | MHL_INT_DSCR_CHG));
+			//TX_DEBUG_PRINT(("g_state_for_mdt=%d$$$$$$$$$$$$$$$$$$$$$$$$\n",g_state_for_mdt));
+
+        }
+#endif // MTK_SMARTBOOK_SUPPORt
+		//}
     	if(cbusInt & BIT2)
     	{
             uint8_t intr[4]={0};
     	    TX_DEBUG_PRINT(("MHL INTR Received\n"));
-            SiiRegReadBlock(REG_CBUS_SET_INT_0, intr, 4);
+            SiiRegReadBlock(TX_PAGE_CBUS | 0x00A0, intr, 4);
     		SiiMhlTxGotMhlIntr( intr[0], intr[1] );
-            SiiRegWriteBlock(REG_CBUS_SET_INT_0, intr, 4);
+            SiiRegWriteBlock(TX_PAGE_CBUS | 0x00A0, intr, 4);
     	}
+#ifdef MDT_SUPPORT    	
+    	}
+#endif    	
     	if(cbusInt & BIT3)
     	{
             uint8_t status[4]={0};
     		TX_DEBUG_PRINT(("MHL STATUS Received\n"));
             for (i = 0; i < 4;++i)
             {
-                status[i] = SiiRegRead(REG_CBUS_WRITE_STAT_0 + i);
-    			SiiRegWrite((REG_CBUS_WRITE_STAT_0 + i), 0xFF  );
+                status[i] = SiiRegRead((TX_PAGE_CBUS | 0x00B0) + i);
+    			SiiRegWrite(((TX_PAGE_CBUS | 0x00B0) + i), 0xFF  );
             }
     		SiiMhlTxGotMhlStatus( status[0], status[1] );
     	}
-    	SiiRegWrite(REG_CBUS_MSC_INT2_STATUS, cbusInt);
+#ifdef MDT_SUPPORT    	
+		if((g_state_for_mdt==WAIT_FOR_WRITE_BURST_COMPLETE)||(g_state_for_mdt==WAIT_FOR_REQ_WRT)||(g_state_for_mdt==WAIT_FOR_GRT_WRT_COMPLETE))
+
+		{
+    		SiiRegWrite(TX_PAGE_CBUS | 0x001E, (cbusInt&0xFE));
+			///TX_DEBUG_PRINT(("Drv: Clear CBUS INTR_2: %02X,g_state_for_mdt=%d\n", (int) (cbusInt&0xFE),g_state_for_mdt));
+			}
+		else
+#endif
+        {
+			SiiRegWrite(TX_PAGE_CBUS | 0x001E, cbusInt);
         TX_DEBUG_PRINT(("Drv: Clear CBUS INTR_2: %02X\n", (int) cbusInt));
 	}
-	cbusInt = SiiRegRead(REG_CBUS_INTR_STATUS);
+	}
+	cbusInt = SiiRegRead(TX_PAGE_CBUS | 0x0008);
 	if (cbusInt)
 	{
-		SiiRegWrite(REG_CBUS_INTR_STATUS, cbusInt);
-	    TX_DEBUG_PRINT(("Drv: Clear CBUS INTR_1: %02X\n", (int) cbusInt));
+#ifdef MDT_SUPPORT	
+		if((g_state_for_mdt==WAIT_FOR_WRITE_BURST_COMPLETE)||(g_state_for_mdt==WAIT_FOR_REQ_WRT)||(g_state_for_mdt==WAIT_FOR_GRT_WRT_COMPLETE))
+            {
+			SiiRegWrite(TX_PAGE_CBUS | 0x0008, (cbusInt&0xEF));
+			///TX_DEBUG_PRINT(("Drv: Clear CBUS INTR_1: %02X,g_state_for_mdt=%d\n", (int) (cbusInt&0xEF),g_state_for_mdt));
+			}
+		else
+#endif
+		{
+			SiiRegWrite(TX_PAGE_CBUS | 0x0008, cbusInt);
+	    	///TX_DEBUG_PRINT(("Drv: Clear CBUS INTR_1: %02X,g_state_for_mdt=%d\n", (int) cbusInt,g_state_for_mdt));
+			}
 	}
 	if((cbusInt & BIT3))
 	{
         uint8_t mscMsg[2];
 	    TX_DEBUG_PRINT(("MSC_MSG Received\n"));
-        mscMsg[0] = SiiRegRead(REG_CBUS_PRI_VS_CMD);
-        mscMsg[1] = SiiRegRead(REG_CBUS_PRI_VS_DATA);
+        mscMsg[0] = SiiRegRead(TX_PAGE_CBUS | 0x0018);
+        mscMsg[1] = SiiRegRead(TX_PAGE_CBUS | 0x0019);
 	    TX_DEBUG_PRINT(("MSC MSG: %02X %02X\n", (int)mscMsg[0], (int)mscMsg[1] ));
 		SiiMhlTxGotMhlMscMsg( mscMsg[0], mscMsg[1] );
 	}
-	if (cbusInt & (BIT_MSC_ABORT | BIT_MSC_XFR_ABORT | BIT_DDC_ABORT))
+	if (cbusInt & (BIT6 | BIT5 | BIT2))
 	{
 		gotData[0] = CBusProcessErrors(cbusInt);
 		mscCmdInProgress = false;
 	}
+#ifdef MDT_SUPPORT	
+	if((g_state_for_mdt!=WAIT_FOR_WRITE_BURST_COMPLETE)&&(g_state_for_mdt!=WAIT_FOR_REQ_WRT)&&(g_state_for_mdt!=WAIT_FOR_GRT_WRT_COMPLETE))
+#endif
+    {
 	if(cbusInt & BIT4)
 	{
 	    TX_DEBUG_PRINT(("MSC_REQ_DONE\n"));
 		mscCmdInProgress = false;
-		SiiMhlTxMscCommandDone( SiiRegRead(REG_CBUS_PRI_RD_DATA_1ST) );
+		SiiMhlTxMscCommandDone( SiiRegRead(TX_PAGE_CBUS | 0x0016) );
+	}
 	}
     if (cbusInt & BIT7)
     {
         TX_DEBUG_PRINT(("Parity error count reaches 15\n"));
-        SiiRegWrite(REG_CBUS_STAT2, 0x00);
+        SiiRegWrite(TX_PAGE_CBUS | 0x0038, 0x00);
     }
 }
 static void ProcessScdtStatusChange (void)
@@ -866,7 +981,7 @@ void SiiMhlTxDrvPowBitChange (bool_t enable)
 {
 	if (enable)
 	{
-		SiiRegModify(REG_DISC_CTRL8, BIT2, SET_BITS);
+		SiiRegModify(TX_PAGE_3 | 0x0017, BIT2, SET_BITS);
 	    TX_DEBUG_PRINT(("POW bit 0->1, set DISC_CTRL8[2] = 1\n"));
 	}
 }
@@ -946,7 +1061,7 @@ static void SetAudioMode(inAudioTypes_t audiomode)
 {
     if (audiomode >= AUD_TYP_NUM)
         audiomode = I2S_48;
-    SiiRegWrite(REG_AUDP_TXCTRL, audioData[audiomode].regAUD_path);
+    SiiRegWrite(TX_PAGE_L1 | 0x2F, audioData[audiomode].regAUD_path);
     SiiRegWrite(TX_PAGE_L1 | 0x14, audioData[audiomode].regAUD_mode);
     SiiRegWrite(TX_PAGE_L1 | 0x1D, audioData[audiomode].regAUD_ctrl);
     SiiRegWrite(TX_PAGE_L1 | 0x21, audioData[audiomode].regAUD_freq);
@@ -1013,7 +1128,7 @@ static void SetACRNValue (void)
             SiiRegWrite(TX_PAGE_L1 | 0x03, (uint8_t)(ACR_N_value_default));
             break;
     }
-    SiiRegModify(REG_AUDP_TXCTRL, BIT2, CLEAR_BITS); 
+    SiiRegModify(TX_PAGE_L1 | 0x2F, BIT2, CLEAR_BITS);
 }
 static void SendAudioInfoFrame (void)
 {
@@ -1052,43 +1167,48 @@ static void AudioVideoIsr(bool_t force_update)
     if(mode_change.video_change)// && SiiVideoInputIsValid())
     {
     	TX_DEBUG_PRINT(("mode_change.video_changed =true\n "));
-        SiiRegModify(REG_LM_DDC, VID_MUTE, SET_BITS);   
-        SiiRegModify(REG_SRST, BIT0, SET_BITS);    
+        SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT5, SET_BITS);
+        SiiRegModify(TX_PAGE_3 | 0x0000, BIT0, SET_BITS);
         //video_data.outputColorSpace = video_data.inputColorSpace;
         video_data.outputVideoCode = video_data.inputVideoCode;
         video_data.outputcolorimetryAspectRatio = video_data.inputcolorimetryAspectRatio;
-        SiiRegModify(REG_SRST, BIT0, CLEAR_BITS);
-        SiiRegModify(REG_LM_DDC, VID_MUTE, CLEAR_BITS);   
+        SiiRegModify(TX_PAGE_3 | 0x0000, BIT0, CLEAR_BITS);
+        SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT5, CLEAR_BITS);
     }
     if ((mode_change.video_change || mode_change.audio_change) && tmdsPowRdy)
     {
         if (1)//(SiiVideoInputIsValid())
         {
-            SiiRegModify(REG_TMDS_CCTRL, TMDS_OE, SET_BITS);
+            SiiRegModify(TX_PAGE_L0 | 0x0080, BIT4, SET_BITS);
             SendAudioInfoFrame();
         	TX_DEBUG_PRINT(("((mode_change.video_change || mode_change.audio_change) && tmdsPowRdy) \n"));
             SendAviInfoframe();
         }
         else
         {
-            SiiRegModify(REG_TMDS_CCTRL, TMDS_OE, CLEAR_BITS);
+            SiiRegModify(TX_PAGE_L0 | 0x0080, BIT4, CLEAR_BITS);
             TX_DEBUG_PRINT (("TMDS Ouput Disabled due to invalid input\n"));
         }
     }
 }
 
-#if !defined GPIO_MHL_RST_B_PIN
+#if 0///!defined GPIO_MHL_RST_B_PIN
 #error GPIO_MHL_RST_B_PIN no defined
 #endif
 
 void SiiMhlTxHwResetKeepLow(void)
 {	
 	printk("%s,%d\n", __func__, __LINE__);
+#ifdef GPIO_MHL_RST_B_PIN	
 	mt_set_gpio_out(GPIO_MHL_RST_B_PIN, GPIO_OUT_ZERO);
+#else
+    printk("%s,%d Error: GPIO_MHL_RST_B_PIN is not defined\n", __func__, __LINE__);
+#endif
 }
 
 void SiiMhlTxHwReset(uint16_t hwResetPeriod,uint16_t hwResetDelay)
 {	
+#ifdef GPIO_MHL_RST_B_PIN
 	printk("%s,%d\n", __func__, __LINE__);
 	mt_set_gpio_out(GPIO_MHL_RST_B_PIN, GPIO_OUT_ONE);
 	msleep(hwResetPeriod);
@@ -1096,6 +1216,9 @@ void SiiMhlTxHwReset(uint16_t hwResetPeriod,uint16_t hwResetDelay)
 	msleep(hwResetPeriod);
 	mt_set_gpio_out(GPIO_MHL_RST_B_PIN, GPIO_OUT_ONE);
 	msleep(hwResetDelay);
+#else
+    printk("%s,%d Error: GPIO_MHL_RST_B_PIN is not defined\n", __func__, __LINE__);
+#endif
 }
 
 #if 0
@@ -1125,6 +1248,7 @@ void SiiMhlTxHwGpioSuspend(void)
 #else
 void SiiMhlTxHwGpioSuspend(void)
 {
+#ifdef MHL_SET_GPIO_MODE
     int i;
     u32 gpio[]={
         GPIO143, GPIO144, GPIO145, GPIO146, GPIO147,
@@ -1142,6 +1266,8 @@ void SiiMhlTxHwGpioSuspend(void)
         mt_set_gpio_pull_select(gpio[i], GPIO_PULL_DOWN);
         mt_set_gpio_pull_enable(gpio[i], GPIO_PULL_ENABLE);
     }
+#endif
+
 }
 #endif
 
@@ -1177,6 +1303,7 @@ void SiiMhlTxHwGpioResume(void)
 #else
 void SiiMhlTxHwGpioResume(void)
 {
+#ifdef MHL_SET_GPIO_MODE
     int i;
     u32 gpio_rgb[]={
         GPIO143, GPIO144, GPIO145, GPIO146, GPIO147,
@@ -1198,6 +1325,7 @@ void SiiMhlTxHwGpioResume(void)
         mt_set_gpio_pull_select(gpio_i2s[i], GPIO_PULL_DOWN);
         mt_set_gpio_pull_enable(gpio_i2s[i], GPIO_PULL_ENABLE);
     }
+#endif    
 }
 #endif
 

@@ -66,11 +66,14 @@
 #define CON1_BOOST_LIM_SHIFT  0
 
 //CON2
-#define CON2_ICHG_MASK    0x1F
+#define CON2_ICHG_MASK    0x3F
 #define CON2_ICHG_SHIFT   2
 
+#define CON2_FORCE_20PCT_MASK    0x1
+#define CON2_FORCE_20PCT_SHIFT   0
+
 //CON3
-#define CON3_IPRECHG_MASK   0xF
+#define CON3_IPRECHG_MASK   0x0F
 #define CON3_IPRECHG_SHIFT  4
 
 #define CON3_ITERM_MASK           0x0F
@@ -175,6 +178,7 @@ extern void bq24196_set_sys_min(kal_uint32 val);
 extern void bq24196_set_boost_lim(kal_uint32 val);
 //CON2----------------------------------------------------
 extern void bq24196_set_ichg(kal_uint32 val);
+extern void bq24196_set_force_20pct(kal_uint32 val);
 //CON3----------------------------------------------------
 extern void bq24196_set_iprechg(kal_uint32 val);
 extern void bq24196_set_iterm(kal_uint32 val);
@@ -203,4 +207,3 @@ extern kal_uint32 bq24196_get_vsys_stat(void);
 extern void bq24196_dump_register(void);
 
 #endif // _bq24196_SW_H_
-

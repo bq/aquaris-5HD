@@ -172,6 +172,9 @@ DSI_STATUS DSI_WaitForNotBusy(void);
 
 DSI_STATUS DSI_StartTransfer(bool isMutexLocked);
 
+unsigned int DSI_Detect_CLK_Glitch(void);
+DSI_STATUS DSI_Config_VDO_FRM_Mode(void);
+
 DSI_STATUS DSI_EnableClk(void);
 DSI_STATUS DSI_DisableClk(void);
 DSI_STATUS DSI_Reset(void);
@@ -198,6 +201,7 @@ DSI_STATUS DSI_TXRX_Control(bool cksm_en,
                                   bool null_packet_en,
                                   bool err_correction_en,
                                   bool dis_eotp_en,
+								  bool hstx_cklp_en,
                                   unsigned int  max_return_size);
 
 DSI_STATUS DSI_PS_Control(unsigned int ps_type, unsigned int vact_line, unsigned int ps_wc);
@@ -217,6 +221,8 @@ DSI_STATUS DSI_ConfigVDOTiming(unsigned int dsi_vsa_nl,
 
 
 //void init_mipi_pll(void);
+void DSI_Set_VM_CMD(LCM_PARAMS *lcm_params);
+
 void DSI_Config_VDO_Timing(LCM_PARAMS *lcm_params);
 
 void DSI_PHY_clk_setting(LCM_PARAMS *lcm_params);
@@ -234,6 +240,7 @@ void DSI_handle_esd_recovery(void);
 void DSI_set_int_TE(bool enable, unsigned int period);
 bool DSI_handle_int_TE(void);
 void DSI_set_noncont_clk(bool enable, unsigned int period);
+void DSI_Detect_glitch_enable(bool enable);
 void DSI_handle_noncont_clk(void);
 void DSI_set_cmdq_V3(LCM_setting_table_V3 *para_tbl, unsigned int size, unsigned char force_update);
 void DSI_set_cmdq_V2(unsigned cmd, unsigned char count, unsigned char *para_list, unsigned char force_update);
@@ -244,7 +251,7 @@ UINT32 DSI_read_lcm_reg(void);
 UINT32 DSI_dcs_read_lcm_reg(unsigned char);
 UINT32 DSI_dcs_read_lcm_reg_v2(UINT8 cmd, UINT8 *buffer, UINT8 buffer_size);
 DSI_STATUS DSI_write_lcm_fb(unsigned int addr, bool long_length);
-DSI_STATUS DSI_read_lcm_fb(void);
+DSI_STATUS DSI_read_lcm_fb(unsigned char *buffer);
 
 DSI_STATUS DSI_enable_MIPI_txio(bool en);
 bool Need_Wait_ULPS(void);
@@ -263,6 +270,9 @@ DSI_STATUS DSI_Change_CLK(unsigned int clk);
 DSI_STATUS DSI_Capture_Framebuffer(unsigned int pvbuf, unsigned int bpp, bool cmd_mode);
 DSI_STATUS DSI_TE_Enable(BOOL enable);
 void DSI_PLL_Select(unsigned int pll_select);
+unsigned int DSI_Check_LCM(UINT32 color);
+unsigned int DSI_BLS_Query(void);
+void DSI_BLS_Enable(bool enable);
 #ifdef __cplusplus
 }
 #endif

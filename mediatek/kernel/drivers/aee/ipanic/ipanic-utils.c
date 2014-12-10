@@ -1,11 +1,9 @@
+#include <linux/kmsg_dump.h>
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/stacktrace.h>
 #include "ipanic.h"
-
-unsigned ipanic_detail_start;
-unsigned ipanic_detail_end;
 
 #define MAX_STACK_TRACE_DEPTH 64
 unsigned long ipanic_stack_entries[64];
@@ -40,10 +38,13 @@ void ipanic_block_scramble(u8 *buf, int buflen)
  *  1: no panic data
  *  2: contain bad panic data
  */
+int g_is_panic;
 int ipanic_header_check(const struct ipanic_header *hdr) 
 {
+	g_is_panic = 1;
 	if (hdr->magic != AEE_IPANIC_MAGIC) {
 		xlog_printk(ANDROID_LOG_INFO, IPANIC_LOG_TAG, "aee-ipanic: No panic data available [Magic header]\n");
+		g_is_panic=0;
 		return 1;
 	}
 
@@ -131,17 +132,6 @@ void ipanic_save_current_tsk_info(void)
     }
 }
 
-void ipanic_oops_start()
-{
-
-	ipanic_detail_start = log_end;
-}
-
-void ipanic_oops_end(void)
-{
-	ipanic_detail_end = log_end;
-}
-
 void register_ipanic_ops(struct ipanic_ops *ops)
 {
 	ipanic_ops = ops;
@@ -166,4 +156,3 @@ void ipanic_oops_free(struct aee_oops *oops, int erase)
 	}
 }
 EXPORT_SYMBOL(ipanic_oops_free);
-

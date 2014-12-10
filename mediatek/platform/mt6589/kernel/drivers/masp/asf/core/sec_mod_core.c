@@ -21,6 +21,10 @@
 #include "sec_nvram.h"
 
 #define MOD                         "ASF"
+#define HEVC_BLK_LEN                20480
+
+#define CI_BLK_SIZE                 16
+#define CI_BLK_ALIGN(len) ( ((len)+CI_BLK_SIZE-1) & ~(CI_BLK_SIZE-1) )
 
 /**************************************************************************
  *  EXTERNAL VARIABLE
@@ -29,11 +33,23 @@ extern MtdPart                      mtd_part_map[];
 extern bool                         bMsg;
 extern struct semaphore             hacc_sem;
 
+
+/**************************************************************************
+ *  GLOBAL VARIABLES
+ **************************************************************************/
+typedef struct
+{
+    unsigned char buf[HEVC_BLK_LEN];
+    unsigned int len;
+} HEVC_BLK;
+HEVC_BLK hevc_blk;
+
 /**************************************************************************
  *  EXTERNAL FUNCTION
  **************************************************************************/
 extern int sec_get_random_id(unsigned int *rid);
 //extern void osal_msleep(unsigned int msec);
+extern void sec_core_init (void);
 
 /**************************************************************************
  *  SEC DRIVER IOCTL
@@ -46,6 +62,7 @@ long sec_core_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     unsigned int rid[4];
     unsigned char part_name[10];    
     META_CONTEXT meta_ctx;
+    int i = 0;
 
     /* ---------------------------------- */
     /* IOCTL                              */
@@ -78,6 +95,7 @@ long sec_core_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
         case SEC_BOOT_INIT:
             SMSG(bMsg,"[%s] CMD - SEC_BOOT_INIT\n",MOD);
             ret = sec_boot_init();
+            sec_core_init();
             ret = osal_copy_to_user((void __user *)arg, (void *)&ret, sizeof(int));            
             break;
 
@@ -200,6 +218,62 @@ long sec_core_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             sp_hacc_dec((unsigned char*)&(meta_ctx.data),NVRAM_CIPHER_LEN,TRUE,HACC_USER2,FALSE);
             meta_ctx.ret = SEC_OK;
             ret = osal_copy_to_user((void __user *)arg, (void *)&meta_ctx, sizeof(meta_ctx));
+            break;
+
+        /* ---------------------------------- */
+        /* HEVC EOP                           */
+        /* ---------------------------------- */
+
+        case SEC_HEVC_EOP:
+            SMSG(TRUE,"[%s] CMD - SEC_HEVC_EOP\n",MOD);   
+            if(osal_copy_from_user((void *)(&hevc_blk), (void __user *)arg, sizeof(HEVC_BLK)))
+            {
+                return -EFAULT;
+            }
+            
+            if ((hevc_blk.len % CI_BLK_SIZE) == 0)
+            {
+                cipher_len = hevc_blk.len;
+            }
+            else if ((hevc_blk.len % CI_BLK_SIZE) > 0)
+            {
+                cipher_len = CI_BLK_ALIGN(hevc_blk.len)-CI_BLK_SIZE;
+                if (cipher_len == 0 ){
+                    SMSG(TRUE,"[%s] less than one ci_blk, no need to do eop",MOD);   
+                    break; 
+                }
+            }
+            sp_hacc_enc((unsigned char*)(&hevc_blk.buf),cipher_len,TRUE,HACC_USER4,FALSE);
+
+            ret = osal_copy_to_user((void __user *)arg, (void *)(&hevc_blk), sizeof(HEVC_BLK));
+            break;
+
+        /* ---------------------------------- */
+        /* HEVC DOP                           */
+        /* ---------------------------------- */
+        case SEC_HEVC_DOP:
+            SMSG(TRUE,"[%s] CMD - SEC_HEVC_DOP\n",MOD);   
+            if(osal_copy_from_user((void *)(&hevc_blk), (void __user *)arg, sizeof(HEVC_BLK)))
+            {
+                return -EFAULT;
+            }
+
+            if ((hevc_blk.len % CI_BLK_SIZE) == 0)
+            {
+                cipher_len = hevc_blk.len;
+            }
+            else if ((hevc_blk.len % CI_BLK_SIZE) > 0)
+            {
+                cipher_len = CI_BLK_ALIGN(hevc_blk.len)-CI_BLK_SIZE;
+                if (cipher_len == 0 ){
+                    SMSG(TRUE,"[%s] less than one ci_blk, no need to do dop",MOD);   
+                    break; 
+                }
+            }
+
+            sp_hacc_dec((unsigned char*)(&hevc_blk.buf),cipher_len,TRUE,HACC_USER4,FALSE);
+            
+            ret = osal_copy_to_user((void __user *)arg, (void *)(&hevc_blk), sizeof(HEVC_BLK));
             break;
 
         /* ---------------------------------- */

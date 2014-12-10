@@ -43,8 +43,8 @@ static inline void mutex_clear_owner(struct mutex *lock)
 	int __ret = 0;							\
 									\
 	if (!oops_in_progress && unlikely(c)) {				\
-        aee_kernel_warning(#c,"Mutex Debug\n");\
-		if (debug_locks_off() && !debug_locks_silent)		\
+        aee_kernel_warning_api(__FILE__, __LINE__, DB_OPT_DUMMY_DUMP | DB_OPT_FTRACE, #c,"Mutex Debug\n");\
+        if (debug_locks_off() && !debug_locks_silent)		\
 			WARN_ON(1);					\
         else \
             dump_stack();\

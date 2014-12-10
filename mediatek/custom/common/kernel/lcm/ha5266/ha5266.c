@@ -1,18 +1,15 @@
+#ifndef BUILD_LK
 #include <linux/string.h>
-#ifdef BUILD_UBOOT
-#if defined(MT6577)
-#include <asm/arch/mt6577_gpio.h>
 #endif
-#if defined(MT6575)
-#include <asm/arch/mt6575_gpio.h>
-#endif
+#ifdef BUILD_LK
+#include <platform/mt_gpio.h>
+#include <platform/mt_pmic.h>
+#include <debug.h>
+#elif (defined BUILD_UBOOT)
 #else
-#if defined(MT6577)
-#include <mach/mt6577_gpio.h>
-#endif
-#if defined(MT6575)
-#include <mach/mt6575_gpio.h>
-#endif
+#include <mach/mt_gpio.h>
+#include <linux/xlog.h>
+#include <mach/mt_pm_ldo.h>
 #endif
 #include "lcm_drv.h"
 

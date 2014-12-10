@@ -134,9 +134,9 @@ unsigned int mt_cirq_set_sens(unsigned int cirq_num, unsigned int sens)
 	unsigned int bit = 1 << (cirq_num % 32);
 
         print_func();
-	if (sens == MT65xx_EDGE_SENSITIVE) {
+	if (sens == MT_EDGE_SENSITIVE) {
             base = (cirq_num / 32) * 4 + CIRQ_SENS_CLR0;
-	} else if (sens == MT65xx_LEVEL_SENSITIVE) {
+	} else if (sens == MT_LEVEL_SENSITIVE) {
             base = (cirq_num / 32) * 4 + CIRQ_SENS_SET0;
 	} else {
 		dbgmsg("%s invalid sensitivity value\n", __func__);
@@ -239,10 +239,10 @@ void mt_cirq_clone_sens(void)
         {
             irq_bit = (irq+ix) % 32;
             if (value & (0x2)) //edge trigger 
-                mt_cirq_set_sens(irq-64+ix,MT65xx_EDGE_SENSITIVE);
+                mt_cirq_set_sens(irq-64+ix,MT_EDGE_SENSITIVE);
                 //*(volatile unsigned int*)((unsigned int)CIRQ_SENS_SET0 + irq_offset*4) |= (0x1 << irq_bit);
             else//level trigger
-                mt_cirq_set_sens(irq-64+ix,MT65xx_LEVEL_SENSITIVE);
+                mt_cirq_set_sens(irq-64+ix,MT_LEVEL_SENSITIVE);
                 //*(volatile unsigned int*)((unsigned int)CIRQ_SENS_CLR0 + irq_offset*4) |= (0x1 << irq_bit);
             value >>= 2;
         }
@@ -291,7 +291,7 @@ void mt_cirq_wfi_func()
     mt_cirq_mask_all();
     mt_cirq_ack_all();
     mt_cirq_set_pol(MT_MD_WDT1_IRQ_ID - 64, MT_CIRQ_POL_NEG);
-    mt_cirq_set_sens(MT_MD_WDT1_IRQ_ID - 64, MT65xx_EDGE_SENSITIVE);
+    mt_cirq_set_sens(MT_MD_WDT1_IRQ_ID - 64, MT_EDGE_SENSITIVE);
     mt_cirq_unmask(MT_MD_WDT1_IRQ_ID - 64);
 }
 

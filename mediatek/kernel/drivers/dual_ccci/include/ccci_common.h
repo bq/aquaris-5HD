@@ -21,14 +21,15 @@
 #define __CCCI_COMMON_H__
 #include <linux/xlog.h>
 #include <ccci_cfg.h>
-#include <ccci_platform_cfg.h>
 #include <ccci_err_no.h>
-#include <ccci.h>
 #include <ccci_md.h>
 #include <ccci_layer.h>
+#include <ccci_rpc.h>
+#include <ccci_ipc.h>
+#include <ccci_fs.h>
+#include <ccmni_net.h>
+#include <ccci_platform_cfg.h>
 #include <mach/mtk_ccci_helper.h>
-
-
 //==================================================================================
 // debug log define    
 //==================================================================================
@@ -121,11 +122,11 @@ do {	\
 //==================================================================================
 // AEE function and macro define  
 //==================================================================================
-#define CCCI_AED_DUMP_EX_MEM		(0x00000001)
-#define CCCI_AED_DUMP_MD_IMG_MEM	(0x00000002)
+#define CCCI_AED_DUMP_EX_MEM		(1<<0)
+#define CCCI_AED_DUMP_MD_IMG_MEM	(1<<1)
+#define CCCI_AED_DUMP_CCIF_REG		(1<<2)
 
 void ccci_aed(int, unsigned int, char *);
-
 
 
 //==================================================================================
@@ -138,6 +139,9 @@ void ccci_aed(int, unsigned int, char *);
 
 #define CCCI_LOG_TX 0
 #define CCCI_LOG_RX 1
+
+#define DBG_FLAG_DEBUG		(1<<0)
+#define DBG_FLAG_JTAG		(1<<1)
 
 
 enum {
@@ -155,6 +159,7 @@ typedef enum _ccif_type
 typedef struct _ccif_hw_info
 {
 	unsigned long	reg_base;
+	unsigned long 	md_reg_base;
 	unsigned int	irq_id;
 	unsigned int	irq_attr;
 	ccif_type_t		type;
@@ -200,9 +205,9 @@ typedef struct _smem_alloc
 	unsigned int		ccci_rpc_smem_base_phy;
 	unsigned int		ccci_rpc_smem_size;
 	// -- TTY
-	unsigned int		ccci_tty_smem_base_virt[CCCI_TTY_BUFF_NR];
-	unsigned int		ccci_tty_smem_base_phy[CCCI_TTY_BUFF_NR];
-	unsigned int		ccci_tty_smem_size[CCCI_TTY_BUFF_NR];
+	unsigned int		ccci_uart_smem_base_virt[CCCI_UART_PORT_NUM];
+	unsigned int		ccci_uart_smem_base_phy[CCCI_UART_PORT_NUM];
+	unsigned int		ccci_uart_smem_size[CCCI_UART_PORT_NUM];
 	// -- Exception
 	unsigned int		ccci_exp_smem_base_virt;
 	unsigned int		ccci_exp_smem_base_phy;
@@ -299,12 +304,14 @@ typedef enum
 {
 	MISC_DMA_ADDR = 0,
 	MISC_32K_LESS,
+	MISC_RAND_SEED,
+	MISC_MD_COCLK_SETTING,
 } misc_feature_id_t;
 
 
 
 //==================================================================================
-// API functions exported by ccci platform
+// API need implemented by ccci platform
 //==================================================================================
 int					get_dev_major_for_md_sys(int md_id);
 int					get_ccif_hw_info(int md_id, ccif_hw_info_t *ccif_hw_info);
@@ -315,14 +322,13 @@ void				md_boot_ready_additional_operation(int md_id);
 void				additional_operation_before_stop_md(int md_id);
 smem_alloc_t*		get_md_smem_layout(int md_id);
 unsigned int		get_md_sys_max_num(void);
-void				enable_mem_access_protection(int md_id);
+void 			ccci_md_wdt_notify_register(int, int (*funcp)(int));
 int					ccci_load_firmware(int md_id, unsigned int load_flag, char img_err_str[], int len);
 int					ccci_power_on_md(int md_id);
 int					ccci_power_down_md(int md_id);
 int					let_md_stop(int md_id, unsigned int timeout);
 int					let_md_go(int md_id);
 int					ccci_get_sub_module_cfg(int md_id, char name[], char out_buf[], int size);
-unsigned int		is_md_enable(int md_id);
 int					ccci_alloc_smem(int md_id);
 void				ccci_free_smem(int md_id);
 ccci_mem_layout_t*	get_md_sys_layout(int md_id);
@@ -331,102 +337,26 @@ char*				get_md_info_str(int md_id);
 void				platform_set_runtime_data(int md_id, modem_runtime_t *runtime);
 void 				config_misc_info(int md_id, unsigned int base[], unsigned int size);
 void                send_battery_info(int md_id);
+#ifdef MTK_ICUSB_SUPPORT
+void				send_icusb_notify(int md_id, unsigned int sim_id);
+#endif
 void                md_fast_dormancy(int md_id);
 void				start_md_wdt_recov_timer(int md_id);
-
-
-//==================================================================================
-// API functions exported by ccci source
-//==================================================================================
 int                 platform_init(int md_id, int power_down);
 void                platform_deinit(int md_id);
-int                 ccci_md_ctrl_init(int md_id);
-void                ccci_md_ctrl_exit(int md_id);
-int                 ccci_chrdev_init(int md_id);
-void                ccci_chrdev_exit(int md_id);
-int                 ccci_tty_init(int md_id);
-void                ccci_tty_exit(int md_id);
-int                 ccci_ipc_init(int md_id);
-void                ccci_ipc_exit(int md_id);
-int                 ccci_rpc_init(int md_id);
-void                ccci_rpc_exit(int md_id);
-int                 ccci_fs_init(int md_id);
-void                ccci_fs_exit(int md_id);
-int                 ccmni_init(int md_id);
-void                ccmni_exit(int md_id);
-int                 ccci_vir_chrdev_init(int md_id);
-void                ccci_vir_chrdev_exit(int md_id);
-int                 init_ccci_dev_node(void);
-int					statistics_init(int md_id);
-void				statistics_exit(int md_id);
-
-
-int					get_dev_id_by_md_id(int md_id, char node_name[], int *major, int* minor);
-int					get_md_id_by_dev_major(int dev_major);
-int					init_ccci_dev_node(void);
-int					send_md_reset_notify(int);
-int					ccci_trigger_md_assert(int);
-int					get_md_exception_type(int md_id);
-int					send_md_stop_notify(int md_id);
-int					send_md_start_notify(int md_id);
-int					ccci_start_modem(int md_id);
-int					ccci_stop_modem(int md_id, unsigned int timeout);
-int					ccci_send_run_time_data(int md_id);
-int					statistics_init_ch_dir(int md_sys_id, int ch, int dir);
-void				dump_logical_layer_tx_rx_histroy(int md_id);
-void				logic_layer_ch_record_dump(int md_id, int ch);
-void				add_logic_layer_record(int md_id, ccci_msg_t *data, int drop);
-void				ccci_dump_logic_layer_info(int md_id, int buf[], int len);
-void				ccci_dump_hw_reg_val(int md_id, int buf[], int len);
-int					send_enter_flight_mode_request(int md_id);
-int					send_leave_flight_mode_request(int md_id);
-int					send_power_on_md_request(int md_id);
-int					send_power_down_md_request(int md_id);
-int					mk_ccci_dev_node(int md_id);
-int					ccci_md_ctrl_common_init(void);
-int					bind_to_low_layer_notify(int md_id, void (*isr_func)(int), void (*send_func)(int, unsigned int));
-ccif_t*             ccif_create_instance(ccif_hw_info_t *info, void* ctl_b, int md_id);
-
-
-
+unsigned int	get_debug_mode_flag(void);
+int		ccci_ipo_h_platform_restore(int md_id); 
+int					set_sim_type(int md_id, int data);
+int					get_sim_type(int md_id, int *p_sim_type);
+int					enable_get_sim_type(int md_id, unsigned int enable);
+void ccci_dump_md_register(int md_id);
+int get_md2_ap_phy_addr_fixed(void);//Generally, AP and MD has same share memory address after hw remapp.
+									     //however, if hardware remapp does not work, then need software remap,
+									     //This variable is used to fix md phy addr does not equeal with AP.
+									     //If hardware remap works, then the variable is 0.
 //==================================================================================
-// API functions for IPO-H
+// CCCI API cannot be directly called by platform, 
+// since ccci.ko is loaded after ccci_platform.ko, 
+// so there is no API exported to platform.
 //==================================================================================
-int					ccci_uart_ipo_h_restore(int md_id);
-int					ccci_ipc_ipo_h_restore(int md_id);
-int					ccmni_ipo_h_restore(int md_id);
-int					ccci_ipo_h_platform_restore(int md_id);
-
-int					ccci_ipo_h_restore(int md_id, char buf[], unsigned int len);
-
-
-//==================================================================================
-// IOCTL commands
-//==================================================================================
-
-#define CCCI_IOC_MAGIC 'C'
-#define CCCI_IOC_MD_RESET				_IO(CCCI_IOC_MAGIC, 0)
-#define CCCI_IOC_GET_MD_STATE			_IOR(CCCI_IOC_MAGIC, 1, unsigned int)
-#define CCCI_IOC_PCM_BASE_ADDR			_IOR(CCCI_IOC_MAGIC, 2, unsigned int)
-#define CCCI_IOC_PCM_LEN				_IOR(CCCI_IOC_MAGIC, 3, unsigned int)
-#define CCCI_IOC_FORCE_MD_ASSERT		_IO(CCCI_IOC_MAGIC, 4)
-#define CCCI_IOC_ALLOC_MD_LOG_MEM		_IO(CCCI_IOC_MAGIC, 5)
-#define CCCI_IOC_DO_MD_RST				_IO(CCCI_IOC_MAGIC, 6)
-#define CCCI_IOC_SEND_RUN_TIME_DATA		_IO(CCCI_IOC_MAGIC, 7)
-#define CCCI_IOC_GET_MD_INFO			_IOR(CCCI_IOC_MAGIC, 8, unsigned int)
-#define CCCI_IOC_GET_MD_EX_TYPE			_IOR(CCCI_IOC_MAGIC, 9, unsigned int)
-#define CCCI_IOC_SEND_STOP_MD_REQUEST	_IO(CCCI_IOC_MAGIC, 10)
-#define CCCI_IOC_SEND_START_MD_REQUEST	_IO(CCCI_IOC_MAGIC, 11)
-#define CCCI_IOC_DO_STOP_MD				_IO(CCCI_IOC_MAGIC, 12)
-#define CCCI_IOC_DO_START_MD			_IO(CCCI_IOC_MAGIC, 13)
-#define CCCI_IOC_ENTER_DEEP_FLIGHT		_IO(CCCI_IOC_MAGIC, 14)
-#define CCCI_IOC_LEAVE_DEEP_FLIGHT		_IO(CCCI_IOC_MAGIC, 15)
-#define CCCI_IOC_POWER_ON_MD			_IO(CCCI_IOC_MAGIC, 16)
-#define CCCI_IOC_POWER_OFF_MD			_IO(CCCI_IOC_MAGIC, 17)
-#define CCCI_IOC_POWER_ON_MD_REQUEST	_IO(CCCI_IOC_MAGIC, 18)
-#define CCCI_IOC_POWER_OFF_MD_REQUEST	_IO(CCCI_IOC_MAGIC, 19)
-#define CCCI_IOC_SIM_SWITCH			    _IOW(CCCI_IOC_MAGIC, 20, unsigned int)
-#define CCCI_IOC_SEND_BATTERY_INFO      _IO(CCCI_IOC_MAGIC, 21)
-
-
-#endif
+#endif //__CCCI_COMMON_H__

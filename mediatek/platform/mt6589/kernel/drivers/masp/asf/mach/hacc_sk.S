@@ -2525,6 +2525,8 @@ hacc_ctx:
 	.section	.debug_str,"MS",%progbits,1
 .LASF44:
 	.ascii	"hacc_set_key\000"
+.LASF42:
+	.ascii	"akey\000"
 .LASF15:
 	.ascii	"BOOL\000"
 .LASF5:
@@ -2549,9 +2551,10 @@ hacc_ctx:
 	.ascii	"hw_key\000"
 .LASF31:
 	.ascii	"config\000"
-.LASF57:
+.LASF56:
 	.ascii	""
-	.ascii	"\000"
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/hacc_sk.c\000"
 .LASF51:
 	.ascii	"console_printk\000"
 .LASF50:
@@ -2630,15 +2633,11 @@ hacc_ctx:
 	.ascii	"hex_asc\000"
 .LASF19:
 	.ascii	"AES_DEC\000"
-.LASF42:
-	.ascii	"akey\000"
+.LASF57:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/out\000"
 .LASF11:
 	.ascii	"__kernel_size_t\000"
-.LASF56:
-	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
 .LASF18:
 	.ascii	"AES_MODE\000"
 .LASF36:

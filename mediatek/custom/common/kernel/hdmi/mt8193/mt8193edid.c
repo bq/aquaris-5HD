@@ -1362,7 +1362,7 @@ void vParserExtEDIDState(u8 *prEdid)
 void mt8193_checkedid(u8 i1noedid)
 {
   u8 bTemp;
-  u8 bRetryCount= 40;
+  u8 bRetryCount= 2;
   u8 i;
   MT8193_EDID_FUNC();
 
@@ -1795,6 +1795,27 @@ void mt8193_AppGetEdidInfo(HDMI_EDID_INFO_T *pv_get_info)
    pv_get_info->ui1_Display_Vertical_Size =_HdmiSinkAvCap.ui1_Display_Vertical_Size;
    pv_get_info->ui2_sink_cec_address = _HdmiSinkAvCap.ui2_sink_cec_address;
 
+}
+
+
+u8 mt8193_Check_EdidHeader(void)
+{
+    u8 bIdx;
+	u8 *prbData;
+	
+	prbData = &_bEdidData[0];
+	
+	//check if EDID header pass, ie. EDID[0] ~ EDID[7] == specify header pattern
+	for(bIdx = EDID_ADDR_HEADER; bIdx < (EDID_ADDR_HEADER+EDID_HEADER_LEN); bIdx++)
+    {
+        if(*(prbData+bIdx) != aEDIDHeader[bIdx])
+        {
+            return (FALSE);
+        }
+    }
+	
+    //EDID Header Check OK Here
+    return TRUE;
 }
 
 #endif

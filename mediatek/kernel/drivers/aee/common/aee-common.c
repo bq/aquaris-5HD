@@ -1,3 +1,4 @@
+#include <linux/bug.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/aee.h>
@@ -12,22 +13,10 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/stacktrace.h>
+#include <mach/wd_api.h>
 
 #ifdef CONFIG_SCHED_DEBUG
 extern int sysrq_sched_debug_show(void);
-#endif
-
-extern void mtk_wdt_disable(void);
-#ifdef CONFIG_LOCAL_WDT
-enum wk_wdt_type {
-	WK_WDT_LOC_TYPE,
-	WK_WDT_EXT_TYPE,
-	WK_WDT_LOC_TYPE_NOLOCK,
-	WK_WDT_EXT_TYPE_NOLOCK,	
-};
-
-extern void mpcore_wk_wdt_stop(void);
-extern void mpcore_wdt_restart(enum wk_wdt_type type);
 #endif
 
 #define AEK_LOG_TAG "aee/aek"
@@ -40,16 +29,16 @@ static char* msgbuf2 = NULL;
 /* Press key to enter kdb */
 void aee_trigger_kdb(void)
 {
+	int res=0;
+	struct wd_api*wd_api = NULL;
+	res = get_wd_api(&wd_api);
 	/* disable Watchdog HW, note it will not enable WDT again when kdb return */
-	mtk_wdt_disable();
-	#ifdef CONFIG_LOCAL_WDT
-	/* disable all local WDT on some specific SMP platform */
-	#ifdef CONFIG_SMP
-	on_each_cpu((smp_call_func_t)mpcore_wk_wdt_stop, NULL, 0);
-	#else
-	mpcore_wk_wdt_stop();
-	#endif
-	#endif
+	if(res)
+	{
+		printk("aee_trigger_kdb, get wd api error\n");
+	} else {
+		wd_api->wd_disable_all();
+	}
 	
 	#ifdef CONFIG_SCHED_DEBUG
 	sysrq_sched_debug_show();
@@ -62,11 +51,13 @@ void aee_trigger_kdb(void)
 	printk(KERN_INFO "Exit KDB \n");
 	#ifdef CONFIG_LOCAL_WDT	
 	/* enable local WDT */
-	#ifdef CONFIG_SMP
-	on_each_cpu((smp_call_func_t)mpcore_wdt_restart, WK_WDT_LOC_TYPE, 0);
-	#else
-	mpcore_wdt_restart(WK_WDT_LOC_TYPE);
-	#endif
+	if(res)
+	{
+		printk("aee_trigger_kdb, get wd api error\n");
+	} else {
+		wd_api->wd_restart(WD_TYPE_NOLOCK);
+	}
+
 	#endif
 	
 }
@@ -162,19 +153,22 @@ void aee_oops_free(struct aee_oops *oops)
 	if (oops->userspace_info) {
 		kfree(oops->userspace_info);
 	}
+	if (oops->mmprofile) {
+		kfree(oops->mmprofile);
+	}
+	if (oops->mini_rdump) {
+		kfree(oops->mini_rdump);
+	}
 	kfree(oops);
 }
-
 EXPORT_SYMBOL(aee_oops_free);
 
-int aee_register_api(struct aee_kernel_api *aee_api)
+void aee_register_api(struct aee_kernel_api *aee_api)
 {
 	if (!aee_api) {
 		BUG();
 	}
-
 	g_aee_api = aee_api;
-	return 0;
 }
 EXPORT_SYMBOL(aee_register_api);
 
@@ -201,6 +195,7 @@ void aee_get_traces(char *msg)
 }
 void aee_kernel_exception_api(const char *file, const int line, const int db_opt, const char *module, const char *msg, ...)
 {
+#ifdef CONFIG_MTK_AEE_AED
 	va_list args;
 
 	va_start(args, msg);
@@ -214,11 +209,13 @@ void aee_kernel_exception_api(const char *file, const int line, const int db_opt
 		vprintk(msg, args);
 	}
 	va_end(args);
+#endif
 }
 EXPORT_SYMBOL(aee_kernel_exception_api);
 
 void aee_kernel_warning_api(const char *file, const int line, const int db_opt, const char *module, const char *msg, ...)
 {
+#ifdef CONFIG_MTK_AEE_AED
 	va_list args;
 
 	va_start(args, msg);
@@ -232,11 +229,13 @@ void aee_kernel_warning_api(const char *file, const int line, const int db_opt, 
 		vprintk(msg, args);
 	}
 	va_end(args);
+#endif
 }
 EXPORT_SYMBOL(aee_kernel_warning_api);
 
 void aee_kernel_reminding_api(const char *file, const int line, const int db_opt, const char *module, const char *msg, ...)
 {
+#ifdef CONFIG_MTK_AEE_AED
 	va_list args;
 
 	va_start(args, msg);
@@ -249,11 +248,13 @@ void aee_kernel_reminding_api(const char *file, const int line, const int db_opt
 		vprintk(msg, args);
 	}
 	va_end(args);
+#endif
 }
 EXPORT_SYMBOL(aee_kernel_reminding_api);
 
 void aed_md_exception(const int *log, int log_size, const int *phy, int phy_size, const char* detail)
 {
+#ifdef CONFIG_MTK_AEE_AED
 	xlog_printk(ANDROID_LOG_DEBUG, AEK_LOG_TAG, "%s\n", __func__);
 	if (g_aee_api)
 	{
@@ -266,11 +267,13 @@ void aed_md_exception(const int *log, int log_size, const int *phy, int phy_size
 		xlog_printk(ANDROID_LOG_DEBUG, AEK_LOG_TAG, "g_aee_api is null\n");
 	}
 	xlog_printk(ANDROID_LOG_DEBUG, AEK_LOG_TAG, "%s out\n", __func__);
+#endif
 }
 EXPORT_SYMBOL(aed_md_exception);
 
 void aed_combo_exception(const int *log, int log_size, const int *phy, int phy_size, const char* detail)
 {
+#ifdef CONFIG_MTK_AEE_AED
 	xlog_printk(ANDROID_LOG_DEBUG, AEK_LOG_TAG, "aed_combo_exception\n") ;
 	if (g_aee_api)
 	{
@@ -283,6 +286,7 @@ void aed_combo_exception(const int *log, int log_size, const int *phy, int phy_s
 		xlog_printk(ANDROID_LOG_DEBUG, AEK_LOG_TAG, "g_aee_api is null\n");
 	}
 	xlog_printk(ANDROID_LOG_DEBUG, AEK_LOG_TAG,  "aed_combo_exception out\n");
+#endif
 }
 EXPORT_SYMBOL(aed_combo_exception);
 
@@ -314,7 +318,7 @@ void aee_sram_printk(const char *fmt, ...)
 #endif
 }
 EXPORT_SYMBOL(aee_sram_printk);
-  
+
 static int __init aee_common_init(void)
 {
 	int ret = 0;

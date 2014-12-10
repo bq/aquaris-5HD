@@ -19,7 +19,7 @@
 //#error GPIO_MHL_EINT_PIN not defined
 #endif
 #if !defined CUST_EINT_MHL_NUM
-#error CUST_EINT_MHL_NUM not defined
+///#error CUST_EINT_MHL_NUM not defined
 #endif
 
 #if 0
@@ -51,13 +51,19 @@ static irqreturn_t HalThreadedIrqHandler(int irq, void *data)
 static struct task_struct *mhl_irq_task = NULL;
 
 static wait_queue_head_t mhl_irq_wq;
+
+#ifdef MTK_SMARTBOOK_SUPPORT
+extern int smartbook_kthread(void *data);
+extern wait_queue_head_t smartbook_wq;
+static struct task_struct *smartbook_task = NULL; //add by kirby
+#endif
+
 static atomic_t mhl_irq_event = ATOMIC_INIT(0);
 
 
 
 static void mhl8338_irq_handler(void)
 {
-	printk("[mhl]mhl interrupt detected!!!\n");
  	atomic_set(&mhl_irq_event, 1);
     wake_up_interruptible(&mhl_irq_wq); 
 	//mt65xx_eint_unmask(CUST_EINT_HDMI_HPD_NUM);   
@@ -70,7 +76,9 @@ static int mhl_irq_kthread(void *data)
 	sched_setscheduler(current, SCHED_RR, &param);
     
     for( ;; ) {
+        set_current_state(TASK_INTERRUPTIBLE);
         wait_event_interruptible(mhl_irq_wq, atomic_read(&mhl_irq_event));
+        set_current_state(TASK_RUNNING);
 		printk("mhl_irq_kthread, mhl irq received\n");
         //hdmi_update_impl();
 
@@ -78,7 +86,9 @@ static int mhl_irq_kthread(void *data)
         SiiMhlTxDeviceIsr();
         if (kthread_should_stop())
             break;
-		mt65xx_eint_unmask(CUST_EINT_MHL_NUM);
+#ifdef CUST_EINT_MHL_NUM
+		mt_eint_unmask(CUST_EINT_MHL_NUM);
+#endif
     }
 
     return 0;
@@ -91,9 +101,15 @@ halReturn_t HalInstallIrqHandler(fwIrqHandler_t irqHandler)
 
 	init_waitqueue_head(&mhl_irq_wq);
 	
-	mhl_irq_task = kthread_create(mhl_irq_kthread, NULL, "hdmi_update_kthread"); 
+	mhl_irq_task = kthread_create(mhl_irq_kthread, NULL, "mhl_irq_kthread"); 
 	wake_up_process(mhl_irq_task);
 
+    #ifdef MTK_SMARTBOOK_SUPPORT
+    //add by kirby
+    init_waitqueue_head(&smartbook_wq);
+	smartbook_task = kthread_create(smartbook_kthread, NULL, "smartbook_kthread"); 
+	wake_up_process(smartbook_task);
+    #endif
 	
 	if(irqHandler == NULL)
 	{
@@ -120,9 +136,15 @@ halReturn_t HalInstallIrqHandler(fwIrqHandler_t irqHandler)
 	mt_set_gpio_pull_select(GPIO_MHL_EINT_PIN,  GPIO_PULL_UP);
     mt_set_gpio_pull_enable(GPIO_MHL_EINT_PIN, true);
 #endif
-	mt65xx_eint_set_sens(CUST_EINT_MHL_NUM, MT65xx_LEVEL_SENSITIVE);
-    mt65xx_eint_registration(CUST_EINT_MHL_NUM, 0, MT65XX_EINT_POL_NEG, &mhl8338_irq_handler, 0);
 
+#ifdef CUST_EINT_MHL_NUM
+	///mt_eint_set_sens(CUST_EINT_MHL_NUM, MT_LEVEL_SENSITIVE);
+	///mt_eint_set_hw_debounce(CUST_EINT_MHL_NUM, CUST_EINT_MHL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_MHL_NUM, CUST_EINT_MHL_TYPE, &mhl8338_irq_handler, 0);
+    mt_eint_unmask(CUST_EINT_MHL_NUM);
+#else
+    printk("%s,%d Error: CUST_EINT_MHL_NUM is not defined\n", __func__, __LINE__);
+#endif
 	#if 0
 	gMhlDevice.irqHandler = irqHandler;
 	retStatus = request_threaded_irq(gMhlDevice.pI2cClient->irq, NULL,

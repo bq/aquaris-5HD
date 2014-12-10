@@ -144,14 +144,14 @@ extern void DpEngine_COLORonInit(void);
 struct disp_path_config_struct
 {
     DISP_MODULE_ENUM srcModule;
-    unsigned int addr; 
-    unsigned int inFormat; 
+    unsigned int addr;
+    unsigned int inFormat;
     unsigned int pitch;
     struct DISP_REGION srcROI;        // ROI
 
     unsigned int layer;
     bool layer_en;
-    enum OVL_LAYER_SOURCE source; 
+    enum OVL_LAYER_SOURCE source;
     struct DISP_REGION bgROI;         // background ROI
     unsigned int bgColor;  // background color
     unsigned int key;     // color key
@@ -159,7 +159,7 @@ struct disp_path_config_struct
     unsigned char alpha;
 
     DISP_MODULE_ENUM dstModule;
-    unsigned int outFormat; 
+    unsigned int outFormat;
     unsigned int dstAddr;  // only take effect when dstModule=DISP_MODULE_WDMA1
 };
 int disp_path_enable();
@@ -218,14 +218,14 @@ int disp_lock_mutex(void)
 
 int disp_unlock_mutex(int id)
 {
-    if(id < 0 && id >= ENGINE_MUTEX_NUM) 
+    if(id < 0 && id >= ENGINE_MUTEX_NUM)
         return -1;
 
     spin_lock(&gMutexLock);
-    
+
     mutex_used[id] = 0;
     DISP_REG_SET_FIELD((1 << id) , DISP_REG_CONFIG_MUTEX_INTEN , 0);
-    
+
     spin_unlock(&gMutexLock);
 
     return 0;
@@ -236,22 +236,22 @@ int disp_lock_cmdq_thread(void)
     int i=0;
 
     printk("disp_lock_cmdq_thread()called \n");
-    
-    spin_lock(&gCmdqLock);    
+
+    spin_lock(&gCmdqLock);
     for (i = 0; i < CMDQ_THREAD_NUM; i++)
     {
-        if (cmdq_thread[i] == 1) 
+        if (cmdq_thread[i] == 1)
         {
             cmdq_thread[i] = 0;
             break;
         }
-    } 
+    }
     spin_unlock(&gCmdqLock);
 
     printk("disp_lock_cmdq_thread(), i=%d \n", i);
 
     return (i>=CMDQ_THREAD_NUM)? -1 : i;
-    
+
 }
 
 int disp_unlock_cmdq_thread(unsigned int idx)
@@ -259,7 +259,7 @@ int disp_unlock_cmdq_thread(unsigned int idx)
     if(idx >= CMDQ_THREAD_NUM)
         return -1;
 
-    spin_lock(&gCmdqLock);        
+    spin_lock(&gCmdqLock);
     cmdq_thread[idx] = 1;  // free thread availbility
     spin_unlock(&gCmdqLock);
 
@@ -275,14 +275,14 @@ int disp_wait_intr(DISP_MODULE_ENUM module, unsigned int timeout_ms)
 
     unsigned long long end_time = 0;
     unsigned long long start_time = sched_clock();
-        
+
     MMProfileLogEx(DDP_MMP_Events.WAIT_INTR, MMProfileFlagStart, 0, module);
     // wait until irq done or timeout
     ret = wait_event_interruptible_timeout(
-                    g_disp_irq_done_queue, 
-                    g_disp_irq.irq_src & (1<<module), 
+                    g_disp_irq_done_queue,
+                    g_disp_irq.irq_src & (1<<module),
                     disp_ms2jiffies(timeout_ms) );
-                    
+
     /*wake-up from sleep*/
     if(ret==0) // timeout
     {
@@ -294,7 +294,7 @@ int disp_wait_intr(DISP_MODULE_ENUM module, unsigned int timeout_ms)
             printk("======== WDMA0 timeout, dump all registers! \n");
             disp_dump_reg(DISP_MODULE_ROT);
             disp_dump_reg(DISP_MODULE_SCL);
-            disp_dump_reg(DISP_MODULE_WDMA0);            
+            disp_dump_reg(DISP_MODULE_WDMA0);
         }
         else
         {
@@ -302,7 +302,7 @@ int disp_wait_intr(DISP_MODULE_ENUM module, unsigned int timeout_ms)
         }
         disp_dump_reg(DISP_MODULE_CONFIG);
 
-        return -EAGAIN;        
+        return -EAGAIN;
     }
     else if(ret<0) // intr by a signal
     {
@@ -310,20 +310,20 @@ int disp_wait_intr(DISP_MODULE_ENUM module, unsigned int timeout_ms)
         MMProfileLog(DDP_MMP_Events.WAIT_INTR, MMProfileFlagEnd);
         DISP_ERR("Wait Done interrupted by a signal! pid=%d, module=%d \n", current->pid ,module);
         disp_dump_reg(module);
-        return -EAGAIN;                 
+        return -EAGAIN;
     }
 
     MMProfileLogEx(DDP_MMP_Events.WAIT_INTR, MMProfileFlagEnd, 0, module);
     spin_lock_irqsave( &g_disp_irq.irq_lock , flags );
-    g_disp_irq.irq_src &= ~(1<<module);    
+    g_disp_irq.irq_src &= ~(1<<module);
     spin_unlock_irqrestore( &g_disp_irq.irq_lock , flags );
 
     end_time = sched_clock();
    	//DISP_MSG("**ROT_SCL_WDMA0 execute %d us\n", ((unsigned int)end_time-(unsigned int)start_time)/1000);
 
-    // after enable new tile mode flow, this time can be very short    
+    // after enable new tile mode flow, this time can be very short
     if(0)//module==DISP_MODULE_WDMA0 && (end_time-start_time)/1000<50) //less than 0.05ms
-    {        
+    {
         DISP_ERR("ROT_SCL_WDMA0 path too fast! %d us\n", ((unsigned int)end_time-(unsigned int)start_time)/1000);
         DISP_MSG("DISP_REG_ROT_SRC_BASE_0: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_SRC_BASE_0));
         DISP_MSG("DISP_REG_ROT_SRC_BASE_1: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_SRC_BASE_1));
@@ -332,8 +332,8 @@ int disp_wait_intr(DISP_MODULE_ENUM module, unsigned int timeout_ms)
         DISP_MSG("DISP_REG_ROT_MF_CLIP_SIZE: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_MF_CLIP_SIZE));
         DISP_MSG("DISP_REG_ROT_EN: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_EN));
         DISP_MSG("DISP_REG_ROT_SRC_CON: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_SRC_CON));
-        DISP_MSG("DISP_REG_ROT_CON: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_CON));        
-        
+        DISP_MSG("DISP_REG_ROT_CON: 0x%x\n",DISP_REG_GET(DISP_REG_ROT_CON));
+
         DISP_MSG("DISP_REG_WDMA_DST_ADDR: 0x%x\n",DISP_REG_GET(DISP_REG_WDMA_DST_ADDR));
         DISP_MSG("DISP_REG_WDMA_DST_U_ADDR: 0x%x\n",DISP_REG_GET(DISP_REG_WDMA_DST_U_ADDR));
         DISP_MSG("DISP_REG_WDMA_DST_UV_PITCH: 0x%x\n",DISP_REG_GET(DISP_REG_WDMA_DST_UV_PITCH));
@@ -342,7 +342,7 @@ int disp_wait_intr(DISP_MODULE_ENUM module, unsigned int timeout_ms)
         DISP_MSG("DISP_REG_WDMA_EN: 0x%x\n",DISP_REG_GET(DISP_REG_WDMA_EN));
         DISP_MSG("DISP_REG_WDMA_CFG: 0x%x\n",DISP_REG_GET(DISP_REG_WDMA_CFG));
     }
-              
+
     return 0;
 }
 
@@ -427,13 +427,8 @@ extern void hdmi_rdma1_done(void);
 #endif
 
 #if  defined(MTK_WFD_SUPPORT)
-extern void wfd_setorientation(int orientation);
 void hdmi_power_on(void);
 void hdmi_power_off(void);
-extern void wfd_update_buffer_switch(void);
-extern bool is_wfd_active(void);
-extern void wfd_update(void);
-extern void wfd_source_buffer_switch(void);
 #endif
 
 //extern void hdmi_test_switch_buffer(void);
@@ -444,19 +439,19 @@ unsigned int cnt_ovl_underflow = 1;
 unsigned int cnt_ovl_eof = 1;
 static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 {
-    unsigned long reg_val; 
+    unsigned long reg_val;
     int i;
-    DISP_IRQ("irq=%d, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x \n", 
-        irq, 
-        DISP_REG_GET(DISP_REG_SCL_INTSTA), 
-        DISP_REG_GET(DISP_REG_ROT_INTERRUPT_STATUS), 
-        DISP_REG_GET(DISP_REG_OVL_INTSTA), 
-        DISP_REG_GET(DISP_REG_WDMA_INTSTA), 
-        DISP_REG_GET(DISP_REG_WDMA_INTSTA+0x1000), 
+    DISP_IRQ("irq=%d, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x \n",
+        irq,
+        DISP_REG_GET(DISP_REG_SCL_INTSTA),
+        DISP_REG_GET(DISP_REG_ROT_INTERRUPT_STATUS),
+        DISP_REG_GET(DISP_REG_OVL_INTSTA),
+        DISP_REG_GET(DISP_REG_WDMA_INTSTA),
+        DISP_REG_GET(DISP_REG_WDMA_INTSTA+0x1000),
         DISP_REG_GET(DISP_REG_RDMA_INT_STATUS),
         DISP_REG_GET(DISP_REG_RDMA_INT_STATUS+0x1000));
 
-       
+
     /*1. Process ISR*/
     switch(irq)
     {
@@ -465,26 +460,26 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 if(reg_val&(1<<0))
                 {
                       DISP_IRQ("IRQ: SCL input frame done! \n");
-                }    
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_IRQ("IRQ: SCL output frame done! \n");
                       g_disp_irq.irq_src |= (1<<DISP_MODULE_SCL);
                 }
-                
+
                 //clear intr
                 DISP_REG_SET(DISP_REG_SCL_INTSTA, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.SCL_IRQ, MMProfileFlagPulse, reg_val, 0);
                 disp_invoke_irq_callbacks(DISP_MODULE_SCL, reg_val);
                 break;
-                  
+
         case MT6589_DISP_ROT_IRQ_ID:
                 reg_val = DISP_REG_GET(DISP_REG_ROT_INTERRUPT_STATUS);
                 if(reg_val&(1<<0))
                 {
                       DISP_IRQ("IRQ: ROT frame done! \n");
                       g_disp_irq.irq_src |= (1<<DISP_MODULE_ROT);
-                }    
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_IRQ("IRQ: ROT reg update done! \n");
@@ -493,19 +488,19 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 {
                       DISP_ERR("IRQ: ROT underrun! \n");
                 }
-                                
+
                 //clear intr
                 DISP_REG_SET(DISP_REG_ROT_INTERRUPT_STATUS, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.ROT_IRQ, MMProfileFlagPulse, reg_val, 0);
                 disp_invoke_irq_callbacks(DISP_MODULE_ROT, reg_val);
             break;
-              
-        case MT6589_DISP_OVL_IRQ_ID:  
+
+        case MT6589_DISP_OVL_IRQ_ID:
                 reg_val = DISP_REG_GET(DISP_REG_OVL_INTSTA);
                 if(reg_val&(1<<0))
                 {
                       DISP_IRQ("IRQ: OVL reg update done! \n");
-                }    
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_IRQ("IRQ: OVL frame done! \n");
@@ -526,7 +521,7 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 if(reg_val&(1<<5))
                 {
                       DISP_ERR("IRQ: OVL-RDMA0 not complete untill EOF! \n");
-                }      
+                }
                 if(reg_val&(1<<6))
                 {
                       DISP_ERR("IRQ: OVL-RDMA1 not complete untill EOF! \n");
@@ -534,7 +529,7 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 if(reg_val&(1<<7))
                 {
                       DISP_ERR("IRQ: OVL-RDMA2 not complete untill EOF! \n");
-                }        
+                }
                 if(reg_val&(1<<8))
                 {
                       DISP_ERR("IRQ: OVL-RDMA3 not complete untill EOF! \n");
@@ -542,7 +537,7 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 if(reg_val&(1<<9))
                 {
                       DISP_ERR("IRQ: OVL-RDMA0 fifo underflow! \n");
-                }      
+                }
                 if(reg_val&(1<<10))
                 {
                       DISP_ERR("IRQ: OVL-RDMA1 fifo underflow! \n");
@@ -550,42 +545,42 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 if(reg_val&(1<<11))
                 {
                       DISP_ERR("IRQ: OVL-RDMA2 fifo underflow! \n");
-                }    
+                }
                 if(reg_val&(1<<12))
                 {
                       DISP_ERR("IRQ: OVL-RDMA3 fifo underflow! \n");
-                }                                                                                                  
+                }
                 //clear intr
-                DISP_REG_SET(DISP_REG_OVL_INTSTA, ~reg_val);     
+                DISP_REG_SET(DISP_REG_OVL_INTSTA, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.OVL_IRQ, MMProfileFlagPulse, reg_val, 0);
                 disp_invoke_irq_callbacks(DISP_MODULE_OVL, reg_val);
             break;
-            
+
         case MT6589_DISP_WDMA0_IRQ_ID:
                 reg_val = DISP_REG_GET(DISP_REG_WDMA_INTSTA);
                 if(reg_val&(1<<0))
                 {
                     DISP_IRQ("IRQ: WDMA0 frame done! \n");
                     g_disp_irq.irq_src |= (1<<DISP_MODULE_WDMA0);
-                }    
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_ERR("IRQ: WDMA0 underrun! \n");
 
-                }  
+                }
                 //clear intr
-                DISP_REG_SET(DISP_REG_WDMA_INTSTA, ~reg_val);           
+                DISP_REG_SET(DISP_REG_WDMA_INTSTA, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.WDMA0_IRQ, MMProfileFlagPulse, reg_val, DISP_REG_GET(DISP_REG_WDMA_CLIP_SIZE));
                 disp_invoke_irq_callbacks(DISP_MODULE_WDMA0, reg_val);
             break;
-            
+
         case MT6589_DISP_WDMA1_IRQ_ID:
                  reg_val = DISP_REG_GET(DISP_REG_WDMA_INTSTA+0x1000);
                 if(reg_val&(1<<0))
                 {
 					DISP_IRQ("IRQ: WDMA1 frame done! \n");
 					g_disp_irq.irq_src |= (1<<DISP_MODULE_WDMA1);
-#if defined(MTK_HDMI_SUPPORT)
+/*#if defined(MTK_HDMI_SUPPORT)
 					if(!DISP_IsVideoMode())
 					    hdmi_source_buffer_switch();
 
@@ -594,8 +589,9 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 					    hdmi_wdma1_done();
 					    hdmi_update();
 					}
-#endif
+#endif*/
 #if defined(MTK_WFD_SUPPORT)
+/*
 					if(!DISP_IsVideoMode())
 					    wfd_source_buffer_switch();
 
@@ -603,27 +599,28 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 					{
 					    wfd_update();
 					}
+*/
 #endif
 		            //hdmi_test_switch_buffer();
-									
-                }    
+
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_ERR("IRQ: WDMA1 underrun! \n");
 
-                }  
+                }
                 //clear intr
-                DISP_REG_SET(DISP_REG_WDMA_INTSTA+0x1000, ~reg_val);           
+                DISP_REG_SET(DISP_REG_WDMA_INTSTA+0x1000, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.WDMA1_IRQ, MMProfileFlagPulse, reg_val, DISP_REG_GET(DISP_REG_WDMA_CLIP_SIZE+0x1000));
                 disp_invoke_irq_callbacks(DISP_MODULE_WDMA1, reg_val);
-            break;           
-            
+            break;
+
         case MT6589_DISP_RDMA0_IRQ_ID:
                 reg_val = DISP_REG_GET(DISP_REG_RDMA_INT_STATUS);
                 if(reg_val&(1<<0))
                 {
                       DISP_IRQ("IRQ: RDMA0 reg update done! \n");
-                }    
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_IRQ("IRQ: RDMA0 frame start! \n");
@@ -641,32 +638,38 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 }
                 if(reg_val&(1<<3))
                 {
-                      if(cnt_rdma_abnormal<100)
+                      if(cnt_rdma_abnormal<300)
                       {
                           DISP_ERR("IRQ: RDMA0 abnormal! %d times \n", cnt_rdma_abnormal);
                           cnt_rdma_abnormal++;
+                          DISP_MSG("0xf0000000=0x%x, 0xf4000000=0x%x, CG0(f4000100)=0x%x, CG1(f4000110)=0x%x \n",
+			                		  *(volatile unsigned int*)(0xf0000000),
+			                		  *(volatile unsigned int*)(0xf4000000),
+			                		  DISP_REG_GET(DISP_REG_CONFIG_CG_CON0),
+			                		  DISP_REG_GET(DISP_REG_CONFIG_CG_CON1));
+			                		//disp_dump_smi_reg();
                       }
                 }
                 if(reg_val&(1<<4))
                 {
-                      if(cnt_rdma_underflow<100)
+                      //if(cnt_rdma_underflow<100)
                       {
                           DISP_ERR("IRQ: RDMA0 underflow!%d times \n", cnt_rdma_underflow);
                           cnt_rdma_underflow++;
                       }
                 }
                 //clear intr
-                DISP_REG_SET(DISP_REG_RDMA_INT_STATUS, ~reg_val);           
+                DISP_REG_SET(DISP_REG_RDMA_INT_STATUS, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.RDMA0_IRQ, MMProfileFlagPulse, reg_val, 0);
                 disp_invoke_irq_callbacks(DISP_MODULE_RDMA0, reg_val);
-            break;  
-            
+            break;
+
         case MT6589_DISP_RDMA1_IRQ_ID:
                 reg_val = DISP_REG_GET(DISP_REG_RDMA_INT_STATUS+0x1000);
                 if(reg_val&(1<<0))
                 {
                       DISP_IRQ("IRQ: RDMA1 reg update done! \n");
-                }    
+                }
                 if(reg_val&(1<<1))
                 {
                       DISP_IRQ("IRQ: RDMA1 frame start! \n");
@@ -676,12 +679,12 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                       DISP_IRQ("IRQ: RDMA1 frame done! \n");
                       g_disp_irq.irq_src |= (1<<DISP_MODULE_RDMA1);
 
-#if defined(MTK_HDMI_SUPPORT)
+/*#if defined(MTK_HDMI_SUPPORT)
                       if(is_hdmi_active() && DISP_IsVideoMode())
                       {
                           hdmi_rdma1_done();
                       }
-#endif
+#endif*/
 
                 }
                 if(reg_val&(1<<3))
@@ -693,18 +696,18 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                       DISP_ERR("IRQ: RDM1A underflow! \n");
                 }
                 //clear intr
-                DISP_REG_SET(DISP_REG_RDMA_INT_STATUS+0x1000, ~reg_val);           
+                DISP_REG_SET(DISP_REG_RDMA_INT_STATUS+0x1000, ~reg_val);
                 MMProfileLogEx(DDP_MMP_Events.RDMA1_IRQ, MMProfileFlagPulse, reg_val, 0);
                 disp_invoke_irq_callbacks(DISP_MODULE_RDMA1, reg_val);
-            break;  
-            
+            break;
+
         case MT6589_DISP_COLOR_IRQ_ID:
             reg_val = DISP_REG_GET(DISPSYS_COLOR_BASE+0x0F08);
 
             // read LUMA histogram
             if (reg_val & 0x2)
             {
-//TODO : might want to move to other IRQ~ -S       
+//TODO : might want to move to other IRQ~ -S
                 //disp_update_hist();
                 //disp_wakeup_aal();
 //TODO : might want to move to other IRQ~ -E
@@ -715,7 +718,7 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
             MMProfileLogEx(DDP_MMP_Events.COLOR_IRQ, MMProfileFlagPulse, reg_val, 0);
 //            disp_invoke_irq_callbacks(DISP_MODULE_COLOR, reg_val);
             break;
-                        
+
         case MT6589_DISP_BLS_IRQ_ID:
             reg_val = DISP_REG_GET(DISP_REG_BLS_INTSTA);
 
@@ -730,9 +733,9 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
             DISP_REG_SET(DISP_REG_BLS_INTSTA, ~reg_val);
             MMProfileLogEx(DDP_MMP_Events.BLS_IRQ, MMProfileFlagPulse, reg_val, 0);
             break;
-            
+
         case MT6589_DISP_TDSHP_IRQ_ID:
-            //DISP_REG_SET(DISPSYS_TDSHP_BASE, 0); 
+            //DISP_REG_SET(DISPSYS_TDSHP_BASE, 0);
             DISP_IRQ("tdshp irq \n ");
             //disp_invoke_irq_callbacks(DISP_MODULE_TDSHP, 0);
             MMProfileLogEx(DDP_MMP_Events.TDSHP_IRQ, MMProfileFlagPulse, 0, 0);
@@ -741,7 +744,7 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
         case MT6589_DISP_CMDQ_IRQ_ID:
             for(i = 0 ; i < CMDQ_THREAD_NUM ; i++)
             {
-                reg_val = DISP_REG_GET(DISP_REG_CMDQ_THRx_IRQ_FLAG(i)); 
+                reg_val = DISP_REG_GET(DISP_REG_CMDQ_THRx_IRQ_FLAG(i));
                 if( reg_val != 0 )
                 {
                     DISP_IRQ("CMQ Thread %d IRQ %lu", i, reg_val);
@@ -758,29 +761,34 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                 }
             }
             return IRQ_HANDLED;
-        case MT6589_DISP_MUTEX_IRQ_ID:  // can not do reg update done status after release mutex(for ECO requirement), 
+        case MT6589_DISP_MUTEX_IRQ_ID:  // can not do reg update done status after release mutex(for ECO requirement),
                                         // so we have to check update timeout intr here
             reg_val = DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA);
-            
+
             if(reg_val&0x3cf) // udpate timeout intr triggered
             {
                 unsigned int reg = 0;
                 unsigned int mutexID = 0;
-                
+
                 for(mutexID=0;mutexID<4;mutexID++)
                 {
                     if((DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA) & (1<<(mutexID+6))) == (1<<(mutexID+6)))
                     {
                         DISP_ERR("disp_path_release_mutex() timeout! \n");
+                        disp_dump_reg(DISP_MODULE_MUTEX0+mutexID);
                         disp_irq_log_module |= (1<<DISP_MODULE_CONFIG);
-                        
+
                         // print error engine
                         reg = DISP_REG_GET(DISP_REG_CONFIG_REG_COMMIT);
                         if(reg!=0)
                         {
                             if(reg&(1<<0))  { DISP_MSG(" ROT update reg timeout! \n");      disp_irq_log_module |= (1<<DISP_MODULE_ROT); }
                             if(reg&(1<<1))  { DISP_MSG(" SCL update reg timeout! \n");      disp_irq_log_module |= (1<<DISP_MODULE_SCL); }
-                            if(reg&(1<<2))  { DISP_MSG(" OVL update reg timeout! \n");      disp_irq_log_module |= (1<<DISP_MODULE_OVL); }                            	                
+                            if(reg&(1<<2))
+                            {
+                            	DISP_MSG(" OVL update reg timeout! \n");
+                            	disp_dump_reg(DISP_MODULE_OVL);
+                            }
                             if(reg&(1<<3))  { DISP_MSG(" COLOR update reg timeout! \n");    disp_irq_log_module |= (1<<DISP_MODULE_COLOR); }
                             if(reg&(1<<4))  { DISP_MSG(" 2D_SHARP update reg timeout! \n"); disp_irq_log_module |= (1<<DISP_MODULE_TDSHP); }
                             if(reg&(1<<5))  { DISP_MSG(" WDMA0 update reg timeout! \n");    disp_irq_log_module |= (1<<DISP_MODULE_WDMA0); }
@@ -789,13 +797,13 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                             if(reg&(1<<8))  { DISP_MSG(" RDMA1 update reg timeout! \n");    disp_irq_log_module |= (1<<DISP_MODULE_RDMA1); }
                             if(reg&(1<<9))  { DISP_MSG(" BLS update reg timeout! \n");      disp_irq_log_module |= (1<<DISP_MODULE_BLS); }
                             if(reg&(1<<10)) { DISP_MSG(" GAMMA update reg timeout! \n");    disp_irq_log_module |= (1<<DISP_MODULE_GAMMA); }
-                        }  
+                        }
                         // prink smi related register
                         disp_irq_log_module |= (1<<DISP_MODULE_SMI);
 
                         //reset mutex
                         DISP_REG_SET(DISP_REG_CONFIG_MUTEX_RST(mutexID), 1);
-                        DISP_REG_SET(DISP_REG_CONFIG_MUTEX_RST(mutexID), 0);                        
+                        DISP_REG_SET(DISP_REG_CONFIG_MUTEX_RST(mutexID), 0);
                         DISP_MSG("mutex reset done! \n");
                     }
                     else if((DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA) & (1<<mutexID)) == (1<<mutexID)) //mutex  update done
@@ -806,7 +814,7 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
                  }
             }
 
-           
+
             DISP_REG_SET(DISP_REG_CONFIG_MUTEX_INTSTA, ~reg_val);
             MMProfileLogEx(DDP_MMP_Events.Mutex_IRQ, MMProfileFlagPulse, reg_val, 0);
             disp_invoke_irq_callbacks(DISP_MODULE_MUTEX, reg_val);
@@ -815,21 +823,21 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
             reg_val = DISP_REG_GET(DISP_REG_G2D_IRQ);
             if(reg_val&G2D_IRQ_STA_BIT)
             {
-				  unsigned long set_val = reg_val & ~(G2D_IRQ_STA_BIT); 
+				  unsigned long set_val = reg_val & ~(G2D_IRQ_STA_BIT);
                   DISP_IRQ("IRQ: G2D done! \n");
 				  g_disp_irq.irq_src |= (1<<DISP_MODULE_G2D);
 				  //clear intr
 				  DISP_REG_SET(DISP_REG_G2D_IRQ, set_val);
-            }                                   
-            
+            }
+
             disp_invoke_irq_callbacks(DISP_MODULE_G2D, reg_val);
-            break;			
+            break;
         default: DISP_ERR("invalid irq=%d \n ", irq); break;
-    }        
+    }
 
     // Wakeup event
     mb();   // Add memory barrier before the other CPU (may) wakeup
-    wake_up_interruptible(&g_disp_irq_done_queue);    
+    wake_up_interruptible(&g_disp_irq_done_queue);
 
     // dump register if error happened
     if(disp_irq_log_module!=0)
@@ -840,33 +848,33 @@ static /*__tcmfunc*/ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 #if 0
     if(DISP_REG_GET(DISP_REG_SCL_INTSTA)!=0)
         DISP_REG_SET(DISP_REG_SCL_INTSTA, 0);
-     
+
     if(DISP_REG_GET(DISP_REG_ROT_INTERRUPT_STATUS)!=0)
         DISP_REG_SET(DISP_REG_ROT_INTERRUPT_STATUS, 0);
-        
-    if(DISP_REG_GET(DISP_REG_OVL_INTSTA)!=0)    
+
+    if(DISP_REG_GET(DISP_REG_OVL_INTSTA)!=0)
         DISP_REG_SET(DISP_REG_OVL_INTSTA, 0);
-        
-    if(DISP_REG_GET(DISP_REG_WDMA_INTSTA)!=0)  
+
+    if(DISP_REG_GET(DISP_REG_WDMA_INTSTA)!=0)
         DISP_REG_SET(DISP_REG_WDMA_INTSTA, 0);
-        
-    if(DISP_REG_GET(DISP_REG_WDMA_INTSTA+0x1000)!=0)   
+
+    if(DISP_REG_GET(DISP_REG_WDMA_INTSTA+0x1000)!=0)
         DISP_REG_SET(DISP_REG_WDMA_INTSTA+0x1000, 0);
-        
-    if(DISP_REG_GET(DISP_REG_RDMA_INT_STATUS)!=0)  
+
+    if(DISP_REG_GET(DISP_REG_RDMA_INT_STATUS)!=0)
         DISP_REG_SET(DISP_REG_RDMA_INT_STATUS, 0);
 
-    if(DISP_REG_GET(DISP_REG_RDMA_INT_STATUS+0x1000)!=0)  
+    if(DISP_REG_GET(DISP_REG_RDMA_INT_STATUS+0x1000)!=0)
         DISP_REG_SET(DISP_REG_RDMA_INT_STATUS+0x1000, 0);
 #endif
 
-             
+
     return IRQ_HANDLED;
 }
 
 
 void disp_power_on(DISP_MODULE_ENUM eModule , unsigned int * pu4Record)
-{  
+{
     unsigned long flag;
     unsigned int ret = 0;
     spin_lock_irqsave(&gPowerOperateLock , flag);
@@ -893,7 +901,7 @@ void disp_power_on(DISP_MODULE_ENUM eModule , unsigned int * pu4Record)
             break;
             case DISP_MODULE_TDSHP :
                 enable_clock(MT_CG_DISP0_2DSHP , "DDP_DRV");
-            break;    
+            break;
             case DISP_MODULE_G2D :
                 enable_clock(MT_CG_DISP0_G2D_ENGINE , "DDP_DRV");
 				enable_clock(MT_CG_DISP0_G2D_SMI , "DDP_DRV");
@@ -915,7 +923,7 @@ void disp_power_on(DISP_MODULE_ENUM eModule , unsigned int * pu4Record)
         }
     }
 
-    
+
     if(DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTEN)!= DDP_MUTEX_INTR_ENABLE_BIT)
     {
         // restore mutex intr_en reg, because this reg will be reset if power is off
@@ -927,7 +935,7 @@ void disp_power_on(DISP_MODULE_ENUM eModule , unsigned int * pu4Record)
 }
 
 void disp_power_off(DISP_MODULE_ENUM eModule , unsigned int * pu4Record)
-{  
+{
     unsigned long flag;
     unsigned int ret = 0;
     spin_lock_irqsave(&gPowerOperateLock , flag);
@@ -959,7 +967,7 @@ void disp_power_off(DISP_MODULE_ENUM eModule , unsigned int * pu4Record)
             case DISP_MODULE_G2D :
                 disable_clock(MT_CG_DISP0_G2D_ENGINE , "DDP_DRV");
                 disable_clock(MT_CG_DISP0_G2D_SMI , "DDP_DRV");
-            break;            
+            break;
             default :
                 DISP_ERR("disp_power_off:unsupported format:%d\n" , eModule);
                 ret = -1;
@@ -1110,6 +1118,85 @@ int ConfColorFunc(int i4NotUsed)
     return 0;
 }
 
+int disp_color_get_pq_param(void* arg)
+{
+    DISP_PQ_PARAM * pq_param;
+
+    pq_param = get_Color_config();
+    if(copy_to_user((void *)arg, pq_param, sizeof(DISP_PQ_PARAM)))
+    {
+        printk("disp driver : DISP_IOCTL_GET_PQPARAM Copy to user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+int disp_color_get_pq_gal_param(void* arg)
+{
+    DISP_PQ_PARAM * pq_param;
+
+    pq_param = get_Color_Gal_config();
+    if(copy_to_user((void *)arg, pq_param, sizeof(DISP_PQ_PARAM)))
+    {
+        printk("disp driver : DISP_IOCTL_GET_PQ_GAL_PARAM Copy to user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+int disp_color_get_pq_cam_param(void* arg)
+{
+    DISP_PQ_PARAM * pq_param;
+
+    pq_param = get_Color_Cam_config();
+    if(copy_to_user((void *)arg, pq_param, sizeof(DISP_PQ_PARAM)))
+    {
+        printk("disp driver : DISP_IOCTL_GET_PQ_CAM_PARAM Copy to user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+
+int disp_color_set_pq_param(void* arg)
+{
+    DISP_PQ_PARAM * pq_param;
+
+    DISP_RegisterExTriggerSource(CheckColorUpdateFunc, ConfColorFunc);
+
+    GetUpdateMutex();
+
+    pq_param = get_Color_config();
+    if(copy_from_user(pq_param, (void *)arg, sizeof(DISP_PQ_PARAM)))
+    {
+        printk("disp driver : DISP_IOCTL_SET_PQPARAM Copy from user failed\n");
+        ReleaseUpdateMutex();
+        return -EFAULT;
+    }
+
+    ReleaseUpdateMutex();
+
+    disp_set_needupdate(DISP_MODULE_COLOR, 1);
+
+    return 0;
+}
+
+int disp_color_get_tdshp_index(void* arg)
+{
+    DISPLAY_TDSHP_T * tdshp_index;
+
+    tdshp_index = get_TDSHP_index();
+    if(copy_to_user((void *)arg, tdshp_index, sizeof(DISPLAY_TDSHP_T)))
+    {
+        printk("disp driver : DISP_IOCTL_GET_TDSHPINDEX Copy to user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
 
 static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -1119,7 +1206,6 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
     unsigned int value;
     DISP_MODULE_ENUM module;
     DISP_OVL_INFO ovl_info;
-    DISP_PQ_PARAM * pq_param;
     DISP_PQ_PARAM * pq_cam_param;
     DISP_PQ_PARAM * pq_gal_param;
     DISPLAY_PQ_T * pq_index;
@@ -1157,9 +1243,9 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
 #endif
     DISP_DBG("cmd=0x%x, arg=0x%x \n", cmd, (unsigned int)arg);
     switch(cmd)
-    {   
+    {
         case DISP_IOCTL_WRITE_REG:
-            
+
             if(copy_from_user(&wParams, (void *)arg, sizeof(DISP_WRITE_REG )))
             {
                 DISP_ERR("DISP_IOCTL_WRITE_REG, copy_from_user failed\n");
@@ -1169,17 +1255,17 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             DISP_DBG("write  0x%x = 0x%x (0x%x)\n", wParams.reg, wParams.val, wParams.mask);
             if(wParams.reg>DISPSYS_REG_ADDR_MAX || wParams.reg<DISPSYS_REG_ADDR_MIN)
             {
-                DISP_ERR("reg write, addr invalid, addr min=0x%x, max=0x%x, addr=0x%x \n", 
-                    DISPSYS_REG_ADDR_MIN, 
-                    DISPSYS_REG_ADDR_MAX, 
+                DISP_ERR("reg write, addr invalid, addr min=0x%x, max=0x%x, addr=0x%x \n",
+                    DISPSYS_REG_ADDR_MIN,
+                    DISPSYS_REG_ADDR_MAX,
                     wParams.reg);
                 return -EFAULT;
             }
-            
+
             *(volatile unsigned int*)wParams.reg = (*(volatile unsigned int*)wParams.reg & ~wParams.mask) | (wParams.val & wParams.mask);
             //mt65xx_reg_sync_writel(wParams.reg, value);
             break;
-            
+
         case DISP_IOCTL_READ_REG:
             if(copy_from_user(&rParams, (void *)arg, sizeof(DISP_READ_REG)))
             {
@@ -1188,9 +1274,9 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             }
             if(0) //wParams.reg>DISPSYS_REG_ADDR_MAX || wParams.reg<DISPSYS_REG_ADDR_MIN)
             {
-                DISP_ERR("reg read, addr invalid, addr min=0x%x, max=0x%x, addr=0x%x \n", 
-                    DISPSYS_REG_ADDR_MIN, 
-                    DISPSYS_REG_ADDR_MAX, 
+                DISP_ERR("reg read, addr invalid, addr min=0x%x, max=0x%x, addr=0x%x \n",
+                    DISPSYS_REG_ADDR_MIN,
+                    DISPSYS_REG_ADDR_MAX,
                     wParams.reg);
                 return -EFAULT;
             }
@@ -1198,11 +1284,11 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             value = (*(volatile unsigned int*)rParams.reg) & rParams.mask;
 
             DISP_DBG("read 0x%x = 0x%x (0x%x)\n", rParams.reg, value, rParams.mask);
-            
+
             if(copy_to_user(rParams.val, &value, sizeof(unsigned int)))
             {
                 DISP_ERR("DISP_IOCTL_READ_REG, copy_to_user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
             break;
 
@@ -1211,36 +1297,36 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             {
                 DISP_ERR("DISP_IOCTL_WAIT_IRQ, copy_from_user failed\n");
                 return -EFAULT;
-            }  
-            ret = disp_wait_intr(wait_irq_struct.module, wait_irq_struct.timeout_ms);            
-            break;  
+            }
+            ret = disp_wait_intr(wait_irq_struct.module, wait_irq_struct.timeout_ms);
+            break;
 
         case DISP_IOCTL_DUMP_REG:
             if(copy_from_user(&module, (void*)arg , sizeof(module)))
             {
                 DISP_ERR("DISP_IOCTL_DUMP_REG, copy_from_user failed\n");
                 return -EFAULT;
-            }  
-            ret = disp_dump_reg(module);            
-            break;  
+            }
+            ret = disp_dump_reg(module);
+            break;
 
         case DISP_IOCTL_LOCK_THREAD:
             printk("DISP_IOCTL_LOCK_THREAD! \n");
-            value = disp_lock_cmdq_thread();  
+            value = disp_lock_cmdq_thread();
             if (copy_to_user((void*)arg, &value , sizeof(unsigned int)))
             {
                 DISP_ERR("DISP_IOCTL_LOCK_THREAD, copy_to_user failed\n");
                 return -EFAULT;
             }
-            break; 
-            
+            break;
+
         case DISP_IOCTL_UNLOCK_THREAD:
             if(copy_from_user(&value, (void*)arg , sizeof(value)))
             {
                     DISP_ERR("DISP_IOCTL_UNLOCK_THREAD, copy_from_user failed\n");
                     return -EFAULT;
-            }  
-            ret = disp_unlock_cmdq_thread(value);  
+            }
+            ret = disp_unlock_cmdq_thread(value);
             break;
 
         case DISP_IOCTL_MARK_CMQ:
@@ -1252,7 +1338,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(value >= CMDQ_THREAD_NUM) return -EFAULT;
             cmq_status[value] = 1;
             break;
-            
+
         case DISP_IOCTL_WAIT_CMQ:
             if(copy_from_user(&value, (void*)arg , sizeof(value)))
             {
@@ -1260,7 +1346,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                     return -EFAULT;
             }
             if(value >= CMDQ_THREAD_NUM) return -EFAULT;
-            
+
             wait_event_interruptible_timeout(cmq_wait_queue[value], cmq_status[value], 3 * HZ);
             if(cmq_status[value] != 0)
             {
@@ -1278,23 +1364,23 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if((-1) != mutex_id)
             {
                 int ret = wait_event_interruptible_timeout(
-                gResourceWaitQueue, 
-                (gLockedResource & (1 << mutex_id)) == 0, 
-                disp_ms2jiffies(50) ); 
-                
+                gResourceWaitQueue,
+                (gLockedResource & (1 << mutex_id)) == 0,
+                disp_ms2jiffies(50) );
+
                 if(ret <= 0)
                 {
                     DISP_ERR("DISP_IOCTL_LOCK_RESOURCE, mutex_id 0x%x failed\n",gLockedResource);
                     return -EFAULT;
                 }
-                
+
                 spin_lock(&gResourceLock);
                 gLockedResource |= (1 << mutex_id);
                 spin_unlock(&gResourceLock);
-                
+
                 spin_lock(&pNode->node_lock);
                 pNode->u4LockedResource = gLockedResource;
-                spin_unlock(&pNode->node_lock);                 
+                spin_unlock(&pNode->node_lock);
             }
             else
             {
@@ -1303,7 +1389,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             }
             break;
 
-            
+
         case DISP_IOCTL_UNLOCK_RESOURCE:
             if(copy_from_user(&mutex_id, (void*)arg , sizeof(int)))
             {
@@ -1315,26 +1401,26 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                 spin_lock(&gResourceLock);
                 gLockedResource &= ~(1 << mutex_id);
                 spin_unlock(&gResourceLock);
-                
+
                 spin_lock(&pNode->node_lock);
                 pNode->u4LockedResource = gLockedResource;
-                spin_unlock(&pNode->node_lock);   
+                spin_unlock(&pNode->node_lock);
 
-                wake_up_interruptible(&gResourceWaitQueue); 
-            } 
+                wake_up_interruptible(&gResourceWaitQueue);
+            }
             else
             {
                 DISP_ERR("DISP_IOCTL_UNLOCK_RESOURCE, mutex_id = -1 failed\n");
                 return -EFAULT;
-            }            
+            }
             break;
 
         case DISP_IOCTL_LOCK_MUTEX:
         {
             wait_event_interruptible_timeout(
-            gMutexWaitQueue, 
-            (mutex_id = disp_lock_mutex()) != -1, 
-            disp_ms2jiffies(200) );             
+            gMutexWaitQueue,
+            (mutex_id = disp_lock_mutex()) != -1,
+            disp_ms2jiffies(200) );
 
             if((-1) != mutex_id)
             {
@@ -1342,11 +1428,11 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                 pNode->u4LockedMutex |= (1 << mutex_id);
                 spin_unlock(&pNode->node_lock);
             }
-            
+
             if(copy_to_user((void *)arg, &mutex_id, sizeof(int)))
             {
                 DISP_ERR("disp driver : Copy to user error (mutex)\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
             break;
         }
@@ -1365,10 +1451,10 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                 spin_unlock(&pNode->node_lock);
             }
 
-            wake_up_interruptible(&gMutexWaitQueue);             
+            wake_up_interruptible(&gMutexWaitQueue);
 
             break;
-            
+
         case DISP_IOCTL_SYNC_REG:
             mb();
             break;
@@ -1379,7 +1465,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             {
                 DISP_ERR("DISP_IOCTL_SET_INTR, copy_from_user failed\n");
                 return -EFAULT;
-            }  
+            }
 
             // enable intr
             if( (value&0xffff0000) !=0)
@@ -1391,8 +1477,8 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             {
                 DISP_REGISTER_IRQ(value&0xff);
                 printk("enable irq: %d \n", value&0xff);
-            }            
-            break; 
+            }
+            break;
 
         case DISP_IOCTL_RUN_DPF:
             DISP_DBG("DISP_IOCTL_RUN_DPF! \n");
@@ -1401,11 +1487,11 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                 DISP_ERR("DISP_IOCTL_SET_INTR, copy_from_user failed, %d\n", ret);
                 return -EFAULT;
             }
-            
+
             spin_lock(&gOvlLock);
 
             disp_run_dp_framework = value;
-    
+
             spin_unlock(&gOvlLock);
 
             if(value == 1)
@@ -1421,11 +1507,11 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
         case DISP_IOCTL_CHECK_OVL:
             DISP_DBG("DISP_IOCTL_CHECK_OVL! \n");
             value = disp_layer_enable;
-            
+
             if(copy_to_user((void *)arg, &value, sizeof(int)))
             {
                 DISP_ERR("disp driver : Copy to user error (result)\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
             break;
 
@@ -1435,20 +1521,20 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             {
                 DISP_ERR("DISP_IOCTL_SET_INTR, copy_from_user failed, %d\n", ret);
                 return -EFAULT;
-            } 
+            }
 
             layer = ovl_info.layer;
-            
+
             spin_lock(&gOvlLock);
             ovl_info = disp_layer_info[layer];
             spin_unlock(&gOvlLock);
-            
+
             if(copy_to_user((void *)arg, &ovl_info, sizeof(DISP_OVL_INFO)))
             {
                 DISP_ERR("disp driver : Copy to user error (result)\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
-            
+
             break;
 
         case DISP_IOCTL_AAL_EVENTCTL:
@@ -1459,7 +1545,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(copy_from_user(&value, (void *)arg, sizeof(int)))
             {
                 printk("disp driver : DISP_IOCTL_AAL_EVENTCTL Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
             disp_set_aal_alarm(value);
             disp_set_needupdate(DISP_MODULE_BLS , 1);
@@ -1505,7 +1591,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(copy_from_user(aal_param , (void *)arg, sizeof(DISP_AAL_PARAM)))
             {
                 printk("disp driver : DISP_IOCTL_SET_AALPARAM Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
 
             disp_aal_unlock();
@@ -1514,20 +1600,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
 
         case DISP_IOCTL_SET_PQPARAM:
 
-            DISP_RegisterExTriggerSource(CheckColorUpdateFunc , ConfColorFunc);
-
-            GetUpdateMutex();
-
-            pq_param = get_Color_config();
-            if(copy_from_user(pq_param, (void *)arg, sizeof(DISP_PQ_PARAM)))
-            {
-                printk("disp driver : DISP_IOCTL_SET_PQPARAM Copy from user failed\n");
-                return -EFAULT;            
-            }
-
-            ReleaseUpdateMutex();
-
-            disp_set_needupdate(DISP_MODULE_COLOR, 1);
+            ret = disp_color_set_pq_param((void*)arg);
 
             break;
 
@@ -1540,18 +1613,13 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                 return -EFAULT;
             }
 
-            break;    
-            
-        case DISP_IOCTL_GET_PQPARAM:
-            
-            pq_param = get_Color_config();
-            if(copy_to_user((void *)arg, pq_param, sizeof(DISP_PQ_PARAM)))
-            {
-                printk("disp driver : DISP_IOCTL_GET_PQPARAM Copy to user failed\n");
-                return -EFAULT;            
-            }
+            break;
 
-            break;    
+        case DISP_IOCTL_GET_PQPARAM:
+
+            ret = disp_color_get_pq_param((void*)arg);
+
+            break;
 
          case DISP_IOCTL_SET_TDSHPINDEX:
 
@@ -1562,18 +1630,13 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
                 return -EFAULT;
             }
 
-            break;           
+            break;
 
         case DISP_IOCTL_GET_TDSHPINDEX:
-            
-                tdshp_index = get_TDSHP_index();
-                if(copy_to_user((void *)arg, tdshp_index, sizeof(DISPLAY_TDSHP_T)))
-                {
-                    printk("disp driver : DISP_IOCTL_GET_TDSHPINDEX Copy to user failed\n");
-                    return -EFAULT;            
-                }
 
-                break;       
+            ret = disp_color_get_tdshp_index((void*)arg);
+
+            break;
 
          case DISP_IOCTL_SET_GAMMALUT:
 
@@ -1585,7 +1648,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             }
 
             disp_bls_update_gamma_lut();
-            
+
             break;
 
          case DISP_IOCTL_SET_PWMLUT:
@@ -1594,7 +1657,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(copy_from_user(pwm_lut, (void *)arg, sizeof(DISPLAY_PWM_T)))
             {
                 printk("disp driver : DISP_IOCTL_SET_PWMLUT Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
 
             disp_bls_update_pwm_lut();
@@ -1605,7 +1668,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(copy_from_user(&module, (void *)arg, sizeof(DISP_MODULE_ENUM)))
             {
                 printk("disp driver : DISP_IOCTL_SET_CLKON Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
 
             disp_power_on(module , &(pNode->u4Clock));
@@ -1615,7 +1678,7 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(copy_from_user(&module, (void *)arg, sizeof(DISP_MODULE_ENUM)))
             {
                 printk("disp driver : DISP_IOCTL_SET_CLKOFF Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
 
             disp_power_off(module , &(pNode->u4Clock));
@@ -1625,9 +1688,9 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             if(copy_from_user(&value, (void *)arg, sizeof(int)))
             {
                 printk("disp driver : DISP_IOCTL_MUTEX_CONTROL Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
-            
+
             if(value == 1)
             {
 #if defined(MTK_AAL_SUPPORT)
@@ -1669,67 +1732,57 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             else
             {
                 printk("disp driver : DISP_IOCTL_MUTEX_CONTROL invalid control\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
-            
-            break;    
-            
+
+            break;
+
         case DISP_IOCTL_GET_LCMINDEX:
-            
+
                 lcmindex = DISP_GetLCMIndex();
                 if(copy_to_user((void *)arg, &lcmindex, sizeof(unsigned long)))
                 {
                     printk("disp driver : DISP_IOCTL_GET_LCMINDEX Copy to user failed\n");
-                    return -EFAULT;            
+                    return -EFAULT;
                 }
 
-                break;       
+                break;
 
-            break;        
-            
+            break;
+
         case DISP_IOCTL_SET_PQ_CAM_PARAM:
 
             pq_cam_param = get_Color_Cam_config();
             if(copy_from_user(pq_cam_param, (void *)arg, sizeof(DISP_PQ_PARAM)))
             {
                 printk("disp driver : DISP_IOCTL_SET_PQ_CAM_PARAM Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
 
-            break;  
-            
+            break;
+
         case DISP_IOCTL_GET_PQ_CAM_PARAM:
-            
-            pq_cam_param = get_Color_Cam_config();
-            if(copy_to_user((void *)arg, pq_cam_param, sizeof(DISP_PQ_PARAM)))
-            {
-                printk("disp driver : DISP_IOCTL_GET_PQ_CAM_PARAM Copy to user failed\n");
-                return -EFAULT;            
-            }
-            
-            break;        
-            
+
+            ret = disp_color_get_pq_cam_param((void*)arg);
+
+            break;
+
         case DISP_IOCTL_SET_PQ_GAL_PARAM:
 
             pq_gal_param = get_Color_Gal_config();
             if(copy_from_user(pq_gal_param, (void *)arg, sizeof(DISP_PQ_PARAM)))
             {
                 printk("disp driver : DISP_IOCTL_SET_PQ_GAL_PARAM Copy from user failed\n");
-                return -EFAULT;            
+                return -EFAULT;
             }
 
-            break;       
+            break;
 
         case DISP_IOCTL_GET_PQ_GAL_PARAM:
-            
-            pq_gal_param = get_Color_Gal_config();
-            if(copy_to_user((void *)arg, pq_gal_param, sizeof(DISP_PQ_PARAM)))
-            {
-                printk("disp driver : DISP_IOCTL_GET_PQ_GAL_PARAM Copy to user failed\n");
-                return -EFAULT;            
-            }
-            
-            break;          
+
+            ret = disp_color_get_pq_gal_param((void*)arg);
+
+            break;
 
         case DISP_IOCTL_TEST_PATH:
 #ifdef DDP_DBG_DDP_PATH_CONFIG
@@ -1741,14 +1794,14 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
 
             config.layer = 0;
             config.layer_en = 1;
-            config.source = OVL_LAYER_SOURCE_MEM; 
-            config.addr = virt_to_phys(inAddr); 
-            config.inFormat = OVL_INPUT_FORMAT_RGB565; 
+            config.source = OVL_LAYER_SOURCE_MEM;
+            config.addr = virt_to_phys(inAddr);
+            config.inFormat = OVL_INPUT_FORMAT_RGB565;
             config.pitch = 480;
             config.srcROI.x = 0;        // ROI
-            config.srcROI.y = 0;  
-            config.srcROI.width = 480;  
-            config.srcROI.height = 800;  
+            config.srcROI.y = 0;
+            config.srcROI.width = 480;
+            config.srcROI.height = 800;
             config.bgROI.x = config.srcROI.x;
             config.bgROI.y = config.srcROI.y;
             config.bgROI.width = config.srcROI.width;
@@ -1756,33 +1809,33 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
             config.bgColor = 0xff;  // background color
             config.key = 0xff;     // color key
             config.aen = 0;             // alpha enable
-            config.alpha = 0;  
+            config.alpha = 0;
             DISP_MSG("value=%d \n", value);
             if(value==0) // mem->ovl->rdma0->dpi0
             {
                 config.srcModule = DISP_MODULE_OVL;
-                config.outFormat = RDMA_OUTPUT_FORMAT_ARGB; 
+                config.outFormat = RDMA_OUTPUT_FORMAT_ARGB;
                 config.dstModule = DISP_MODULE_DPI0;
                 config.dstAddr = 0;
             }
             else if(value==1) // mem->ovl-> wdma1->mem
             {
                 config.srcModule = DISP_MODULE_OVL;
-                config.outFormat = WDMA_OUTPUT_FORMAT_RGB888; 
+                config.outFormat = WDMA_OUTPUT_FORMAT_RGB888;
                 config.dstModule = DISP_MODULE_WDMA1;
                 config.dstAddr = virt_to_phys(outAddr);
             }
             else if(value==2)  // mem->rdma0 -> dpi0
             {
                 config.srcModule = DISP_MODULE_RDMA0;
-                config.outFormat = RDMA_OUTPUT_FORMAT_ARGB; 
+                config.outFormat = RDMA_OUTPUT_FORMAT_ARGB;
                 config.dstModule = DISP_MODULE_DPI0;
                 config.dstAddr = 0;
             }
             disp_path_config(&config);
             disp_path_enable();
-#endif			
-            break;            
+#endif
+            break;
         case DISP_IOCTL_G_WAIT_REQUEST:
             ret = ddp_bitblt_ioctl_wait_reequest(arg);
             break;
@@ -1790,12 +1843,12 @@ static long disp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned lo
         case DISP_IOCTL_T_INFORM_DONE:
             ret = ddp_bitblt_ioctl_inform_done(arg);
             break;
-            
+
         default :
             DISP_ERR("Ddp drv dose not have such command : %d\n" , cmd);
-            break; 
+            break;
     }
-    
+
     return ret;
 }
 
@@ -1812,7 +1865,7 @@ static int disp_open(struct inode *inode, struct file *file)
         DISP_MSG("Not enough entry for DDP open operation\n");
         return -ENOMEM;
     }
-    
+
     pNode = (disp_node_struct *)file->private_data;
     pNode->open_pid = current->pid;
     pNode->open_tgid = current->tgid;
@@ -1836,14 +1889,14 @@ static int disp_release(struct inode *inode, struct file *file)
     disp_node_struct *pNode = NULL;
     unsigned int index = 0;
     DISP_DBG("enter disp_release() process:%s\n",current->comm);
-    
+
     pNode = (disp_node_struct *)file->private_data;
 
     spin_lock(&pNode->node_lock);
 
     if(pNode->u4LockedMutex)
     {
-        DISP_ERR("Proccess terminated[Mutex] ! :%s , mutex:%u\n" 
+        DISP_ERR("Proccess terminated[Mutex] ! :%s , mutex:%u\n"
             , current->comm , pNode->u4LockedMutex);
 
         for(index = 0 ; index < ENGINE_MUTEX_NUM ; index += 1)
@@ -1854,12 +1907,12 @@ static int disp_release(struct inode *inode, struct file *file)
                 DISP_DBG("unlock index = %d ,mutex_used[ %d %d %d %d ]\n",index,mutex_used[0],mutex_used[1] ,mutex_used[2],mutex_used[3]);
             }
         }
-        
-    } 
+
+    }
 
     if(pNode->u4LockedResource)
     {
-        DISP_ERR("Proccess terminated[REsource] ! :%s , resource:%d\n" 
+        DISP_ERR("Proccess terminated[REsource] ! :%s , resource:%d\n"
             , current->comm , pNode->u4LockedResource);
         spin_lock(&gResourceLock);
         gLockedResource = 0;
@@ -1868,7 +1921,7 @@ static int disp_release(struct inode *inode, struct file *file)
 
     if(pNode->u4Clock)
     {
-        DISP_ERR("Process safely terminated [Clock] !:%s , clock:%u\n" 
+        DISP_ERR("Process safely terminated [Clock] !:%s , clock:%u\n"
             , current->comm , pNode->u4Clock);
 
         for(index  = 0 ; index < DISP_MODULE_MAX; index += 1)
@@ -1887,7 +1940,7 @@ static int disp_release(struct inode *inode, struct file *file)
         kfree(file->private_data);
         file->private_data = NULL;
     }
-    
+
     return 0;
 }
 
@@ -1901,10 +1954,10 @@ static int disp_mmap(struct file * file, struct vm_area_struct * a_pstVMArea)
 {
 
     a_pstVMArea->vm_page_prot = pgprot_noncached(a_pstVMArea->vm_page_prot);
-    if(remap_pfn_range(a_pstVMArea , 
-                 a_pstVMArea->vm_start , 
-                 a_pstVMArea->vm_pgoff , 
-                 (a_pstVMArea->vm_end - a_pstVMArea->vm_start) , 
+    if(remap_pfn_range(a_pstVMArea ,
+                 a_pstVMArea->vm_start ,
+                 a_pstVMArea->vm_pgoff ,
+                 (a_pstVMArea->vm_end - a_pstVMArea->vm_start) ,
                  a_pstVMArea->vm_page_prot))
     {
         DISP_MSG("MMAP failed!!\n");
@@ -1929,13 +1982,16 @@ static struct file_operations disp_fops = {
 
 static int disp_probe(struct platform_device *pdev)
 {
-    struct class_device;
-    
-	int ret;
+
 	int i;
-    struct class_device *class_dev = NULL;
-    
+    struct proc_dir_entry *disp_entry;
+
     DISP_MSG("\ndisp driver probe...\n\n");
+/*
+    struct class_device;
+	int ret;
+    struct class_device *class_dev = NULL;
+
 	ret = alloc_chrdev_region(&disp_devno, 0, 1, DISP_DEVNAME);
 
 	if(ret)
@@ -1955,6 +2011,12 @@ static int disp_probe(struct platform_device *pdev)
 
     disp_class = class_create(THIS_MODULE, DISP_DEVNAME);
     class_dev = (struct class_device *)device_create(disp_class, NULL, disp_devno, NULL, DISP_DEVNAME);
+*/
+    disp_entry = create_proc_entry(DISP_DEVNAME, 0, NULL);
+    if(disp_entry )
+    {
+        disp_entry -> proc_fops = &disp_fops;
+    }
 
     // initial wait queue
     for(i = 0 ; i < CMDQ_THREAD_NUM ; i++)
@@ -1962,7 +2024,7 @@ static int disp_probe(struct platform_device *pdev)
         init_waitqueue_head(&cmq_wait_queue[i]);
         cmq_status[i] = 0;
     }
-        
+
     // Register IRQ
 
     //DISP_REGISTER_IRQ(MT6589_DISP_COLOR_IRQ_ID);
@@ -1991,16 +2053,15 @@ static int disp_probe(struct platform_device *pdev)
     // create kthread to print irq log, else if print too much log in irq context, EE or HW Reset may happen
     init_waitqueue_head(&disp_irq_log_wq);
     disp_irq_log_task = kthread_create(disp_irq_log_kthread_func, NULL, "disp_config_update_kthread");
-    if (IS_ERR(disp_irq_log_task)) 
+    if (IS_ERR(disp_irq_log_task))
     {
         DISP_ERR("DISP_InitVSYNC(): Cannot create disp_irq_log_task kthread\n");
     }
     wake_up_process(disp_irq_log_task);
-    
-    
+
+
 	DISP_MSG("DISP Probe Done\n");
 
-	NOT_REFERENCED(class_dev);
 	return 0;
 }
 
@@ -2052,7 +2113,7 @@ static struct platform_driver disp_driver = {
 
 static void disp_device_release(struct device *dev)
 {
-	// Nothing to release? 
+	// Nothing to release?
 }
 
 static u64 disp_dmamask = ~(u32)0;
@@ -2071,7 +2132,7 @@ static struct platform_device disp_device = {
 static int __init disp_init(void)
 {
     int ret;
-	
+
     DISP_MSG("Register disp device\n");
 	if(platform_device_register(&disp_device))
 	{
@@ -2080,7 +2141,7 @@ static int __init disp_init(void)
         return ret;
 	}
 
-    DISP_MSG("Register the disp driver\n");    
+    DISP_MSG("Register the disp driver\n");
     if(platform_driver_register(&disp_driver))
     {
         DISP_ERR("failed to register disp driver\n");
@@ -2094,7 +2155,9 @@ static int __init disp_init(void)
     pRegBackup = kmalloc(DDP_BACKUP_REG_NUM*sizeof(int), GFP_KERNEL);
     ASSERT(pRegBackup!=NULL);
     *pRegBackup = DDP_UNBACKED_REG_MEM;
-		
+
+    ddp_color_init();
+
     return 0;
 }
 
@@ -2102,10 +2165,10 @@ static void __exit disp_exit(void)
 {
     cdev_del(disp_cdev);
     unregister_chrdev_region(disp_devno, 1);
-	
+
     platform_driver_unregister(&disp_driver);
     platform_device_unregister(&disp_device);
-	
+
     device_destroy(disp_class, disp_devno);
     class_destroy(disp_class);
 
@@ -2117,7 +2180,7 @@ static void __exit disp_exit(void)
 int disp_set_overlay_roi(int layer, int x, int y, int w, int h, int pitch)
 {
     // DISP_MSG(" disp_set_overlay_roi %d\n", layer );
-    
+
     if(layer < 0 || layer >= DDP_OVL_LAYER_MUN) return -1;
     spin_lock(&gOvlLock);
 
@@ -2126,7 +2189,7 @@ int disp_set_overlay_roi(int layer, int x, int y, int w, int h, int pitch)
     disp_layer_info[layer].w = w;
     disp_layer_info[layer].h = h;
     disp_layer_info[layer].pitch = pitch;
-    
+
     spin_unlock(&gOvlLock);
 
     return 0;
@@ -2136,13 +2199,13 @@ int disp_set_overlay_addr(int layer, unsigned int addr, DDP_OVL_FORMAT fmt)
 {
     // DISP_MSG(" disp_set_overlay_addr %d\n", layer );
     if(layer < 0 || layer >= DDP_OVL_LAYER_MUN) return -1;
-    
+
     spin_lock(&gOvlLock);
 
     disp_layer_info[layer].addr = addr;
     if(fmt != DDP_NONE_FMT)
         disp_layer_info[layer].fmt = fmt;
-    
+
     spin_unlock(&gOvlLock);
 
     return 0;
@@ -2152,7 +2215,7 @@ int disp_set_overlay(int layer, int enable)
 {
     // DISP_MSG(" disp_set_overlay %d %d\n", layer, enable );
     if(layer < 0 || layer >= DDP_OVL_LAYER_MUN) return -1;
-    
+
     spin_lock(&gOvlLock);
 
     if(enable == 0)
@@ -2177,7 +2240,7 @@ int disp_set_mutex_status(int enable)
     spin_lock(&gOvlLock);
 
     disp_mutex_status = enable;
-    
+
     spin_unlock(&gOvlLock);
     return 0;
 }
@@ -2187,13 +2250,13 @@ int disp_get_mutex_status()
     return disp_mutex_status;
 }
 
-int disp_dump_reg(DISP_MODULE_ENUM module)           
+int disp_dump_reg(DISP_MODULE_ENUM module)
 {
-    unsigned int index;    
+    unsigned int index;
     switch(module)
-    {        
-        case DISP_MODULE_ROT: 
-            DISP_MSG("===== DISP ROT Reg Dump: ============\n");    
+    {
+        case DISP_MODULE_ROT:
+            DISP_MSG("===== DISP ROT Reg Dump: ============\n");
             DISP_MSG("(+000)ROT_EN                   =0x%x\n", DISP_REG_GET(DISP_REG_ROT_EN                   ));
             DISP_MSG("(+008)ROT_RESET                =0x%x\n", DISP_REG_GET(DISP_REG_ROT_RESET                ));
             DISP_MSG("(+010)ROT_INTERRUPT_ENABLE     =0x%x\n", DISP_REG_GET(DISP_REG_ROT_INTERRUPT_ENABLE       ));
@@ -2264,9 +2327,9 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(+4A8)ROT_MON_STA_21           =0x%x\n", DISP_REG_GET(DISP_REG_ROT_MON_STA_21           ));
             DISP_MSG("(+4B0)ROT_MON_STA_22           =0x%x\n", DISP_REG_GET(DISP_REG_ROT_MON_STA_22           ));
             break;
-        
-        case DISP_MODULE_SCL: 
-            DISP_MSG("===== DISP SCL Reg Dump: ============\n");       
+
+        case DISP_MODULE_SCL:
+            DISP_MSG("===== DISP SCL Reg Dump: ============\n");
             DISP_MSG("(+000)SCL_CTRL       =0x%x \n", DISP_REG_GET(DISP_REG_SCL_CTRL       ));
             DISP_MSG("(+004)SCL_INTEN      =0x%x \n", DISP_REG_GET(DISP_REG_SCL_INTEN      ));
             DISP_MSG("(+008)SCL_INTSTA     =0x%x \n", DISP_REG_GET(DISP_REG_SCL_INTSTA     ));
@@ -2285,9 +2348,9 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(+060)SCL_EXT_COEF   =0x%x \n", DISP_REG_GET(DISP_REG_SCL_EXT_COEF   ));
             DISP_MSG("(+064)SCL_PEAK_CFG   =0x%x \n", DISP_REG_GET(DISP_REG_SCL_PEAK_CFG   ));
             break;
-             
-        case DISP_MODULE_OVL: 
-            DISP_MSG("===== DISP OVL Reg Dump: ============\n");           
+
+        case DISP_MODULE_OVL:
+            DISP_MSG("===== DISP OVL Reg Dump: ============\n");
             DISP_MSG("(000)OVL_STA                    =0x%x \n", DISP_REG_GET(DISP_REG_OVL_STA                     ));
             DISP_MSG("(004)OVL_INTEN                  =0x%x \n", DISP_REG_GET(DISP_REG_OVL_INTEN                 ));
             DISP_MSG("(008)OVL_INTSTA                 =0x%x \n", DISP_REG_GET(DISP_REG_OVL_INTSTA                 ));
@@ -2355,13 +2418,13 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(254)OVL_RDMA2_DBG              =0x%x \n", DISP_REG_GET(DISP_REG_OVL_RDMA2_DBG             ));
             DISP_MSG("(258)OVL_RDMA3_DBG              =0x%x \n", DISP_REG_GET(DISP_REG_OVL_RDMA3_DBG             ));
             break;
-             
 
-        case DISP_MODULE_COLOR:  
+
+        case DISP_MODULE_COLOR:
             DISP_MSG("===== DISP Color Reg Dump: ============\n");
             DISP_MSG("(CFG_MAIN)=0x%x \n", DISP_REG_GET(CFG_MAIN)); //color all bypass
             DISP_MSG("(0x420)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0x420)));
-            DISP_MSG("(0xf00)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf00))); 
+            DISP_MSG("(0xf00)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf00)));
             DISP_MSG("(0xf04)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf04)));
             DISP_MSG("(0xf64)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf64)));
             DISP_MSG("(0xf68)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf68)));
@@ -2395,31 +2458,31 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(0xfd8)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xfd8)));
             DISP_MSG("(0xfdc)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xfdc)));
             DISP_MSG("(0x428)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0x428)));
-            DISP_MSG("(0x42c)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0x42c)));                    
-            DISP_MSG("(0xf50)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf50)));  
-            DISP_MSG("(0xf54)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf54))); 
+            DISP_MSG("(0x42c)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0x42c)));
+            DISP_MSG("(0xf50)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf50)));
+            DISP_MSG("(0xf54)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf54)));
             DISP_MSG("(0x40C)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0x40C)));
             DISP_MSG("(0xf60)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xf60)));
             DISP_MSG("(0xfa0)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE + 0xfa0)));
-            DISP_MSG("(G_PIC_ADJ_MAIN_2)=0x%x \n", DISP_REG_GET(G_PIC_ADJ_MAIN_2));                                                                                                                                                                                                                                                                                                 
-            for (index = 0; index < 8; index++)                                                                                                  
-            {                                                                                                                                    
+            DISP_MSG("(G_PIC_ADJ_MAIN_2)=0x%x \n", DISP_REG_GET(G_PIC_ADJ_MAIN_2));
+            for (index = 0; index < 8; index++)
+            {
                 DISP_MSG("(Y_SLOPE_1_0_MAIN)=0x%x \n", DISP_REG_GET(Y_SLOPE_1_0_MAIN + 4 * index));
-            }                                         
-            for (index = 0; index < 7; index++)                                                                                                             
-            {                                                    
-                DISP_MSG("(LOCAL_HUE_CD_0)=0x%x \n", DISP_REG_GET(LOCAL_HUE_CD_0 + 4 * index));                         
-            }                                                                                                      
-            // color window                                      
+            }
+            for (index = 0; index < 7; index++)
+            {
+                DISP_MSG("(LOCAL_HUE_CD_0)=0x%x \n", DISP_REG_GET(LOCAL_HUE_CD_0 + 4 * index));
+            }
+            // color window
             DISP_MSG("(DISPSYS_COLOR_BASE)=0x%x \n", DISP_REG_GET((DISPSYS_COLOR_BASE+0x740)));
 
 
 
-        break;                 
-        
-        case DISP_MODULE_TDSHP:  
-        break;                 
-        case DISP_MODULE_BLS:      
+        break;
+
+        case DISP_MODULE_TDSHP:
+        break;
+        case DISP_MODULE_BLS:
             DISP_MSG("===== DISP BLS Reg Dump: ============\n");
             DISP_MSG("(0x%08X)BLS_EN                =0x%x \n", DISP_REG_BLS_EN, DISP_REG_GET(DISP_REG_BLS_EN));
             DISP_MSG("(0x%08X)BLS_SETTING           =0x%x \n", DISP_REG_BLS_BLS_SETTING, DISP_REG_GET(DISP_REG_BLS_BLS_SETTING));
@@ -2432,9 +2495,9 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(0x%08X)PWM_WAVE_NUM          =0x%x \n", DISP_REG_PWM_WAVE_NUM, DISP_REG_GET(DISP_REG_PWM_WAVE_NUM));
             DISP_MSG("(0x%08X)PWM_SEND_WAVENUM      =0x%x \n", DISP_REG_PWM_SEND_WAVENUM, DISP_REG_GET(DISP_REG_PWM_SEND_WAVENUM));
         break;
-                 
-        case DISP_MODULE_WDMA0:  
-        case DISP_MODULE_WDMA1: 
+
+        case DISP_MODULE_WDMA0:
+        case DISP_MODULE_WDMA1:
             if(DISP_MODULE_WDMA0==module)
             {
                 index = 0;
@@ -2442,8 +2505,8 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             else if(DISP_MODULE_WDMA1==module)
             {
                 index = 1;
-            }  
-            DISP_MSG("===== DISP WDMA%d Reg Dump: ============\n", index);      
+            }
+            DISP_MSG("===== DISP WDMA%d Reg Dump: ============\n", index);
             DISP_MSG("(000)WDMA_INTEN         =0x%x \n", DISP_REG_GET(DISP_REG_WDMA_INTEN        +0x1000*index) );
             DISP_MSG("(004)WDMA_INTSTA        =0x%x \n", DISP_REG_GET(DISP_REG_WDMA_INTSTA       +0x1000*index) );
             DISP_MSG("(008)WDMA_EN            =0x%x \n", DISP_REG_GET(DISP_REG_WDMA_EN           +0x1000*index) );
@@ -2477,10 +2540,10 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(0A0)WDMA_FLOW_CTRL_DBG =0x%x \n", DISP_REG_GET(DISP_REG_WDMA_FLOW_CTRL_DBG+0x1000*index) );
             DISP_MSG("(0A4)WDMA_EXEC_DBG      =0x%x \n", DISP_REG_GET(DISP_REG_WDMA_EXEC_DBG     +0x1000*index) );
             DISP_MSG("(0A8)WDMA_CLIP_DBG      =0x%x \n", DISP_REG_GET(DISP_REG_WDMA_CLIP_DBG     +0x1000*index) );
-            break;      
-           
-        case DISP_MODULE_RDMA0:  
-        case DISP_MODULE_RDMA1:  
+            break;
+
+        case DISP_MODULE_RDMA0:
+        case DISP_MODULE_RDMA1:
             if(DISP_MODULE_RDMA0==module)
             {
                 index = 0;
@@ -2488,7 +2551,7 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             else if(DISP_MODULE_RDMA1==module)
             {
                 index = 1;
-            } 
+            }
             DISP_MSG("===== DISP RDMA%d Reg Dump: ======== \n", index);
             DISP_MSG("(000)RDMA_INT_ENABLE        =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_INT_ENABLE       +0x1000*index));
             DISP_MSG("(004)RDMA_INT_STATUS        =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_INT_STATUS       +0x1000*index));
@@ -2517,96 +2580,96 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(080)RDMA_CF_PRE_ADD2       =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_CF_PRE_ADD2      +0x1000*index));
             DISP_MSG("(084)RDMA_CF_POST_ADD0      =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_CF_POST_ADD0     +0x1000*index));
             DISP_MSG("(088)RDMA_CF_POST_ADD1      =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_CF_POST_ADD1     +0x1000*index));
-            DISP_MSG("(08C)RDMA_CF_POST_ADD2      =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_CF_POST_ADD2     +0x1000*index));      
+            DISP_MSG("(08C)RDMA_CF_POST_ADD2      =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_CF_POST_ADD2     +0x1000*index));
             DISP_MSG("(090)RDMA_DUMMY             =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_DUMMY            +0x1000*index));
             DISP_MSG("(094)RDMA_DEBUG_OUT_SEL     =0x%x \n", DISP_REG_GET(DISP_REG_RDMA_DEBUG_OUT_SEL    +0x1000*index));
             break;
-    
+
         case DISP_MODULE_CMDQ:
             DISP_MSG("===== DISP CMDQ Reg Dump: ============\n");
-            DISP_MSG("(0x10)CMDQ_IRQ_FLAG          =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_IRQ_FLAG        )); 
-            DISP_MSG("(0x20)CMDQ_LOADED_THR        =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_LOADED_THR      )); 
-            DISP_MSG("(0x30)CMDQ_THR_SLOT_CYCLES   =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_THR_SLOT_CYCLES )); 
-            DISP_MSG("(0x40)CMDQ_BUS_CTRL          =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_BUS_CTRL        ));                                               
-            DISP_MSG("(0x50)CMDQ_ABORT             =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_ABORT           )); 
+            DISP_MSG("(0x10)CMDQ_IRQ_FLAG          =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_IRQ_FLAG        ));
+            DISP_MSG("(0x20)CMDQ_LOADED_THR        =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_LOADED_THR      ));
+            DISP_MSG("(0x30)CMDQ_THR_SLOT_CYCLES   =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_THR_SLOT_CYCLES ));
+            DISP_MSG("(0x40)CMDQ_BUS_CTRL          =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_BUS_CTRL        ));
+            DISP_MSG("(0x50)CMDQ_ABORT             =0x%x \n", DISP_REG_GET(DISP_REG_CMDQ_ABORT           ));
             for(index=0;index<CMDQ_THREAD_NUM;index++)
             {
-                DISP_MSG("(0x%x)CMDQ_THRx_RESET%d                =0x%x \n", (0x100 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_RESET(index)               )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_EN%d                   =0x%x \n", (0x104 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_EN(index)                  )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_SUSPEND%d              =0x%x \n", (0x108 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_SUSPEND(index)             )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_STATUS%d               =0x%x \n", (0x10c + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_STATUS(index)              )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_IRQ_FLAG%d             =0x%x \n", (0x110 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_IRQ_FLAG(index)            )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_IRQ_FLAG_EN%d          =0x%x \n", (0x114 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_IRQ_FLAG_EN(index)         )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_SECURITY%d             =0x%x \n", (0x118 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_SECURITY(index)            )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_PC%d                   =0x%x \n", (0x120 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_PC(index)                  )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_END_ADDR%d             =0x%x \n", (0x124 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_END_ADDR(index)            )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_EXEC_CMDS_CNT%d        =0x%x \n", (0x128 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_EXEC_CMDS_CNT(index)       )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_WAIT_EVENTS0%d         =0x%x \n", (0x130 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_WAIT_EVENTS0(index)        )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_WAIT_EVENTS1%d         =0x%x \n", (0x134 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_WAIT_EVENTS1(index)        )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS0%d     =0x%x \n", (0x140 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS0(index)    )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS1%d     =0x%x \n", (0x144 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS1(index)    )); 
-                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS0_CLR%d =0x%x \n", (0x148 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS0_CLR(index))); 
-                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS1_CLR%d =0x%x \n", (0x14c + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS1_CLR(index))); 
-                DISP_MSG("(0x%x)CMDQ_THRx_INSTN_TIMEOUT_CYCLES%d =0x%x \n", (0x150 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_INSTN_TIMEOUT_CYCLES(index))); 
+                DISP_MSG("(0x%x)CMDQ_THRx_RESET%d                =0x%x \n", (0x100 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_RESET(index)               ));
+                DISP_MSG("(0x%x)CMDQ_THRx_EN%d                   =0x%x \n", (0x104 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_EN(index)                  ));
+                DISP_MSG("(0x%x)CMDQ_THRx_SUSPEND%d              =0x%x \n", (0x108 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_SUSPEND(index)             ));
+                DISP_MSG("(0x%x)CMDQ_THRx_STATUS%d               =0x%x \n", (0x10c + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_STATUS(index)              ));
+                DISP_MSG("(0x%x)CMDQ_THRx_IRQ_FLAG%d             =0x%x \n", (0x110 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_IRQ_FLAG(index)            ));
+                DISP_MSG("(0x%x)CMDQ_THRx_IRQ_FLAG_EN%d          =0x%x \n", (0x114 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_IRQ_FLAG_EN(index)         ));
+                DISP_MSG("(0x%x)CMDQ_THRx_SECURITY%d             =0x%x \n", (0x118 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_SECURITY(index)            ));
+                DISP_MSG("(0x%x)CMDQ_THRx_PC%d                   =0x%x \n", (0x120 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_PC(index)                  ));
+                DISP_MSG("(0x%x)CMDQ_THRx_END_ADDR%d             =0x%x \n", (0x124 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_END_ADDR(index)            ));
+                DISP_MSG("(0x%x)CMDQ_THRx_EXEC_CMDS_CNT%d        =0x%x \n", (0x128 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_EXEC_CMDS_CNT(index)       ));
+                DISP_MSG("(0x%x)CMDQ_THRx_WAIT_EVENTS0%d         =0x%x \n", (0x130 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_WAIT_EVENTS0(index)        ));
+                DISP_MSG("(0x%x)CMDQ_THRx_WAIT_EVENTS1%d         =0x%x \n", (0x134 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_WAIT_EVENTS1(index)        ));
+                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS0%d     =0x%x \n", (0x140 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS0(index)    ));
+                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS1%d     =0x%x \n", (0x144 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS1(index)    ));
+                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS0_CLR%d =0x%x \n", (0x148 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS0_CLR(index)));
+                DISP_MSG("(0x%x)CMDQ_THRx_OBSERVED_EVENTS1_CLR%d =0x%x \n", (0x14c + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_OBSERVED_EVENTS1_CLR(index)));
+                DISP_MSG("(0x%x)CMDQ_THRx_INSTN_TIMEOUT_CYCLES%d =0x%x \n", (0x150 + 0x80*index), index, DISP_REG_GET(DISP_REG_CMDQ_THRx_INSTN_TIMEOUT_CYCLES(index)));
             }
             break;
 
-                 
-        case DISP_MODULE_GAMMA:  
-        break;                 
-        case DISP_MODULE_DBI:      
-        break;                 
+
+        case DISP_MODULE_GAMMA:
+        break;
+        case DISP_MODULE_DBI:
+        break;
         case DISP_MODULE_DSI:
 		case DISP_MODULE_DSI_VDO:
 		case DISP_MODULE_DSI_CMD:
             /*
             DISP_MSG("---------- Start dump DSI registers ----------\n");
-            
+
             for (index = 0; index < sizeof(DSI_REGS); index += 4)
             {
                 DISP_MSG( "DSI+%04x : 0x%08x\n", index, DISP_REG_GET(DSI_BASE + index));
             }
-            
+
             for (index = 0; index < sizeof(DSI_CMDQ_REGS); index += 4)
             {
                 DISP_MSG("DSI_CMD+%04x(%p) : 0x%08x\n", index, (UINT32*)(DSI_BASE+0x180+index), DISP_REG_GET((DSI_BASE+0x180+index)));
             }
-            
+
             for (index = 0; index < sizeof(DSI_PHY_REGS); index += 4)
             {
                 DISP_MSG("DSI_PHY+%04x(%p) : 0x%08x\n", index, (UINT32*)(MIPI_CONFIG_BASE+0x800+index), DISP_REG_GET((MIPI_CONFIG_BASE+0x800+index)));
             }
 
-        */    
-        break;                 
-        case DISP_MODULE_DPI1:  
+        */
         break;
-                         
-        case DISP_MODULE_DPI0:   
+        case DISP_MODULE_DPI1:
+        break;
+
+        case DISP_MODULE_DPI0:
             /*
             DISP_MSG("===== DISP DPI0 Reg Dump: ============\n");
-            DISP_MSG("(0x00)DPI0_EN_REG               = 0x%x \n", *DPI0_EN_REG               ); 
+            DISP_MSG("(0x00)DPI0_EN_REG               = 0x%x \n", *DPI0_EN_REG               );
             DISP_MSG("(0x04)DPI0_RST_REG              = 0x%x \n", *DPI0_RST_REG              );
-            DISP_MSG("(0x08)DPI0_INTEN_REG            = 0x%x \n", *DPI0_INTEN_REG            ); 
-            DISP_MSG("(0x0C)DPI0_INTSTA_REG           = 0x%x \n", *DPI0_INTSTA_REG           );    
-            DISP_MSG("(0x10)DPI0_CON_REG              = 0x%x \n", *DPI0_CON_REG              ); 
-            DISP_MSG("(0x14)DPI0_CLKCON_REG           = 0x%x \n", *DPI0_CLKCON_REG           ); 
-            DISP_MSG("(0x18)DPI0_SIZE_REG             = 0x%x \n", *DPI0_SIZE_REG             ); 
-            DISP_MSG("(0x1C)DPI0_TGEN_HWIDTH_REG      = 0x%x \n", *DPI0_TGEN_HWIDTH_REG      ); 
-            DISP_MSG("(0x20)DPI0_TGEN_HPORCH_REG      = 0x%x \n", *DPI0_TGEN_HPORCH_REG      );    
-            DISP_MSG("(0x24)DPI0_TGEN_VWIDTH_LODD_REG = 0x%x \n", *DPI0_TGEN_VWIDTH_LODD_REG );    
-            DISP_MSG("(0x28)DPI0_TGEN_VPORCH_LODD_REG = 0x%x \n", *DPI0_TGEN_VPORCH_LODD_REG );    
-            DISP_MSG("(0x2C)DPI0_TGEN_WWIDTH_LEVEN_REG= 0x%x \n", *DPI0_TGEN_WWIDTH_LEVEN_REG); 
-            DISP_MSG("(0x30)DPI0_TGEN_VPORCH_LEVEN_REG= 0x%x \n", *DPI0_TGEN_VPORCH_LEVEN_REG); 
-            DISP_MSG("(0x34)DPI0_TGEN_VWIDTH_RODD_REG = 0x%x \n", *DPI0_TGEN_VWIDTH_RODD_REG ); 
-            DISP_MSG("(0x38)DPI0_TGEN_VPORCH_RODD_REG = 0x%x \n", *DPI0_TGEN_VPORCH_RODD_REG ); 
-            DISP_MSG("(0x50)DPI0_BG_HCNTL_REG         = 0x%x \n", *DPI0_BG_HCNTL_REG         ); 
-            DISP_MSG("(0x54)DPI0_BG_VCNTL_REG         = 0x%x \n", *DPI0_BG_VCNTL_REG         );    
+            DISP_MSG("(0x08)DPI0_INTEN_REG            = 0x%x \n", *DPI0_INTEN_REG            );
+            DISP_MSG("(0x0C)DPI0_INTSTA_REG           = 0x%x \n", *DPI0_INTSTA_REG           );
+            DISP_MSG("(0x10)DPI0_CON_REG              = 0x%x \n", *DPI0_CON_REG              );
+            DISP_MSG("(0x14)DPI0_CLKCON_REG           = 0x%x \n", *DPI0_CLKCON_REG           );
+            DISP_MSG("(0x18)DPI0_SIZE_REG             = 0x%x \n", *DPI0_SIZE_REG             );
+            DISP_MSG("(0x1C)DPI0_TGEN_HWIDTH_REG      = 0x%x \n", *DPI0_TGEN_HWIDTH_REG      );
+            DISP_MSG("(0x20)DPI0_TGEN_HPORCH_REG      = 0x%x \n", *DPI0_TGEN_HPORCH_REG      );
+            DISP_MSG("(0x24)DPI0_TGEN_VWIDTH_LODD_REG = 0x%x \n", *DPI0_TGEN_VWIDTH_LODD_REG );
+            DISP_MSG("(0x28)DPI0_TGEN_VPORCH_LODD_REG = 0x%x \n", *DPI0_TGEN_VPORCH_LODD_REG );
+            DISP_MSG("(0x2C)DPI0_TGEN_WWIDTH_LEVEN_REG= 0x%x \n", *DPI0_TGEN_WWIDTH_LEVEN_REG);
+            DISP_MSG("(0x30)DPI0_TGEN_VPORCH_LEVEN_REG= 0x%x \n", *DPI0_TGEN_VPORCH_LEVEN_REG);
+            DISP_MSG("(0x34)DPI0_TGEN_VWIDTH_RODD_REG = 0x%x \n", *DPI0_TGEN_VWIDTH_RODD_REG );
+            DISP_MSG("(0x38)DPI0_TGEN_VPORCH_RODD_REG = 0x%x \n", *DPI0_TGEN_VPORCH_RODD_REG );
+            DISP_MSG("(0x50)DPI0_BG_HCNTL_REG         = 0x%x \n", *DPI0_BG_HCNTL_REG         );
+            DISP_MSG("(0x54)DPI0_BG_VCNTL_REG         = 0x%x \n", *DPI0_BG_VCNTL_REG         );
             DISP_MSG("(0x60)DPI0_STATUS_REG           = 0x%x \n", *DPI0_STATUS_REG           );
-            DISP_MSG("(0x64)DPI0_MATRIX_COEFF_SET0_REG= 0x%x \n", *DPI0_MATRIX_COEFF_SET0_REG); 
-            DISP_MSG("(0x68)DPI0_MATRIX_COEFF_SET1_REG= 0x%x \n", *DPI0_MATRIX_COEFF_SET1_REG); 
-            DISP_MSG("(0x6C)DPI0_MATRIX_COEFF_SET2_REG= 0x%x \n", *DPI0_MATRIX_COEFF_SET2_REG); 
-            DISP_MSG("(0X8C)DPI0_Y_LIMIT_REG          = 0x%x \n", *DPI0_Y_LIMIT_REG          ); 
+            DISP_MSG("(0x64)DPI0_MATRIX_COEFF_SET0_REG= 0x%x \n", *DPI0_MATRIX_COEFF_SET0_REG);
+            DISP_MSG("(0x68)DPI0_MATRIX_COEFF_SET1_REG= 0x%x \n", *DPI0_MATRIX_COEFF_SET1_REG);
+            DISP_MSG("(0x6C)DPI0_MATRIX_COEFF_SET2_REG= 0x%x \n", *DPI0_MATRIX_COEFF_SET2_REG);
+            DISP_MSG("(0X8C)DPI0_Y_LIMIT_REG          = 0x%x \n", *DPI0_Y_LIMIT_REG          );
             DISP_MSG("(0x90)DPI0_C_LIMIT_REG          = 0x%x \n", *DPI0_C_LIMIT_REG          );
             */
             break;
@@ -2616,20 +2679,20 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
         case DISP_MODULE_MUTEX2:
         case DISP_MODULE_MUTEX3:
             DISP_MSG("===== DISP Mutex%d Reg Dump: ============\n", module - DISP_MODULE_MUTEX0);
-            DISP_MSG("((0x0) CFG_MUTEX_INTEN    =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTEN     )); 
-            DISP_MSG("((0x4) CFG_MUTEX_INTSTA   =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA    )); 
-            DISP_MSG("((0x8) CFG_REG_UPD_TIMEOUT=0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_UPD_TIMEOUT )); 
-            DISP_MSG("((0xC) CFG_REG_COMMIT     =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_COMMIT      )); 
+            DISP_MSG("((0x0) CFG_MUTEX_INTEN    =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTEN     ));
+            DISP_MSG("((0x4) CFG_MUTEX_INTSTA   =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA    ));
+            DISP_MSG("((0x8) CFG_REG_UPD_TIMEOUT=0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_UPD_TIMEOUT ));
+            DISP_MSG("((0xC) CFG_REG_COMMIT     =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_COMMIT      ));
             index = module - DISP_MODULE_MUTEX0;
             {
-                DISP_MSG("(0x%x)CFG_MUTEX_EN(%d)  =0x%x \n", 0x20 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_EN(index)  )); 
-                DISP_MSG("(0x%x)CFG_MUTEX(%d)     =0x%x \n", 0x24 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX(index)     )); 
-                DISP_MSG("(0x%x)CFG_MUTEX_RST(%d) =0x%x \n", 0x28 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_RST(index) )); 
-                DISP_MSG("(0x%x)CFG_MUTEX_MOD(%d) =0x%x \n", 0x2C + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_MOD(index) )); 
-                DISP_MSG("(0x%x)CFG_MUTEX_SOF(%d) =0x%x \n", 0x30 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_SOF(index) )); 
+                DISP_MSG("(0x%x)CFG_MUTEX_EN(%d)  =0x%x \n", 0x20 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_EN(index)  ));
+                DISP_MSG("(0x%x)CFG_MUTEX(%d)     =0x%x \n", 0x24 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX(index)     ));
+                DISP_MSG("(0x%x)CFG_MUTEX_RST(%d) =0x%x \n", 0x28 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_RST(index) ));
+                DISP_MSG("(0x%x)CFG_MUTEX_MOD(%d) =0x%x \n", 0x2C + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_MOD(index) ));
+                DISP_MSG("(0x%x)CFG_MUTEX_SOF(%d) =0x%x \n", 0x30 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_SOF(index) ));
             }
             break;
-            
+
 
         case DISP_MODULE_CONFIG:
         case DISP_MODULE_MUTEX:
@@ -2684,20 +2747,20 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG("(0x870)CFG_DEBUG_OUT_SEL  =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_DEBUG_OUT_SEL   ));
             DISP_MSG("(0x874)CFG_TEST_CLK_SEL   =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_TEST_CLK_SEL    ));
             DISP_MSG("(0x880)CFG_DUMMY          =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_DUMMY           ));
-            DISP_MSG("((0x0) CFG_MUTEX_INTEN    =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTEN     )); 
-            DISP_MSG("((0x4) CFG_MUTEX_INTSTA   =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA    )); 
-            DISP_MSG("((0x8) CFG_REG_UPD_TIMEOUT=0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_UPD_TIMEOUT )); 
-            DISP_MSG("((0xC) CFG_REG_COMMIT     =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_COMMIT      )); 
+            DISP_MSG("((0x0) CFG_MUTEX_INTEN    =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTEN     ));
+            DISP_MSG("((0x4) CFG_MUTEX_INTSTA   =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_MUTEX_INTSTA    ));
+            DISP_MSG("((0x8) CFG_REG_UPD_TIMEOUT=0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_UPD_TIMEOUT ));
+            DISP_MSG("((0xC) CFG_REG_COMMIT     =0x%x \n", DISP_REG_GET(DISP_REG_CONFIG_REG_COMMIT      ));
             for(index=0;index<5;index++)
             {
-                DISP_MSG("(0x%x)CFG_MUTEX_EN(%d)  =0x%x \n", 0x20 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_EN(index)  )); 
-                DISP_MSG("(0x%x)CFG_MUTEX(%d)     =0x%x \n", 0x24 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX(index)     )); 
-                DISP_MSG("(0x%x)CFG_MUTEX_RST(%d) =0x%x \n", 0x28 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_RST(index) )); 
-                DISP_MSG("(0x%x)CFG_MUTEX_MOD(%d) =0x%x \n", 0x2C + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_MOD(index) )); 
-                DISP_MSG("(0x%x)CFG_MUTEX_SOF(%d) =0x%x \n", 0x30 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_SOF(index) )); 
+                DISP_MSG("(0x%x)CFG_MUTEX_EN(%d)  =0x%x \n", 0x20 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_EN(index)  ));
+                DISP_MSG("(0x%x)CFG_MUTEX(%d)     =0x%x \n", 0x24 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX(index)     ));
+                DISP_MSG("(0x%x)CFG_MUTEX_RST(%d) =0x%x \n", 0x28 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_RST(index) ));
+                DISP_MSG("(0x%x)CFG_MUTEX_MOD(%d) =0x%x \n", 0x2C + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_MOD(index) ));
+                DISP_MSG("(0x%x)CFG_MUTEX_SOF(%d) =0x%x \n", 0x30 + (0x20 * index), index, DISP_REG_GET(DISP_REG_CONFIG_MUTEX_SOF(index) ));
             }
             break;
- 
+
         case DISP_MODULE_G2D:
                 DISP_MSG("(0x000)DISP_REG_G2D_START    =0x%x \n", DISP_REG_GET(DISP_REG_G2D_START     ));
                 DISP_MSG("(0x004)DISP_REG_G2D_MODE_CON    =0x%x \n", DISP_REG_GET(DISP_REG_G2D_MODE_CON     ));
@@ -2720,7 +2783,7 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
                 DISP_MSG("(0xD8))DISP_REG_G2D_DI_MAT_0    =0x%x \n", DISP_REG_GET(DISP_REG_G2D_DI_MAT_0     ));
                 DISP_MSG("(0xDC)DISP_REG_G2D_DI_MAT_1        =0x%x \n", DISP_REG_GET(DISP_REG_G2D_DI_MAT_1         ));
                 DISP_MSG("(0xE0)DISP_REG_G2D_PMC        =0x%x \n", DISP_REG_GET(DISP_REG_G2D_PMC         ));
-                           
+
             break;
 
 	case DISP_MODULE_SMI:
@@ -2733,7 +2796,7 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG(" 0xF4010608= 0x%x \n", *(volatile unsigned int*)0xF4010608);
             DISP_MSG(" 0xF4010610= 0x%x \n", *(volatile unsigned int*)0xF4010610);
             DISP_MSG(" 0xF4010614= 0x%x \n", *(volatile unsigned int*)0xF4010614);
-            DISP_MSG(" 0xF4010618= 0x%x \n", *(volatile unsigned int*)0xF4010618);              
+            DISP_MSG(" 0xF4010618= 0x%x \n", *(volatile unsigned int*)0xF4010618);
             DISP_MSG(" 0xf4000100= 0x%x \n", *(volatile unsigned int*)0xf4000100);
             DISP_MSG(" 0xf4000110= 0x%x \n", *(volatile unsigned int*)0xf4000110);
             DISP_MSG(" 0xf4000120= 0x%x \n", *(volatile unsigned int*)0xf4000120);
@@ -2745,7 +2808,7 @@ int disp_dump_reg(DISP_MODULE_ENUM module)
             DISP_MSG(" 0xF0202408= 0x%x \n", *(volatile unsigned int*)0xF0202408);
             DISP_MSG(" 0xF020240C= 0x%x \n", *(volatile unsigned int*)0xF020240C);
             DISP_MSG(" 0xF0202410= 0x%x \n", *(volatile unsigned int*)0xF0202410);
-        break;  
+        break;
 
         default:
         	  DISP_MSG("disp_dump_reg() invalid module id=%d \n", module);

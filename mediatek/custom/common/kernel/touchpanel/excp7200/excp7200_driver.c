@@ -58,6 +58,7 @@ static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
+#if 0
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
@@ -65,7 +66,7 @@ extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
 extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
                                      kal_bool auto_umask);
-
+#endif
 static struct i2c_client *i2c_client = NULL;
 static const struct i2c_device_id tpd_i2c_id[] = {{"mtk-tpd",0},{}};
 static unsigned short force[] = {0, 0x08, I2C_CLIENT_END,I2C_CLIENT_END};
@@ -185,10 +186,10 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
         TPD_DMESG(TPD_DEVICE " failed to create kernel thread: %d\n", err);
     }
     
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
     
     printk("MediaTek touch panel i2c probe success\n");
     
@@ -370,7 +371,7 @@ void tpd_suspend(struct i2c_client *client, pm_message_t message)
     {
         TPD_DEBUG("[mtk-tpd] i2c write communcate error in suspend: 0x%x\n", ret);
     }
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
     
     TPD_DEBUG("[mtk-tpd] touch suspend\n");
 }
@@ -390,7 +391,7 @@ void tpd_resume(struct i2c_client *client)
     mt_set_gpio_pull_select(GPIO_CTP_EINT_PIN, GPIO_PULL_UP);
 
     
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
     tpd_halt = 0;
     TPD_DEBUG("[mtk-tpd] touch resume\n");
 }

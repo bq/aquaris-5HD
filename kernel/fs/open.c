@@ -34,7 +34,6 @@
 #include <linux/pipe_fs_i.h>
 #include <linux/wait.h>
 #endif
-#include <mach/mt_io_logger.h>
 #include <linux/delay.h>
 #include "internal.h"
 
@@ -43,21 +42,9 @@ int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 {
 	int ret;
 	struct iattr newattrs;
-#if IO_LOGGER_ENABLE
-	
-		unsigned long long time1 = 0,timeoffset = 0;
-		bool add_trace_e = false;
-#endif
 	/* Not pretty: "inode->i_size" shouldn't really be signed. But it is. */
 	if (length < 0)
 		return -EINVAL;
-#if IO_LOGGER_ENABLE
-	if(unlikely(en_IOLogger())){
-		add_trace_e=true;
-		time1 = sched_clock();
-		AddIOTrace(IO_LOGGER_MSG_VFS_INTFS,do_truncate,dentry->d_name.name,(u32)length);
-	}
-#endif
 
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | time_attrs;
@@ -74,19 +61,6 @@ int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	mutex_lock(&dentry->d_inode->i_mutex);
 	ret = notify_change(dentry, &newattrs);
 	mutex_unlock(&dentry->d_inode->i_mutex);
-#if IO_LOGGER_ENABLE
-			if(unlikely(en_IOLogger()) && add_trace_e){
-				timeoffset = sched_clock() - time1;
-				add_trace_e = false;
-				if(BEYOND_TRACE_LOG_TIME(timeoffset))
-				{
-					 AddIOTrace(IO_LOGGER_MSG_VFS_INTFS_END,do_truncate,dentry->d_name.name,ret,timeoffset);	
-					 if(BEYOND_DUMP_LOG_TIME(timeoffset))
-						DumpIOTrace(timeoffset);
-					
-				}
-			}
-#endif
 	return ret;
 }
 
@@ -426,13 +400,11 @@ SYSCALL_DEFINE1(fchdir, unsigned int, fd)
 	struct file *file;
 	struct inode *inode;
 	int error;
-	int fput_needed;	//++ for linux kernel patch 20120718
-
-	error = -EBADF;
-	//file = fget(fd);								//-- for linux kernel patch 20120718
-	file = fget_raw_light(fd, &fput_needed);	//++ for linux kernel patch 20120718
+	
+    error = -EBADF;
+    file = fget(fd);
 	if (!file)
-		goto out;
+        goto out;
 
 	inode = file->f_path.dentry->d_inode;
 
@@ -444,8 +416,7 @@ SYSCALL_DEFINE1(fchdir, unsigned int, fd)
 	if (!error)
 		set_fs_pwd(current->fs, &file->f_path);
 out_putf:
-	//fput(file);						//-- for linux kernel patch 20120718
-	fput_light(file, fput_needed);	//++ for linux kernel patch 20120718
+	fput(file);
 out:
 	return error;
 }
@@ -914,9 +885,9 @@ static inline int build_open_flags(int flags, umode_t mode, struct open_flags *o
 	int lookup_flags = 0;
 	int acc_mode;
 
-	if (!(flags & O_CREAT))
-		mode = 0;
-	op->mode = mode;
+    if (!(flags & O_CREAT))
+        mode = 0;
+    op->mode = mode;
 
 	/* Must never be set by userspace */
 	flags &= ~FMODE_NONOTIFY;
@@ -1008,22 +979,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	int lookup = build_open_flags(flags, mode, &op);
 	char *tmp = getname(filename);
 	int fd = PTR_ERR(tmp);
-#if IO_LOGGER_ENABLE
-
-	unsigned long long time1 = 0,timeoffset = 0;
-	bool add_trace_e = false;
-#endif
 	if (!IS_ERR(tmp)) {
-#if IO_LOGGER_ENABLE
-		if(unlikely(en_IOLogger())){
-			if(!memcmp(tmp,"/data",5)||!memcmp(tmp,"/system",7)){
-				add_trace_e = true;
-				time1 = sched_clock();
-				AddIOTrace(IO_LOGGER_MSG_VFS_OPEN_INTFS,do_sys_open,tmp);
-			}
-		}
-		
-#endif
 		fd = get_unused_fd_flags(flags);
 		if (fd >= 0) {
 			struct file *f = do_filp_open(dfd, tmp, &op, lookup);
@@ -1035,19 +991,6 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 				fd_install(fd, f);
 			}
 		}
-#if IO_LOGGER_ENABLE
-			if(unlikely(en_IOLogger()) && add_trace_e){
-				timeoffset = sched_clock() - time1;
-				add_trace_e = false;
-				if(BEYOND_TRACE_LOG_TIME(timeoffset))
-				{
-					 AddIOTrace(IO_LOGGER_MSG_VFS_OPEN_INTFS_END,do_sys_open,tmp,timeoffset);	
-					 if(BEYOND_DUMP_LOG_TIME(timeoffset))
-						DumpIOTrace(timeoffset);
-					
-				}
-			}
-#endif
 		putname(tmp);
 	}
 	return fd;

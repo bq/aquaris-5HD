@@ -22,6 +22,8 @@
 
 #include "trace_output.h"
 
+#include <linux/mtk_ftrace.h>
+
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM "TRACE_SYSTEM"
 
@@ -1463,6 +1465,16 @@ static __init int setup_boot_time_ftrace(char *str)
     return 1;
 }
 __setup("boot_time_ftrace", setup_boot_time_ftrace);
+
+// delay the ring buffer expand until lat_initcall stage
+// to avoid impacting the boot time
+static __init int expand_ring_buffer_init(void){
+    if(!boot_time_ftrace)
+        tracing_update_buffers();
+    return 0;
+}
+late_initcall(expand_ring_buffer_init);
+
 #endif
 
 static __init int event_trace_init(void)
@@ -1533,26 +1545,19 @@ static __init int event_trace_init(void)
 	}
 
 #ifdef CONFIG_MTK_SCHED_TRACERS
-    ftrace_set_clr_event("sched_switch", 1);
-    ftrace_set_clr_event("sched_wakeup", 1);
-    ftrace_set_clr_event("sched_wakeup_new", 1);
-#ifdef CONFIG_SMP
-    ftrace_set_clr_event("sched_migrate_task", 1);
-#endif
-    ftrace_set_clr_event("irq_handler_entry", 1);
-    ftrace_set_clr_event("irq_handler_exit", 1);
+    // enable ftrace facilities
+    mt_ftrace_enable_disable(1);
 
     // only update buffer eariler if we want to collect boot-time ftrace
     // to avoid the boot time impacted by early-expanded ring buffer
     if(boot_time_ftrace)
         tracing_update_buffers();
     else 
-        set_tracer_flags(TRACE_ITER_OVERWRITE, 1);
-        // trace_flags |= TRACE_ITER_OVERWRITE;
+        set_tracer_flag(TRACE_ITER_OVERWRITE, 1);
 		// ring_buffer_change_overwrite(global_trace.buffer, 1);
 
 
-    printk("[ftrace]mtk ftrace ready...\n");
+    printk("[ftrace]ftrace ready...\n");
 #endif
 
 	ret = register_module_notifier(&trace_module_nb);
@@ -1562,17 +1567,6 @@ static __init int event_trace_init(void)
 	return 0;
 }
 fs_initcall(event_trace_init);
-
-#ifdef CONFIG_MTK_SCHED_TRACERS
-// delay the ring buffer expand until lat_initcall stage
-// to avoid impacting the boot time
-static __init int expand_ring_buffer_init(void){
-    if(!boot_time_ftrace)
-        tracing_update_buffers();
-    return 0;
-}
-late_initcall(expand_ring_buffer_init);
-#endif
 
 #ifdef CONFIG_FTRACE_STARTUP_TEST
 

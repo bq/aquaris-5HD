@@ -17,9 +17,9 @@ if [ "$3" = "" ]; then
     echo ""
     exit 1;
 fi
-
-cd mediatek/build/tools/SignTool
-make
+echo [Dependency] $0
+#cd mediatek/build/tools/SignTool
+#make
 cd $CUR_DIR
 
 ##############################################################
@@ -43,7 +43,7 @@ fi
 Sparse_Str=`hexdump -n 4 $3 | head -n 1 | awk '{print $2,$3}'`
 Yaffs_Str=`hexdump $3 | head -n 1 | awk '{print $2,$3,$4,$5,$6,$7,$8,$9}'`
 if [ "$Sparse_Str" = "ff3a ed26" ] ; then
-
+    echo [Dependency] ${Simg2imgTool}
     ./${Simg2imgTool} $3 UN_SPARSE_TEMP_IMG
     ./${SignTool} $1 $2 UN_SPARSE_TEMP_IMG SIGNATURE HEADER
     if [ $? -eq 0 ] ; then
@@ -75,7 +75,7 @@ if [ "$Sparse_Str" = "ff3a ed26" ] ; then
     rm -rf EXT_HDR_SPARSE
 
 elif [ "$Yaffs_Str" = "0003 0000 0001 0000 ffff 0000 0000 0000" ] ; then
-
+    echo [Dependency] ${Yaffs2Covert}
     ./${Yaffs2Covert} -c $NAND_PAGE_SIZE $3 UN_YAFFS_TEMP_IMG
     echo "./${Yaffs2Covert} -c $NAND_PAGE_SIZE $3 UN_YAFFS_TEMP_IMG"
     ./${SignTool} $1 $2 UN_YAFFS_TEMP_IMG SIGNATURE HEADER

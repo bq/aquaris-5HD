@@ -42,6 +42,10 @@ enum {
     FM_HWCOEFF_DOWNLOAD_OPCODE = 0x14,
     FM_ROM_DOWNLOAD_OPCODE = 0x15,
     FM_SOFT_MUTE_TUNE_OPCODE = 0x17,
+	FM_HOST_READ_OPCODE = 0x18,//mcu register read
+	FM_HOST_WRITE_OPCODE = 0x19,
+	CSPI_WRITE_OPCODE = 0x20,
+	CSPI_READ_OPCODE = 0x21,//common SPI read
 };
 
 enum {
@@ -67,7 +71,11 @@ enum {
     FLAG_COEFF = (1 << FM_COEFF_DOWNLOAD_OPCODE),
     FLAG_HWCOEFF = (1 << FM_HWCOEFF_DOWNLOAD_OPCODE),
     FLAG_ROM = (1 << FM_ROM_DOWNLOAD_OPCODE),
+	FLAG_CSPI_READ = (1 << 22),//22
     FLAG_SM_TUNE = (1 << FM_SOFT_MUTE_TUNE_OPCODE), // 23
+    FLAG_HOST_READ = (1 << FM_HOST_READ_OPCODE),//24
+	FLAG_HOST_WRITE = (1 << FM_HOST_WRITE_OPCODE),//25
+	FLAG_CSPI_WRITE = (1 << 26),//26
     FLAG_CQI_DONE = (1 << 27),
     FLAG_TUNE_DONE = (1 << 28),
     FLAG_SEEK_DONE = (1 << 29),
@@ -83,6 +91,7 @@ struct fm_res_ctx {
     fm_u16 scan_result[FM_SCANTBL_SIZE];
     fm_s8 cqi[FM_CQI_BUF_SIZE];
     struct rds_rx_t rds_rx_result;
+    fm_u32 cspi_rd;//common spi read data
 };
 
 #define FM_TRACE_ENABLE
@@ -147,7 +156,7 @@ struct fm_trace_fifo_t {
     __ret;                          \
 })
 
-#if (defined(MT6620_FM)||defined(MT6628_FM))
+#if (defined(MT6620_FM)||defined(MT6628_FM)||defined(MT6627_FM)||defined(MT6630_FM))
 #include "fm_utils.h"
 
 #define RX_BUF_SIZE 128

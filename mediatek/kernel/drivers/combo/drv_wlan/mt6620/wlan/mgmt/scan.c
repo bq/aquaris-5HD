@@ -19,11 +19,11 @@
 **
 ** 01 30 2013 yuche.tsai
 ** [ALPS00451578] [JB2][WFD][Case Fail][JE][MR1]?????????[Java (JE),660,-1361051648,99,/data/core/,0,system_server_crash,system_server]JE happens when try to connect WFD.(4/5)
-** Fix possible old scan result indicate to supplicant after formation.
+** Fix possible old scan result indicated to supplicant after formation.
 **
-** 01 16 2013 yuche.tsai
-** [ALPS00431980] [WFD]Aupus one ?play game 10 minitues?wfd connection automaticlly disconnect
-** Fix possible FW assert issue.
+** 01 16 2013 cp.wu
+** [ALPS00429083] [Need Patch] [Volunteer Patch][MT6620 Wi-Fi] Improve AP-IOT compatibility against AP whose timestamp will reset unexpectedly
+** when BSS-DESC is re-allocated, all information needs to be filled
  *
  * 07 17 2012 yuche.tsai
  * NULL
@@ -1542,7 +1542,7 @@ scanAddToBssDesc (
     BOOLEAN fgIsValidSsid = FALSE, fgEscape = FALSE;
     PARAM_SSID_T rSsid;
     UINT_64 u8Timestamp;
-	BOOLEAN fgIsNewBssDesc = FALSE;
+    BOOLEAN fgIsNewBssDesc = FALSE;
 
     UINT_32 i;
     UINT_8 ucSSIDChar;
@@ -1638,8 +1638,8 @@ scanAddToBssDesc (
                                           fgIsValidSsid == TRUE ? &rSsid : NULL);
 
     if (prBssDesc == (P_BSS_DESC_T)NULL) {
-		fgIsNewBssDesc = TRUE;
-		
+        fgIsNewBssDesc = TRUE;
+
         do {
             //4 <1.2.1> First trial of allocation
             prBssDesc = scanAllocateBssDesc(prAdapter);
@@ -1709,7 +1709,7 @@ scanAddToBssDesc (
         if(prBssDesc->eBSSType == BSS_TYPE_INFRASTRUCTURE && u8Timestamp < prBssDesc->u8TimeStamp.QuadPart) {
             BOOLEAN fgIsConnected, fgIsConnecting;
 
-			/* set flag for indicating this is a new BSS-DESC */
+            /* set flag for indicating this is a new BSS-DESC */
             fgIsNewBssDesc = TRUE;
 
             /* backup 2 flags for APs which reset timestamp unexpectedly */
@@ -1729,7 +1729,7 @@ scanAddToBssDesc (
     }
 
     /* NOTE: Keep consistency of Scan Record during JOIN process */
-    if ((fgIsNewBssDesc == FALSE) && prBssDesc->fgIsConnecting) {
+    if (fgIsNewBssDesc == FALSE && prBssDesc->fgIsConnecting) {
         return prBssDesc;
     }
 

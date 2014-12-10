@@ -5,6 +5,7 @@
 #include <mach/mt_spm_mtcmos.h>
 #endif
 #include <mach/mt_spm_idle.h>
+#include <mach/wd_api.h>
 
 
 
@@ -17,9 +18,6 @@ extern void __inner_clean_dcache_L2(void);  //definition in mt_cache_v7.S
 extern void inner_dcache_flush_L1(void);    //definition in inner_cache.c
 extern void __switch_to_smp(void);          //definition in mt_hotplug.S
 extern void __switch_to_amp(void);          //definition in mt_hotplug.S
-#ifdef CONFIG_MTK_WD_KICKER
-extern void wk_stop_kick_cpu(int cpu);
-#endif
 
 
 
@@ -121,13 +119,13 @@ int platform_cpu_kill(unsigned int cpu)
     switch(cpu)
     {
         case 1:
-            spm_mtcmos_ctrl_cpu1(STA_POWER_DOWN);
+            spm_mtcmos_ctrl_cpu1(STA_POWER_DOWN, 1);
             break;
         case 2:
-            spm_mtcmos_ctrl_cpu2(STA_POWER_DOWN);
+            spm_mtcmos_ctrl_cpu2(STA_POWER_DOWN, 1);
             break;
         case 3:
-            spm_mtcmos_ctrl_cpu3(STA_POWER_DOWN);
+            spm_mtcmos_ctrl_cpu3(STA_POWER_DOWN, 1);
             break;
         default:
             break;
@@ -146,19 +144,20 @@ int platform_cpu_kill(unsigned int cpu)
 void platform_cpu_die(unsigned int cpu)
 {
     int spurious = 0;
+    struct wd_api *wd_api = NULL;
     
     HOTPLUG_INFO("platform_cpu_die, cpu: %d\n", cpu);
-
-#ifdef CONFIG_MTK_WD_KICKER
-    wk_stop_kick_cpu(cpu);
-#endif
-
+    
+    get_wd_api(&wd_api);
+    if (wd_api)
+        wd_api->wd_cpu_hot_plug_off_notify(cpu);
+    
     /*
      * we're ready for shutdown now, so do it
      */
     cpu_enter_lowpower(cpu);
     platform_do_lowpower(cpu, &spurious);
-
+    
     /*
      * bring this CPU back into the world of cache
      * coherency, and then restore interrupts

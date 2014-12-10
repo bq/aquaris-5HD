@@ -30,14 +30,14 @@ extern bool console_suspend_enabled; // from printk.c
 #define _TAG_HIB_M "HIB/TOI"
 #if (HIB_TOI_DEBUG)
 #undef hib_log
-#define hib_log(fmt, ...)	if (!console_suspend_enabled) pr_warn("[%s] [%s()]" fmt, _TAG_HIB_M, __func__, ##__VA_ARGS__);
+#define hib_log(fmt, ...)	pr_warn("[%s] [%s()]" fmt, _TAG_HIB_M, __func__, ##__VA_ARGS__);
 #else
 #define hib_log(fmt, ...)
 #endif
 #undef hib_warn
-#define hib_warn(fmt, ...)  if (!console_suspend_enabled) pr_warn("[%s] [%s()]" fmt, _TAG_HIB_M, __func__, ##__VA_ARGS__);
+#define hib_warn(fmt, ...)  pr_warn("[%s] [%s()]" fmt, _TAG_HIB_M, __func__, ##__VA_ARGS__);
 #undef hib_err
-#define hib_err(fmt, ...)   if (!console_suspend_enabled) pr_err("[%s] [%s()]" fmt, _TAG_HIB_M, __func__, ##__VA_ARGS__);
+#define hib_err(fmt, ...)   pr_err("[%s] [%s()]" fmt, _TAG_HIB_M, __func__, ##__VA_ARGS__);
 
 // for set_env() by MTK
 #include <mach/env.h>

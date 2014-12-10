@@ -69,6 +69,7 @@
 
 static UCHAR gFullPatchName[NAME_MAX + 1];
 static const WMT_IC_INFO_S *gp_mt6628_info = NULL;
+static WMT_PATCH gp_mt6628_patch_info;
 static WMT_CO_CLOCK gCoClockEn = WMT_CO_CLOCK_DIS;
 #if 0
 static UCHAR WMT_WAKEUP_DIS_GATE_CMD[] = {0x1, 0x3, 0x01, 0x00, 0x04};
@@ -531,7 +532,7 @@ static const WMT_IC_INFO_S mt6628_info_table[] = {
         .cChipVersion      = WMT_IC_VER_E1,
         .cPatchNameExt     = WMT_IC_PATCH_E1_EXT,
         //need to refine?
-        .eWmtHwVer        = WMTHWVER_MT6620_E1,
+        .eWmtHwVer        = WMTHWVER_E1,
         .bWorkWithoutPatch = MTK_WCN_BOOL_FALSE,
         .bPsmSupport       = MTK_WCN_BOOL_TRUE,
     }, 
@@ -540,7 +541,7 @@ static const WMT_IC_INFO_S mt6628_info_table[] = {
         .cChipName         = WMT_IC_NAME_MT6628,
         .cChipVersion      = WMT_IC_VER_E2,
         .cPatchNameExt     = WMT_IC_PATCH_E2_EXT,
-        .eWmtHwVer        = WMTHWVER_MT6620_E2,
+        .eWmtHwVer        = WMTHWVER_E2,
         .bWorkWithoutPatch = MTK_WCN_BOOL_FALSE,
         .bPsmSupport       = MTK_WCN_BOOL_TRUE,
     }, 
@@ -549,7 +550,7 @@ static const WMT_IC_INFO_S mt6628_info_table[] = {
         .cChipName         = WMT_IC_NAME_MT6628,
         .cChipVersion      = WMT_IC_VER_E3,
         .cPatchNameExt     = WMT_IC_PATCH_E2_EXT,
-        .eWmtHwVer        = WMTHWVER_MT6620_E3,
+        .eWmtHwVer        = WMTHWVER_E3,
         .bWorkWithoutPatch = MTK_WCN_BOOL_FALSE,
         .bPsmSupport       = MTK_WCN_BOOL_TRUE,
     }, 
@@ -558,7 +559,7 @@ static const WMT_IC_INFO_S mt6628_info_table[] = {
         .cChipName         = WMT_IC_NAME_MT6628,
         .cChipVersion      = WMT_IC_VER_E4,
         .cPatchNameExt     = WMT_IC_PATCH_E2_EXT,
-        .eWmtHwVer        = WMTHWVER_MT6620_E4,
+        .eWmtHwVer        = WMTHWVER_E4,
         .bWorkWithoutPatch = MTK_WCN_BOOL_FALSE,
         .bPsmSupport       = MTK_WCN_BOOL_TRUE,
     }, 
@@ -567,7 +568,7 @@ static const WMT_IC_INFO_S mt6628_info_table[] = {
         .cChipName         = WMT_IC_NAME_MT6628,
         .cChipVersion      = WMT_IC_VER_E5,
         .cPatchNameExt     = WMT_IC_PATCH_E2_EXT,
-        .eWmtHwVer        = WMTHWVER_MT6620_E5,
+        .eWmtHwVer        = WMTHWVER_E5,
         .bWorkWithoutPatch = MTK_WCN_BOOL_FALSE,
         .bPsmSupport       = MTK_WCN_BOOL_TRUE,
     }
@@ -648,6 +649,7 @@ const WMT_IC_OPS wmt_ic_ops_mt6628 = {
     .co_clock_ctrl = mt6628_co_clock_ctrl,
     .is_quick_sleep  = mt6628_quick_sleep_flag_get,
     .is_aee_dump_support = mt6628_aee_dump_flag_get,
+    .trigger_stp_assert = NULL,
 };
 
 /*******************************************************************************
@@ -670,6 +672,7 @@ mt6628_sw_init (
     UINT32 patch_num = 0;
     UINT32 patch_index = 0;
 #endif
+    WMT_CTRL_DATA ctrlData;
     WMT_DBG_FUNC(" start\n");
 
     osal_assert(NULL != gp_mt6628_info);
@@ -836,7 +839,7 @@ mt6628_sw_init (
         }
         WMT_INFO_FUNC("enable host STP-UART-FULL mode\n");
         /*13. wait for 10ms, enough for chip do mechanism switch.(at least 2ms is needed)*/
-        osal_msleep(10);
+        osal_sleep_ms(10);
         /* 14. Query chip STP options (TEST-ONLY) */
         /* 15. Query baud rate (stp, TEST-ONLY) */
         iRet = wmt_core_init_script(init_table_5, osal_array_size(init_table_5));
@@ -905,11 +908,23 @@ mt6628_sw_init (
     }
     else
     {
-        WMT_INFO_FUNC("disable mt662x firmware coredump\n");
+        WMT_INFO_FUNC("disable mt662x firmware coredump. hifType: %d\n", pWmtHifConf->hifType);
     }
 
+#if 1
+	ctrlData.ctrlId = WMT_CTRL_SET_STP_DBG_INFO;
+	ctrlData.au4CtrlData[0] = wmt_ic_ops_mt6628.icId;
+	ctrlData.au4CtrlData[1] = (UINT32)gp_mt6628_info->cChipVersion;
+	ctrlData.au4CtrlData[2] = (UINT32)&gp_mt6628_patch_info;
+	iRet = wmt_ctrl(&ctrlData);
+	if (iRet) {
+		WMT_ERR_FUNC("set dump info fail(%d)\n",iRet);
+        return -16;
+	}
+#endif
 
 #if CFG_WMT_PS_SUPPORT
+    if (WMT_HIF_UART == pWmtHifConf->hifType) {
     osal_assert(NULL != gp_mt6628_info);
     if (NULL != gp_mt6628_info) {
        if (MTK_WCN_BOOL_FALSE != gp_mt6628_info->bPsmSupport) {
@@ -918,6 +933,12 @@ mt6628_sw_init (
        else {
            wmt_lib_ps_disable();
        }
+    }
+    }
+    else if (WMT_HIF_SDIO == pWmtHifConf->hifType) {
+        /* COMMON SDIO is used different PS from UART, so disable current ps support
+           Note: using wmt_lib_ps_ctrl() due to wmt_lib_ps_disable() cannot clear gPsEnable setting */
+        wmt_lib_ps_ctrl(0);
     }
 #endif
 
@@ -932,11 +953,13 @@ mt6628_sw_deinit (
     WMT_DBG_FUNC(" start\n");
 
 #if CFG_WMT_PS_SUPPORT
+    if (WMT_HIF_UART == pWmtHifConf->hifType) {
     osal_assert(NULL != gp_mt6628_info);
     if ( (NULL != gp_mt6628_info)
         && (MTK_WCN_BOOL_FALSE != gp_mt6628_info->bPsmSupport) ) {
            wmt_lib_ps_disable();
        }
+    }
 #endif
 
     gp_mt6628_info = NULL;
@@ -1665,6 +1688,7 @@ mt6628_patch_dwn (UINT32 index)
   /* reserve 1st patch cmd space before patch body
      *        |<-WMT_CMD: 5Bytes->|<-patch body: X Bytes (X=patchSize)----->|
      */
+    osal_memcpy(&gp_mt6628_patch_info, patchHdr, osal_sizeof(WMT_PATCH));
     pbuf -= sizeof(WMT_PATCH_CMD);
 
     fragNum = patchSize / patchSizePerFrag;
@@ -1883,6 +1907,7 @@ mt6628_patch_dwn (VOID)
   /* reserve 1st patch cmd space before patch body
      *        |<-WMT_CMD: 5Bytes->|<-patch body: X Bytes (X=patchSize)----->|
      */
+    osal_memcpy(&gp_mt6628_patch_info, patchHdr, osal_sizeof(WMT_PATCH));
     pbuf -= sizeof(WMT_PATCH_CMD);
 
     fragNum = patchSize / patchSizePerFrag;

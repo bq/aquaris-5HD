@@ -816,7 +816,7 @@
 
 
 /* 7.3.2.25 RSN information element */
-#define ELEM_MAX_LEN_WPA                            24 /* one pairwise, one AKM suite, one PMKID */
+#define ELEM_MAX_LEN_WPA                            34 /* one pairwise, one AKM suite, one PMKID */
 #define ELEM_MAX_LEN_RSN                            38 /* one pairwise, one AKM suite, one PMKID */
 #define ELEM_MAX_LEN_WAPI                           38 /* one pairwise, one AKM suite, one BKID */
 #define ELEM_MAX_LEN_WSC                            200/* one pairwise, one AKM suite, one BKID */

@@ -1,11 +1,6 @@
 #ifdef BUILD_LK
 #else
-#include <linux/string.h>
-#if defined(BUILD_UBOOT)
-//#include <asm/arch/mt6589_gpio.h>
-#else
-//#include <mach/mt6589_gpio.h>
-#endif
+    #include <linux/string.h>
 #endif
 #include "lcm_drv.h"
 
@@ -383,12 +378,12 @@ static void lcm_get_params(LCM_PARAMS *params)
     /* serial host interface configurations */
     
     params->dbi.port                    = 0;
-    params->dbi.data_width              = LCM_DBI_DATA_WIDTH_16BITS;
+    params->dbi.data_width              = LCM_DBI_DATA_WIDTH_8BITS;
     params->dbi.data_format.color_order = LCM_COLOR_ORDER_RGB;
     params->dbi.data_format.trans_seq   = LCM_DBI_TRANS_SEQ_MSB_FIRST;
     params->dbi.data_format.padding     = LCM_DBI_PADDING_ON_LSB;
     params->dbi.data_format.format      = LCM_DBI_FORMAT_RGB565;
-    params->dbi.data_format.width       = LCM_DBI_DATA_WIDTH_16BITS;
+    params->dbi.data_format.width       = LCM_DBI_DATA_WIDTH_8BITS;
     params->dbi.cpu_write_bits          = LCM_DBI_CPU_WRITE_8_BITS;
     params->dbi.io_driving_current      = LCM_DRIVING_CURRENT_6575_4MA;
 

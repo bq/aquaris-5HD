@@ -71,9 +71,8 @@ module_param(lock_stat, int, 0644);
 static void lockdep_aee(void)
 {
     char aee_str[40];
-    sprintf( aee_str, "[%s]LockProve Warning", current->comm);
-    aee_kernel_warning( aee_str,"LockProve Debug\n");
-
+    snprintf( aee_str, 40, "[%s]LockProve Warning", current->comm);
+    aee_kernel_warning_api(__FILE__, __LINE__, DB_OPT_DUMMY_DUMP | DB_OPT_FTRACE, aee_str,"LockProve Debug\n");
 }
 /*
  * lockdep_lock: protects the lockdep graph, the hashes and the
@@ -551,9 +550,12 @@ static void print_lockdep_cache(struct lockdep_map *lock)
 
 static void print_lock(struct held_lock *hlock)
 {
-	print_lock_name(hlock_class(hlock));
-	printk(", at: ");
-	print_ip_sym(hlock->acquire_ip);
+    struct lock_class *lock = hlock_class(hlock);
+    if(lock != NULL){
+        print_lock_name(lock);
+        printk(", at: ");
+        print_ip_sym(hlock->acquire_ip);
+    }
 }
 
 static void lockdep_print_held_locks(struct task_struct *curr)
@@ -740,9 +742,9 @@ register_lock_class(struct lockdep_map *lock, unsigned int subclass, int force)
  	 */
 	if (!static_obj(lock->key)) {
 		debug_locks_off();
-		printk("INFO: trying to register non-static key.\n");
-		printk("the code is fine but needs lockdep annotation.\n");
-		printk("turning off the locking correctness validator.\n");
+		printk(KERN_EMERG"INFO: trying to register non-static key.\n");
+		printk(KERN_EMERG"the code is fine but needs lockdep annotation.\n");
+		printk(KERN_EMERG"turning off the locking correctness validator.\n");
 		dump_stack();
 
 		return NULL;
@@ -1029,6 +1031,10 @@ static int __bfs(struct lock_list *source_entry,
 			head = &lock->class->locks_before;
 
 		list_for_each_entry(entry, head, entry) {
+            if(entry == NULL){
+                printk("=======\nlocklist entry is NULL\n=======\n");
+                return -1;
+            }
 			if (!lock_accessed(entry)) {
 				unsigned int cq_depth;
 				mark_lock_accessed(entry, lock);
@@ -1157,8 +1163,6 @@ print_circular_bug_header(struct lock_list *entry, unsigned int depth,
 	if (debug_locks_silent)
 		return 0;
 
-    //Add by Mtk
-    lockdep_aee();
 
 	printk("\n");
 	printk("======================================================\n");
@@ -1219,6 +1223,9 @@ static noinline int print_circular_bug(struct lock_list *this,
 
 	printk("\nstack backtrace:\n");
 	dump_stack();
+
+    //Add by Mtk
+    lockdep_aee();
 
 	return 0;
 }
@@ -3226,8 +3233,6 @@ static int check_unlock(struct task_struct *curr, struct lockdep_map *lock,
 {
 	if (unlikely(!debug_locks))
 		return 0;
-    if (!lock->in_checking)
-        return 0;
 	/*
 	 * Lockdep should run with IRQs disabled, recursion, head-ache, etc..
 	 */
@@ -3575,11 +3580,8 @@ void lock_acquire(struct lockdep_map *lock, unsigned int subclass,
 	if (unlikely(current->lockdep_recursion))
 		return;
 
-	if (unlikely(!debug_locks)){
-        lock->in_checking = 0;
+	if (unlikely(lock->skip==1))
 		return;
-    }else
-        lock->in_checking = 1;
 
 	raw_local_irq_save(flags);
 	check_flags(flags);
@@ -3599,6 +3601,9 @@ void lock_release(struct lockdep_map *lock, int nested,
 	unsigned long flags;
 
 	if (unlikely(current->lockdep_recursion))
+		return;
+
+	if (unlikely(lock->skip==1))
 		return;
 
 	raw_local_irq_save(flags);
@@ -4084,7 +4089,7 @@ void debug_check_no_locks_freed(const void *mem_from, unsigned long mem_len)
 }
 EXPORT_SYMBOL_GPL(debug_check_no_locks_freed);
 
-static void print_held_locks_bug(struct task_struct *curr)
+static void print_held_locks_bug(void)
 {
 	if (!debug_locks_off())
 		return;
@@ -4096,22 +4101,21 @@ static void print_held_locks_bug(struct task_struct *curr)
 
 	printk("\n");
 	printk("=====================================\n");
-	printk("[ ProveLock BUG: lock held at task exit time! ]\n");
+	printk("[ ProveLock BUG: %s/%d still has locks held! ]\n",
+	       current->comm, task_pid_nr(current));
 	print_kernel_ident();
 	printk("-------------------------------------\n");
-	printk("%s/%d is exiting with locks still held!\n",
-		curr->comm, task_pid_nr(curr));
-	lockdep_print_held_locks(curr);
-
+	lockdep_print_held_locks(current);
 	printk("\nstack backtrace:\n");
 	dump_stack();
 }
 
-void debug_check_no_locks_held(struct task_struct *task)
+void debug_check_no_locks_held(void)
 {
-	if (unlikely(task->lockdep_depth > 0))
-		print_held_locks_bug(task);
+	if (unlikely(current->lockdep_depth > 0))
+		print_held_locks_bug();
 }
+EXPORT_SYMBOL_GPL(debug_check_no_locks_held);
 
 void debug_show_all_locks(void)
 {

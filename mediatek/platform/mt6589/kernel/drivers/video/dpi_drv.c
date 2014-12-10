@@ -485,6 +485,19 @@ DPI_STATUS DPI_DisableClk()
 }
 EXPORT_SYMBOL(DPI_DisableClk);
 
+DPI_STATUS DPI_EnableColorBar(void)
+{
+	DPI_REG_PATTERN pattern = DPI_REG->PATTERN;
+
+    pattern.PAT_EN = 1;
+	pattern.PAT_SEL = 4; // Color Bar
+
+    OUTREG32(&DPI_REG->PATTERN, AS_UINT32(&pattern));
+
+    return DPI_STATUS_OK;
+}
+EXPORT_SYMBOL(DPI_EnableColorBar);
+
 DPI_STATUS DPI_EnableSeqOutput(BOOL enable)
 {
     return DPI_STATUS_OK;
@@ -532,6 +545,53 @@ DPI_STATUS DPI_ConfigHDMI()
     return DPI_STATUS_OK;
 }
 EXPORT_SYMBOL(DPI_ConfigHDMI);
+
+DPI_STATUS DPI_ConfigBG(BOOL enable, UINT32 BG_W, UINT32 GB_H)
+{
+    if(enable = false)
+    {
+        DPI_REG_CNTL pol = DPI_REG->CNTL;
+        pol.DPI_BG_EN = 0;
+        OUTREG32(&DPI_REG->CNTL, AS_UINT32(&pol));
+        return DPI_STATUS_OK;
+    }
+          
+    DPI_REG_CNTL pol = DPI_REG->CNTL;
+    pol.DPI_BG_EN = 1;
+    if((BG_W == 0) || (GB_H == 0))
+		pol.DPI_BG_EN = 0;
+    OUTREG32(&DPI_REG->CNTL, AS_UINT32(&pol));
+
+    DPI_REG_BG_HCNTL pol2 = DPI_REG->BG_HCNTL;
+    pol2.BG_RIGHT = BG_W/2;
+    pol2.BG_LEFT = BG_W/2;
+    OUTREG32(&DPI_REG->BG_HCNTL, AS_UINT32(&pol2));
+
+    DPI_REG_BG_VCNTL pol3 = DPI_REG->BG_VCNTL;
+    pol3.BG_BOT = GB_H/2;
+    pol3.BG_TOP = GB_H/2;
+    OUTREG32(&DPI_REG->BG_VCNTL, AS_UINT32(&pol3));
+
+    DPI_REG_BG_COLOR pol4 = DPI_REG->BG_COLOR;
+    pol4.BG_B = 0;
+    pol4.BG_G = 0;
+    pol4.BG_R = 0;
+    OUTREG32(&DPI_REG->BG_COLOR, AS_UINT32(&pol4));
+    
+    return DPI_STATUS_OK;
+}
+EXPORT_SYMBOL(DPI_ConfigBG);
+
+DPI_STATUS DPI_ConfigInRBSwap(BOOL enable)
+{
+    DPI_REG_CNTL pol = DPI_REG->CNTL;
+	 
+    pol.IN_RB_SWAP = enable ? 1 : 0;
+    OUTREG32(&DPI_REG->CNTL, AS_UINT32(&pol));
+    
+    return DPI_STATUS_OK;
+}
+EXPORT_SYMBOL(DPI_ConfigInRBSwap);
 
 DPI_STATUS DPI_ConfigDataEnable(DPI_POLARITY polarity)
 {

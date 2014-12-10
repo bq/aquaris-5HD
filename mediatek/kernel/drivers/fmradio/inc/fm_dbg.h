@@ -1,7 +1,8 @@
 #ifndef __FM_DBG_H__
 #define __FM_DBG_H__
 
-#include <linux/kernel.h> //for printk()
+//#include <linux/kernel.h> //for printk()
+#include <linux/xlog.h>
 
 //DBG zone
 #define BASE	4
@@ -44,14 +45,141 @@
 #define FM_DBG	L7
 
 extern fm_u32 g_dbg_level;
+#if 0
 #define WCN_DBG(flag, fmt, args...) \
 	do { \
 		if ((((flag)&0x0000000f)<=(g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
-			printk(KERN_ALERT "[" #flag "]" fmt, ## args); \
+			xlog_printk(ANDROID_LOG_INFO, "[" #flag "]", fmt, ## args);\
+		} \
+	} while(0)
+#else	
+#define WCN_DBG(flag, fmt, args...) \
+    do { \
+        if ((((flag)&0x0000000f)<=(g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            printk(KERN_DEBUG "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+#endif
+
+#define FM_USE_XLOG
+
+#ifdef FM_USE_XLOG
+#define FM_DRV_LOG_TAG "FM_DRV"
+
+#define FM_LOG_DBG(flag, fmt, args...) \
+	do{ \
+		if((FM_DBG<= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_INFO, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
 		} \
 	} while(0)
 
+#define FM_LOG_INF(flag, fmt, args...) \
+    do{ \
+        if((FM_INF <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_INFO, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
 
+#define FM_LOG_NTC(flag, fmt, args...) \
+    do{ \
+        if((FM_NTC<= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_WARN, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+
+#define FM_LOG_WAR(flag, fmt, args...) \
+    do{ \
+        if((FM_WAR <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_WARN, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+
+#define FM_LOG_ERR(flag, fmt, args...) \
+    do{ \
+        if((FM_ERR <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_ERROR, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+
+#define FM_LOG_CRT(flag, fmt, args...) \
+    do{ \
+        if((FM_CRT <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_FATAL, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+
+#define FM_LOG_ALT(flag, fmt, args...) \
+    do{ \
+        if((FM_ALT <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_FATAL, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+
+#define FM_LOG_EMG(flag, fmt, args...) \
+    do{ \
+        if((FM_EMG<= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+            xlog_printk(ANDROID_LOG_FATAL, FM_DRV_LOG_TAG, "[" #flag "]" fmt, ## args); \
+        } \
+    } while(0)
+
+#else
+
+#define FM_LOG_DBG(flag, fmt, args...) \
+            do{ \
+                if((FM_DBG<= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_DEBUG "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_INF(flag, fmt, args...) \
+            do{ \
+                if((FM_INF <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_INFO "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_NTC(flag, fmt, args...) \
+            do{ \
+                if((FM_NTC <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_NOTICE "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_WAR(flag, fmt, args...) \
+            do{ \
+                if((FM_WAR <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_WARNING "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_ERR(flag, fmt, args...) \
+            do{ \
+                if((FM_ERR <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_ERR "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_CRT(flag, fmt, args...) \
+            do{ \
+                if((FM_CRT <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_CRIT "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_ALT(flag, fmt, args...) \
+            do{ \
+                if((FM_ALT <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_ALERT "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+        
+#define FM_LOG_EMG(flag, fmt, args...) \
+            do{ \
+                if((FM_EMG <= (g_dbg_level&0x0000000f)) && ((flag)&0xfffffff0)& g_dbg_level) { \
+                    printk(KERN_EMERG "[" #flag "]" fmt, ## args); \
+                } \
+            } while(0)
+#endif
 
 #endif //__FM_DBG_H__
 

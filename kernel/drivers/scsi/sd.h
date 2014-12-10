@@ -63,10 +63,14 @@ struct scsi_disk {
 	unsigned int	max_medium_access_timeouts;
 	unsigned int	medium_access_timed_out;
 	u8		media_present;
+#ifdef MTK_MULTI_PARTITION_MOUNT_ONLY_SUPPORT	
+	u8		old_media_present;  //add for sdcard hotplug
+#endif	
 	u8		write_prot;
 	u8		protection_type;/* Data Integrity Field */
 	u8		provisioning_mode;
 	unsigned	ATO : 1;	/* state of disk ATO bit */
+	unsigned	cache_override : 1; /* temp override of WCE,RCD */
 	unsigned	WCE : 1;	/* state of disk WCE bit */
 	unsigned	RCD : 1;	/* state of disk RCD bit, unused */
 	unsigned	DPOFUA : 1;	/* state of disk DPOFUA bit */

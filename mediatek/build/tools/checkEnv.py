@@ -426,7 +426,7 @@ class GccCheck(object):
             checkResult = 1
 
     def checkGccVersion(self):
-        gccVersion = commands.getoutput("%s --v" % self.gcc)
+        gccVersion = commands.getoutput("%s -v" % self.gcc)
         pattern = re.compile(".*gcc\s*version\s*([\d\.]+)",re.S)
         match = pattern.match(gccVersion)
         if match:
@@ -485,9 +485,9 @@ class EabiCheck(object):
             self.versionNo = match.group(1)
             number = self.versionNo.split(".")
             if int(number[0]) < 4 \
-               or (int(number[0]) == 4 and int(number[1]) != 6): 
+               or (int(number[0]) == 4 and int(number[1]) != 7): 
                 self.info = "your arm-linux-androideabi-gcc version is not recommendation"
-            elif int(number[0]) == 4 and int(number[1]) == 6:
+            elif int(number[0]) == 4 and int(number[1]) == 7:
                self.flag = "OK"
         else:
             self.versionNo = "unknown version"

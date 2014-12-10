@@ -67,6 +67,11 @@
 
 #include "internal.h"
 
+#if defined(CONFIG_MTK_EXTMEM)
+extern bool extmem_in_mspace(struct vm_area_struct *vma);
+extern unsigned long get_virt_from_mspace(unsigned long pa);
+#endif
+
 #ifndef CONFIG_NEED_MULTIPLE_NODES
 /* use the per-pgdat data instead for discontigmem - mbligh */
 unsigned long max_mapnr;
@@ -182,10 +187,17 @@ static int tlb_next_batch(struct mmu_gather *tlb)
 		return 1;
 	}
 
+	if (tlb->batch_count == MAX_GATHER_BATCH_COUNT)
+		return 0;
+#ifndef CONFIG_MTK_PAGERECORDER
 	batch = (void *)__get_free_pages(GFP_NOWAIT | __GFP_NOWARN, 0);
+#else
+ 	batch = (void *)__get_free_pages_nopagedebug(GFP_NOWAIT | __GFP_NOWARN, 0);
+#endif
 	if (!batch)
 		return 0;
 
+	tlb->batch_count++;
 	batch->next = NULL;
 	batch->nr   = 0;
 	batch->max  = MAX_GATHER_BATCH;
@@ -212,6 +224,7 @@ void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm, bool fullmm)
 	tlb->local.nr   = 0;
 	tlb->local.max  = ARRAY_SIZE(tlb->__pages);
 	tlb->active     = &tlb->local;
+	tlb->batch_count = 0;
 
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
 	tlb->batch = NULL;
@@ -1440,6 +1453,205 @@ int zap_vma_ptes(struct vm_area_struct *vma, unsigned long address,
 }
 EXPORT_SYMBOL_GPL(zap_vma_ptes);
 
+#ifdef CONFIG_ZEROPAGE
+static int zeromap_pte_range(struct mmu_gather *tlb,
+				struct vm_area_struct *vma, pmd_t *pmd,
+				unsigned long addr, unsigned long end)
+{
+	struct mm_struct *mm = tlb->mm;
+	int force_flush = 0;
+	int rss[NR_MM_COUNTERS];
+	spinlock_t *ptl;
+	pte_t *start_pte;
+	pte_t *pte;
+
+again:
+	init_rss_vec(rss);
+	start_pte = pte_alloc_map_lock(mm, pmd, addr, &ptl);
+	if (!start_pte)
+		return -ENOMEM;
+	pte = start_pte;
+	arch_enter_lazy_mmu_mode();
+	do {
+		/* Use the zero-page for reads */
+		pte_t zpent = pte_mkspecial(pfn_pte(my_zero_pfn(addr),
+						vma->vm_page_prot));
+		pte_t ptent = *pte;
+		if (pte_none(ptent)) {
+			// do_anonymous_page(mm, vma, addr, pte, pmd, flags);
+			set_pte_at(mm, addr, pte, zpent);
+			continue;
+		}
+
+		if (pte_present(ptent)) {
+			struct page *page;
+
+			page = vm_normal_page(vma, addr, ptent);
+			set_pte_at(mm, addr, pte, zpent);   // ptep_get_and_clear_full
+			tlb_remove_tlb_entry(tlb, pte, addr);
+			if (unlikely(!page))
+				continue;
+			if (PageAnon(page))
+				rss[MM_ANONPAGES]--;
+			else {
+				if (pte_dirty(ptent))
+					set_page_dirty(page);
+				if (pte_young(ptent) &&
+				    likely(!VM_SequentialReadHint(vma)))
+					mark_page_accessed(page);
+				rss[MM_FILEPAGES]--;
+			}
+			page_remove_rmap(page);
+			if (unlikely(page_mapcount(page) < 0))
+				print_bad_pte(vma, addr, ptent, page);
+			force_flush = !__tlb_remove_page(tlb, page);
+			if (force_flush)
+				break;
+			continue;
+		}
+
+		if (pte_file(ptent)) {
+			if (unlikely(!(vma->vm_flags & VM_NONLINEAR)))
+				print_bad_pte(vma, addr, ptent, NULL);
+		} else {
+			swp_entry_t entry = pte_to_swp_entry(ptent);
+
+			if (!non_swap_entry(entry))
+				rss[MM_SWAPENTS]--;
+			else if (is_migration_entry(entry)) {
+				struct page *page;
+
+				page = migration_entry_to_page(entry);
+
+				if (PageAnon(page))
+					rss[MM_ANONPAGES]--;
+				else
+					rss[MM_FILEPAGES]--;
+			}
+			if (unlikely(!free_swap_and_cache(entry)))
+				print_bad_pte(vma, addr, ptent, NULL);
+		}
+		set_pte_at(mm, addr, pte, zpent);       // pte_clear_not_present_full
+	} while (pte++, addr += PAGE_SIZE, addr != end);
+
+	add_mm_rss_vec(mm, rss);
+	arch_leave_lazy_mmu_mode();
+	pte_unmap_unlock(start_pte, ptl);
+
+	/*
+	 * mmu_gather ran out of room to batch pages, we break out of
+	 * the PTE lock to avoid doing the potential expensive TLB invalidate
+	 * and page-free while holding it.
+	 */
+	if (force_flush) {
+		force_flush = 0;
+		tlb_flush_mmu(tlb);
+		if (addr != end)
+			goto again;
+	}
+
+	return 0;
+}
+
+static inline int zeromap_pmd_range(struct mmu_gather *tlb,
+				struct vm_area_struct *vma, pud_t *pud,
+				unsigned long addr, unsigned long end)
+{
+	pmd_t *pmd;
+	unsigned long next;
+	int err;
+
+	pmd = pmd_alloc(vma->vm_mm, pud, addr);
+	if (!pmd)
+		return -ENOMEM;
+	do {
+		next = pmd_addr_end(addr, end);
+		VM_BUG_ON(pmd_trans_huge(*pmd));
+		err = zeromap_pte_range(tlb, vma, pmd, addr, next);
+		if (err)
+			break;
+		cond_resched();
+	} while (pmd++, addr = next, addr != end);
+	return err;
+}
+
+static inline int zeromap_pud_range(struct mmu_gather *tlb,
+				struct vm_area_struct *vma, pgd_t *pgd,
+				unsigned long addr, unsigned long end)
+{
+	pud_t *pud;
+	unsigned long next;
+	int err;
+
+	pud = pud_alloc(vma->vm_mm, pgd, addr);
+	if (!pud)
+		return -ENOMEM;
+	do {
+		next = pud_addr_end(addr, end);
+		err = zeromap_pmd_range(tlb, vma, pud, addr, next);
+		if (err)
+			break;
+	} while (pud++, addr = next, addr != end);
+	return err;
+}
+
+static int zeromap_page_range(struct mmu_gather *tlb,
+			     struct vm_area_struct *vma,
+			     unsigned long addr, unsigned long end)
+{
+	pgd_t *pgd;
+	unsigned long next;
+	int err;
+
+	BUG_ON(addr >= end);
+	mem_cgroup_uncharge_start();
+	tlb_start_vma(tlb, vma);
+	pgd = pgd_offset(vma->vm_mm, addr);
+	do {
+		next = pgd_addr_end(addr, end);
+		err = zeromap_pud_range(tlb, vma, pgd, addr, next);
+		if (err)
+			break;
+	} while (pgd++, addr = next, addr != end);
+	tlb_end_vma(tlb, vma);
+	mem_cgroup_uncharge_end();
+
+	return err;
+}
+
+/**
+ * zero_page_range - map user pages to the zero page in a given range
+ * @vma: vm_area_struct holding the applicable pages
+ * @start: starting address of pages to map
+ * @end: end address of pages to map
+ *
+ * Caller must protect the VMA list.
+ *
+ * The range must fit into one VMA.
+ */
+int zero_page_range(struct vm_area_struct *vma, unsigned long address,
+		unsigned long size)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	struct mmu_gather tlb;
+	unsigned long end = address + size;
+	int err;
+
+	BUG_ON(is_pfn_mapping(vma));
+	BUG_ON(is_vm_hugetlb_page(vma));
+
+	lru_add_drain();
+	tlb_gather_mmu(&tlb, mm, 0);
+	update_hiwater_rss(mm);
+	mmu_notifier_invalidate_range_start(mm, address, end);
+	err = zeromap_page_range(&tlb, vma, address, end);
+	mmu_notifier_invalidate_range_end(mm, address, end);
+	tlb_finish_mmu(&tlb, address, end);
+
+	return err;
+}
+#endif
+
 /**
  * follow_page - look up a page descriptor from a user-virtual address
  * @vma: vm_area_struct mapping @address
@@ -1726,11 +1938,24 @@ int __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 			pte_unmap(pte);
 			goto next_page;
 		}
+    #ifdef CONFIG_MTK_EXTMEM
+        if (!vma || !(vm_flags & vma->vm_flags))
+		{
+		    return i ? : -EFAULT;
+        }
 
+		if (vma->vm_flags & (VM_IO | VM_PFNMAP))
+		{
+		    /*Would pass VM_IO | VM_RESERVED | VM_PFNMAP. (for Reserved Physical Memory PFN Mapping Usage)*/
+		    if(!((vma->vm_flags&VM_IO)&&(vma->vm_flags&VM_RESERVED)&&(vma->vm_flags&VM_PFNMAP)))
+			    return i ? : -EFAULT;
+        }
+    #else
 		if (!vma ||
 		    (vma->vm_flags & (VM_IO | VM_PFNMAP)) ||
 		    !(vm_flags & vma->vm_flags))
 			return i ? : -EFAULT;
+    #endif
 
 		if (is_vm_hugetlb_page(vma)) {
 			i = follow_hugetlb_page(mm, vma, pages, vmas,
@@ -2325,6 +2550,53 @@ int remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
 }
 EXPORT_SYMBOL(remap_pfn_range);
 
+/**
+ * vm_iomap_memory - remap memory to userspace
+ * @vma: user vma to map to
+ * @start: start of area
+ * @len: size of area
+ *
+ * This is a simplified io_remap_pfn_range() for common driver use. The
+ * driver just needs to give us the physical memory range to be mapped,
+ * we'll figure out the rest from the vma information.
+ *
+ * NOTE! Some drivers might want to tweak vma->vm_page_prot first to get
+ * whatever write-combining details or similar.
+ */
+int vm_iomap_memory(struct vm_area_struct *vma, phys_addr_t start, unsigned long len)
+{
+	unsigned long vm_len, pfn, pages;
+
+	/* Check that the physical memory area passed in looks valid */
+	if (start + len < start)
+		return -EINVAL;
+	/*
+	 * You *really* shouldn't map things that aren't page-aligned,
+	 * but we've historically allowed it because IO memory might
+	 * just have smaller alignment.
+	 */
+	len += start & ~PAGE_MASK;
+	pfn = start >> PAGE_SHIFT;
+	pages = (len + ~PAGE_MASK) >> PAGE_SHIFT;
+	if (pfn + pages < pfn)
+		return -EINVAL;
+
+	/* We start the mapping 'vm_pgoff' pages into the area */
+	if (vma->vm_pgoff > pages)
+		return -EINVAL;
+	pfn += vma->vm_pgoff;
+	pages -= vma->vm_pgoff;
+
+	/* Can we fit all of the mapping? */
+	vm_len = vma->vm_end - vma->vm_start;
+	if (vm_len >> PAGE_SHIFT > pages)
+		return -EINVAL;
+
+	/* Ok, let it rip */
+	return io_remap_pfn_range(vma, vma->vm_start, pfn, vm_len, vma->vm_page_prot);
+}
+EXPORT_SYMBOL(vm_iomap_memory);
+
 static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 				     unsigned long addr, unsigned long end,
 				     pte_fn_t fn, void *data)
@@ -2665,6 +2937,14 @@ reuse:
 gotten:
 	pte_unmap_unlock(page_table, ptl);
 
+#ifdef CONFIG_ZEROPAGE
+	/* 
+	 * WARNING: CONFIG_ZEROPAGE is not compatible with MEMCG 
+	 */
+	count_vm_event(PGANFAULT);
+	mem_cgroup_count_vm_event(mm, PGANFAULT);
+
+#endif 
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
 
@@ -3108,6 +3388,14 @@ static int do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 
 	pte_unmap(page_table);
 
+#ifdef CONFIG_ZEROPAGE
+	/* 
+	 * WARNING: CONFIG_ZEROPAGE is not compatible with MEMCG 
+	 */
+	count_vm_event(PGANFAULT);
+	mem_cgroup_count_vm_event(mm, PGANFAULT);
+#endif 
+
 	/* Check if we need to add a guard page to the stack */
 	if (check_stack_guard_page(vma, address) < 0)
 		return VM_FAULT_SIGBUS;
@@ -3490,6 +3778,7 @@ int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		return hugetlb_fault(mm, vma, address, flags);
 
+retry:
 	pgd = pgd_offset(mm, address);
 	pud = pud_alloc(mm, pgd, address);
 	if (!pud)
@@ -3503,13 +3792,24 @@ int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 							  pmd, flags);
 	} else {
 		pmd_t orig_pmd = *pmd;
+		int ret;
+
 		barrier();
 		if (pmd_trans_huge(orig_pmd)) {
 			if (flags & FAULT_FLAG_WRITE &&
 			    !pmd_write(orig_pmd) &&
-			    !pmd_trans_splitting(orig_pmd))
-				return do_huge_pmd_wp_page(mm, vma, address,
-							   pmd, orig_pmd);
+			    !pmd_trans_splitting(orig_pmd)) {
+				ret = do_huge_pmd_wp_page(mm, vma, address, pmd,
+							  orig_pmd);
+				/*
+				 * If COW results in an oom, the huge pmd will
+				 * have been split, so retry the fault on the
+				 * pte for a smaller charge.
+				 */
+				if (unlikely(ret & VM_FAULT_OOM))
+					goto retry;
+				return ret;
+			}
 			return 0;
 		}
 	}
@@ -3799,6 +4099,22 @@ static int __access_remote_vm(struct task_struct *tsk, struct mm_struct *mm,
 		ret = get_user_pages(tsk, mm, addr, 1,
 				write, 1, &page, &vma);
 		if (ret <= 0) {
+#if defined(CONFIG_MTK_EXTMEM)
+			if (!write) {
+				vma = find_vma(mm, addr);
+				if (!vma || vma->vm_start > addr)
+					break;
+				if (vma->vm_end < addr + len)
+					len = vma->vm_end - addr;
+				if (extmem_in_mspace(vma)) {
+					void *extmem_va = (void *)get_virt_from_mspace(vma->vm_pgoff << PAGE_SHIFT) + (addr - vma->vm_start);
+					memcpy(buf, extmem_va, len);
+					buf += len;
+					break;
+				}
+			}
+			
+#endif
 			/*
 			 * Check if this is a VM_IO | VM_PFNMAP VMA, which
 			 * we can access using slightly different code.

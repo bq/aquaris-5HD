@@ -1,10 +1,12 @@
 #ifndef BUILD_LK
 #include <linux/string.h>
+#include <linux/kernel.h>
 #endif
 #include "lcm_drv.h"
 
 #ifdef BUILD_LK
 	#include <platform/mt_gpio.h>
+	#include <string.h>
 #elif defined(BUILD_UBOOT)
 	#include <asm/arch/mt_gpio.h>
 #else

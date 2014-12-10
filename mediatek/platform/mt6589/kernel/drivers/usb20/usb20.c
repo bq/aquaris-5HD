@@ -15,254 +15,204 @@
 #include <linux/list.h>
 #include <linux/gpio.h>
 #include <linux/io.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+#include <linux/usb/nop-usb-xceiv.h>
+#endif
 #include <linux/xlog.h>
+#include <linux/switch.h>
+#include <linux/i2c.h>
 #include <mach/irqs.h>
 #include <mach/eint.h>
-
 #include <linux/musb/musb_core.h>
-#include <mach/mtk_musb.h>
+#include <linux/musb/mtk_musb.h>
+#include <linux/dma-mapping.h>
+#include <linux/platform_device.h>
 #include <linux/musb/musbhsdma.h>
-#ifndef CONFIG_MT6589_FPGA
 #include <cust_gpio_usage.h>
-#endif
-#include <linux/switch.h>
+#include <mach/upmu_common.h>
+#include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
 #include <mach/mt_clkmgr.h>
-#include <linux/i2c.h>
-#include "mach/emi_mpu.h"
+#include <mach/emi_mpu.h>
+#include "usb20.h"
 
-#define DEVICE_INTTERRUPT 1
-#define EINT_CHR_DET_NUM	23
-
-#ifdef ID_PIN_USE_EX_EINT
-#define ID_PIN_EINT 1
-#define ID_PIN_GPIO GPIO112
-#define GPIO_ID_PIN_EINT_PIN_M_EINT GPIO_MODE_05
-#else
-#define ID_PIN_EINT 28
-#define U2PHYDTM1  (USB_SIF_BASE+0x800 + 0x6c)
-#define ID_PULL_UP 0x0101
-#define ID_PHY_RESET 0x3d11
-#endif
-
+extern struct musb *mtk_musb;
 static DEFINE_SEMAPHORE(power_clock_lock);
-
 static bool platform_init_first = true;
+extern bool mtk_usb_power;
+static u32 cable_mode = CABLE_MODE_NORMAL;
 
-#ifndef CONFIG_MT6589_FPGA
-extern void upmu_interrupt_chrdet_int_en(kal_uint32 val);
-#endif
 
 /*EP Fifo Config*/
 static struct musb_fifo_cfg __initdata fifo_cfg[] = {
-{ .hw_ep_num =  1, .style = FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  1, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  2, .style = FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  2, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  3, .style = FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  3, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  4, .style = FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  4, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_DOUBLE},
-{ .hw_ep_num =  5, .style = FIFO_TX,   .maxpacket = 64, .ep_mode = EP_INT,.mode = BUF_SINGLE},
-{ .hw_ep_num =	5, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_INT,.mode = BUF_SINGLE},
-{ .hw_ep_num =  6, .style = FIFO_TX,   .maxpacket = 64, .ep_mode = EP_INT, .mode = BUF_SINGLE},
-{ .hw_ep_num =	6, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_INT,.mode = BUF_SINGLE},
-{ .hw_ep_num =	7, .style = FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_SINGLE},
-{ .hw_ep_num =	7, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = BUF_SINGLE},
-{ .hw_ep_num =	8, .style = FIFO_TX,   .maxpacket = 512, .ep_mode = EP_ISO,.mode = BUF_DOUBLE},
-{ .hw_ep_num =	8, .style = FIFO_RX,   .maxpacket = 512, .ep_mode = EP_ISO,.mode = BUF_DOUBLE},
+{ .hw_ep_num =  1, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  1, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  2, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  2, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  3, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  3, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  4, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  4, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =  5, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_INT,.mode = MUSB_BUF_SINGLE},
+{ .hw_ep_num =	5, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_INT,.mode = MUSB_BUF_SINGLE},
+{ .hw_ep_num =  6, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_INT, .mode = MUSB_BUF_SINGLE},
+{ .hw_ep_num =	6, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_INT,.mode = MUSB_BUF_SINGLE},
+{ .hw_ep_num =	7, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_SINGLE},
+{ .hw_ep_num =	7, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_BULK,.mode = MUSB_BUF_SINGLE},
+{ .hw_ep_num =	8, .style = MUSB_FIFO_TX,   .maxpacket = 512, .ep_mode = EP_ISO,.mode = MUSB_BUF_DOUBLE},
+{ .hw_ep_num =	8, .style = MUSB_FIFO_RX,   .maxpacket = 512, .ep_mode = EP_ISO,.mode = MUSB_BUF_DOUBLE},
 };
 
-static struct musb_fifo_cfg fifo_cfg_host[] = {
-{ .hw_ep_num =  1, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  1, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  2, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  2, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  3, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  3, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  4, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  4, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  5, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =	5, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =  6, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =	6, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =	7, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =	7, .style = FIFO_RX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =	8, .style = FIFO_TX,   .maxpacket = 512, .mode = BUF_SINGLE},
-{ .hw_ep_num =	8, .style = FIFO_RX,   .maxpacket = 64,  .mode = BUF_SINGLE},
-};
+static struct timer_list musb_idle_timer;
 
-bool mtk_usb_power = FALSE;
-u32 delay_time = 15;
-module_param(delay_time,int,0644);
-u32 delay_time1 = 55;
-module_param(delay_time1,int,0644);
-typedef enum
+static void musb_do_idle(unsigned long _musb)
 {
-    CABLE_MODE_CHRG_ONLY = 0,
-    CABLE_MODE_NORMAL,
-    CABLE_MODE_HOST_ONLY,
-    CABLE_MODE_MAX
-} CABLE_MODE;
+	struct musb	*musb = (void *)_musb;
+	unsigned long	flags;
+	u8	devctl;
 
-u32 cable_mode = CABLE_MODE_NORMAL;
-
-#ifdef CONFIG_USB_MTK_HDRC_HCD
-static void mtk_set_vbus(struct musb *musb, int is_on)
-{
-    DBG(0,"mt65xx_usb20_vbus++,is_on=%d\r\n",is_on);
-#ifndef CONFIG_MT6589_FPGA
-    if(is_on){
-        //power on VBUS, implement later...
-    #ifdef MTK_FAN5405_SUPPORT
-        fan5405_set_opa_mode(1);
-        fan5405_set_otg_pl(1);
-        fan5405_set_otg_en(1);
-    #elif defined(MTK_BQ24158_SUPPORT)
-        bq24158_set_opa_mode(1);
-	bq24158_set_otg_pl(1);
-	bq24158_set_otg_en(1);
-    #elif defined(MTK_NCP1851_SUPPORT) || defined(MTK_BQ24196_SUPPORT)
-        tbl_charger_otg_vbus((work_busy(&musb->id_pin_work.work)<< 8)| 1);
-    #else
-        mt_set_gpio_out(GPIO_OTG_DRVVBUS_PIN,GPIO_OUT_ONE);
-        #endif
-    } else {
-        //power off VBUS, implement later...
-    #ifdef MTK_FAN5405_SUPPORT
-        fan5405_config_interface_liao(0x01,0x30);
-	fan5405_config_interface_liao(0x02,0x8e);
-    #elif defined(MTK_BQ24158_SUPPORT)
-        bq24158_config_interface_reg(0x01,0x30);
-	bq24158_config_interface_reg(0x02,0x8e);
-    #elif defined(MTK_NCP1851_SUPPORT) || defined(MTK_BQ24196_SUPPORT)
-        tbl_charger_otg_vbus((work_busy(&musb->id_pin_work.work)<< 8)| 0);
-    #else
-        mt_set_gpio_out(GPIO_OTG_DRVVBUS_PIN,GPIO_OUT_ZERO);
-    #endif
-    }
-#endif
-    return;
-}
-#endif
-
-#ifdef CONFIG_USB_MTK_OTG
-/*void musb_phy_reset(void)
-{
-	u32 phy_dtm = 0;
-	phy_dtm = musb_readl(mtk_musb->mregs,U2PHYDTM1);
-	phy_dtm |= ID_PHY_RESET;
-	musb_writel(mtk_musb->mregs,U2PHYDTM1,phy_dtm);
-	mdelay(2);
-	phy_dtm &= ~0xFEFE;
-	musb_writel(mtk_musb->mregs,U2PHYDTM1,phy_dtm);
-	printk("state register is %x\n",musb_readb(mtk_musb->mregs,0x71));
-}
-*/
-
-//extern struct switch_dev otg_state;
-
-bool musb_is_host(void)
-{
-	u8 devctl = 0;
-  DBG(0,"will mask PMIC charger detection\n");
-#ifndef CONFIG_MT6589_FPGA
-  upmu_interrupt_chrdet_int_en(0);
-#endif
-	musb_platform_enable(mtk_musb);
-	//musb_set_vbus(mtk_musb,FALSE);
-	//mt65xx_eint_mask(EINT_CHR_DET_NUM);
-	devctl = musb_readb(mtk_musb->mregs,MUSB_DEVCTL);
-	DBG(0, "devctl = %x before end session\n", devctl);
-	devctl &= ~MUSB_DEVCTL_SESSION;	// this will cause A-device change back to B-device after A-cable plug out
-	musb_writeb(mtk_musb->mregs, MUSB_DEVCTL, devctl);
-	msleep(delay_time);
-
-	devctl = musb_readb(mtk_musb->mregs,MUSB_DEVCTL);
-	DBG(0,"devctl = %x before set session\n",devctl);
-
-	devctl |= MUSB_DEVCTL_SESSION;
-	//musb_set_vbus(mtk_musb,TRUE);
-	musb_writeb(mtk_musb->mregs,MUSB_DEVCTL,devctl);
-	msleep(delay_time1);
-	devctl = musb_readb(mtk_musb->mregs,MUSB_DEVCTL);
-	DBG(0,"devclt = %x\n",devctl);
-
-	if (devctl & MUSB_DEVCTL_BDEVICE) {
-		usb_is_host = FALSE;
-        DBG(0,"will unmask PMIC charger detection\n");
-#ifndef CONFIG_MT6589_FPGA
-        upmu_interrupt_chrdet_int_en(1);
-#endif
-		return FALSE;
-	} else {
-		usb_is_host = TRUE;
-		return TRUE;
+	if (musb->is_active) {
+		DBG(0, "%s active, igonre do_idle\n",
+			otg_state_string(musb->xceiv->state));
+		return;
 	}
+
+	spin_lock_irqsave(&musb->lock, flags);
+
+	switch (musb->xceiv->state) {
+	case OTG_STATE_B_PERIPHERAL:
+	case OTG_STATE_A_WAIT_BCON:
+		devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+		if (devctl & MUSB_DEVCTL_BDEVICE) {
+			musb->xceiv->state = OTG_STATE_B_IDLE;
+			MUSB_DEV_MODE(musb);
+		} else {
+			musb->xceiv->state = OTG_STATE_A_IDLE;
+			MUSB_HST_MODE(musb);
+		}
+		break;
+	case OTG_STATE_A_HOST:
+		devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+		if (devctl &  MUSB_DEVCTL_BDEVICE)
+			musb->xceiv->state = OTG_STATE_B_IDLE;
+		else
+			musb->xceiv->state = OTG_STATE_A_WAIT_BCON;
+	default:
+		break;
+	}
+	spin_unlock_irqrestore(&musb->lock, flags);
+
+    DBG(0, "otg_state %s \n", otg_state_string(musb->xceiv->state));
 }
 
-/*
-bool musb_is_host(void)
+static void mt_usb_try_idle(struct musb *musb, unsigned long timeout)
 {
-	if(musb_readl(mtk_musb->mregs,USB_L1INTP)&IDDIG_INT_STATUS)
-		return true;
-	else
-		return false;
-}
-*/
+	unsigned long		default_timeout = jiffies + msecs_to_jiffies(3);
+	static unsigned long	last_timer;
 
-void switch_int_to_device(void)
-{
-	 musb_writel(mtk_musb->mregs,USB_L1INTP,0);
-	 musb_writel(mtk_musb->mregs,USB_L1INTM,IDDIG_INT_STATUS|musb_readl(mtk_musb->mregs,USB_L1INTM));
+	if (timeout == 0)
+		timeout = default_timeout;
 
-	 DBG(0,"switch_int_to_device is done\n");
-}
+	/* Never idle if active, or when VBUS timeout is not set as host */
+	if (musb->is_active || ((musb->a_wait_bcon == 0)
+			&& (musb->xceiv->state == OTG_STATE_A_WAIT_BCON))) {
+		DBG(2, "%s active, deleting timer\n",
+			otg_state_string(musb->xceiv->state));
+		del_timer(&musb_idle_timer);
+		last_timer = jiffies;
+		return;
+	}
 
-void switch_int_to_host(void)
-{
-/*	mt65xx_eint_set_polarity(ID_PIN_EINT, !DEVICE_INTTERRUPT);
-	DBG(2,"switch_int_to_host is done\n");
-	mt65xx_eint_unmask(ID_PIN_EINT);
-	mt65xx_reg_sync_writel(1 << EINT_CHR_DET_NUM, EINT_INTACK);
-	mt65xx_eint_unmask(EINT_CHR_DET_NUM);*/
-	musb_writel(mtk_musb->mregs,USB_L1INTP,IDDIG_INT_STATUS);
-	musb_writel(mtk_musb->mregs,USB_L1INTM,IDDIG_INT_STATUS|musb_readl(mtk_musb->mregs,USB_L1INTM));
-	DBG(0,"switch_int_to_host is done\n");
+	if (time_after(last_timer, timeout)) {
+		if (!timer_pending(&musb_idle_timer))
+			last_timer = timeout;
+		else {
+			DBG(2, "Longer idle timer already pending, ignoring\n");
+			return;
+		}
+	}
+	last_timer = timeout;
 
-}
-
-void switch_int_to_host_and_mask(void)
-{
-	musb_writel(mtk_musb->mregs,USB_L1INTM,(~IDDIG_INT_STATUS)&musb_readl(mtk_musb->mregs,USB_L1INTM)); //mask before change polarity
-	mb();
-	musb_writel(mtk_musb->mregs,USB_L1INTP,IDDIG_INT_STATUS);
-	DBG(0,"swtich_int_to_host_and_mask is done\n");
+	DBG(2, "%s inactive, for idle timer for %lu ms\n",
+		otg_state_string(musb->xceiv->state),
+		(unsigned long)jiffies_to_msecs(timeout - jiffies));
+	mod_timer(&musb_idle_timer, timeout);
 }
 
-void otg_int_init(void)
+static void mt_usb_enable(struct musb *musb)
 {
-	//bool is_ready = mtk_musb->is_ready;
-#ifdef ID_PIN_USE_EX_EINT
-	mt_set_gpio_mode(ID_PIN_GPIO, GPIO_ID_PIN_EINT_PIN_M_EINT);
-	mt_set_gpio_dir(ID_PIN_GPIO, GPIO_DIR_IN);
-	mt_set_gpio_pull_enable(ID_PIN_GPIO, GPIO_PULL_ENABLE);
-	mt_set_gpio_pull_select(ID_PIN_GPIO, GPIO_PULL_UP);
-#else
-	u32 phy_id_pull = 0;
-	phy_id_pull = __raw_readl(U2PHYDTM1);
-	phy_id_pull |= ID_PULL_UP;
-	__raw_writel(phy_id_pull,U2PHYDTM1);
+    unsigned long   flags;
+
+    DBG(0, "%d, %d\n", mtk_usb_power, musb->power);
+
+    if (musb->power == true)
+        return;
+
+    flags = musb_readl(mtk_musb->mregs,USB_L1INTM);
+
+    // mask ID pin, so "open clock" and "set flag" won't be interrupted. ISR may call clock_disable.
+    musb_writel(mtk_musb->mregs,USB_L1INTM,(~IDDIG_INT_STATUS)&flags);
+
+    if (platform_init_first) {
+        DBG(0,"usb init first\n\r");
+        musb->is_host = true;
+    }
+
+    if (!mtk_usb_power) {
+        if (down_interruptible(&power_clock_lock))
+            xlog_printk(ANDROID_LOG_ERROR, "USB20", "%s: busy, Couldn't get power_clock_lock\n" \
+                        , __func__);
+
+#ifndef FPGA_PLATFORM
+        //enable_pll(UNIVPLL, "USB_PLL");
+        DBG(0,"enable UPLL before connect\n");
 #endif
-	//mt65xx_eint_set_sens(ID_PIN_EINT, MT65xx_LEVEL_SENSITIVE);
-	//mt65xx_eint_set_hw_debounce(ID_PIN_EINT,64);
-	//mtk_musb->is_ready = FALSE;
-	//mt65xx_eint_registration(ID_PIN_EINT, FALSE, !DEVICE_INTTERRUPT, musb_id_pin_interrup,FALSE);
-	//mtk_musb->is_ready = is_ready;
+        mdelay(10);
 
-	musb_writel(mtk_musb->mregs,USB_L1INTM,IDDIG_INT_STATUS|musb_readl(mtk_musb->mregs,USB_L1INTM));
+        usb_phy_recover();
+
+        mtk_usb_power = true;
+
+        up(&power_clock_lock);
+    }
+	musb->power = true;
+
+    musb_writel(mtk_musb->mregs,USB_L1INTM,flags);
 }
+
+static void mt_usb_disable(struct musb *musb)
+{
+    printk("%s, %d, %d\n", __func__, mtk_usb_power, musb->power);
+
+    if (musb->power == false)
+        return;
+
+    if (platform_init_first) {
+        DBG(0,"usb init first\n\r");
+        musb->is_host = false;
+        platform_init_first = false;
+    }
+
+    if (mtk_usb_power) {
+        if (down_interruptible(&power_clock_lock))
+            xlog_printk(ANDROID_LOG_ERROR, "USB20", "%s: busy, Couldn't get power_clock_lock\n" \
+                        , __func__);
+
+        mtk_usb_power = false;
+
+        usb_phy_savecurrent();
+
+#ifndef FPGA_PLATFORM
+        //disable_pll(UNIVPLL,"USB_PLL");
+        DBG(0, "disable UPLL before disconnect\n");
 #endif
+
+        up(&power_clock_lock);
+    }
+
+    musb->power = false;
+}
 
 /* ================================ */
 /* connect and disconnect functions */
@@ -280,28 +230,27 @@ bool mt_usb_is_device(void)
   return !mtk_musb->is_host;
 }
 
-bool mt_usb_is_ready(void)
-{
-	printk("[MUSB] USB is ready or not\n");
-	if(!mtk_musb || !mtk_musb->is_ready)
-        return false;
-    else
-        return true;
-}
-
 void mt_usb_connect(void)
 {
 	printk("[MUSB] USB is ready for connect\n");
-	DBG(3, "is ready %d is_host %d power %d\n",mtk_musb->is_ready,mtk_musb->is_host , mtk_musb->power);
-	if(!mtk_musb || !mtk_musb->is_ready || mtk_musb->is_host || mtk_musb->power)
-		return;
+    DBG(3, "is ready %d is_host %d power %d\n",mtk_musb->is_ready,mtk_musb->is_host , mtk_musb->power);
+    if (!mtk_musb || !mtk_musb->is_ready || mtk_musb->is_host || mtk_musb->power)
+        return;
+
+    DBG(0,"cable_mode=%d\n",cable_mode);
+
 	if(cable_mode != CABLE_MODE_NORMAL)
 	{
-		musb_sync_with_bat(mtk_musb,USB_CONFIGURED);
-		mtk_musb->power = true;
-		return;
-	}
-	musb_start(mtk_musb);
+        DBG(0,"musb_sync_with_bat, USB_CONFIGURED\n");
+        musb_sync_with_bat(mtk_musb,USB_CONFIGURED);
+        mtk_musb->power = true;
+        return;
+    }
+
+	if (!wake_lock_active(&mtk_musb->usb_lock))
+		wake_lock(&mtk_musb->usb_lock);
+
+    musb_start(mtk_musb);
 	printk("[MUSB] USB connect\n");
 }
 
@@ -317,26 +266,48 @@ void mt_usb_disconnect(void)
 	if (wake_lock_active(&mtk_musb->usb_lock))
 		wake_unlock(&mtk_musb->usb_lock);
 
+    DBG(0,"cable_mode=%d\n",cable_mode);
+
 	if (cable_mode != CABLE_MODE_NORMAL) {
+        DBG(0,"musb_sync_with_bat, USB_SUSPEND\n");
 		musb_sync_with_bat(mtk_musb,USB_SUSPEND);
 		mtk_musb->power = false;
-		return;
 	}
+
 	printk("[MUSB] USB disconnect\n");
 }
 
-bool is_usb_connected(void)
+bool usb_cable_connected(void)
 {
-#ifdef CONFIG_POWER_EXT
-	if (upmu_get_rgs_chrdet()
+#ifdef FPGA_PLATFORM
+	return true;
 #else
-	if (upmu_is_chr_det()
-#endif
-	   && (mt_charger_type_detection() == STANDARD_HOST)) {
-		return true;
-	} else {
+
+#ifdef CONFIG_USB_MTK_OTG
+	//ALPS00775710
+    int iddig_state = 1;
+
+    iddig_state = mt_get_gpio_in(GPIO_OTG_IDDIG_EINT_PIN);
+	DBG(0,"iddig_state = %d\n", iddig_state);
+
+	if(!iddig_state)
 		return false;
+	//ALPS00775710
+#endif //end CONFIG_USB_MTK_OTG
+
+#ifdef CONFIG_POWER_EXT
+	if (upmu_get_rgs_chrdet())
+#else
+	if (upmu_is_chr_det())
+#endif
+	{
+		int type = mt_charger_type_detection();
+		if ((type == STANDARD_HOST) || (type == CHARGING_HOST))
+		return true;
 	}
+
+		return false;
+#endif // end FPGA_PLATFORM
 }
 
 void musb_platform_reset(struct musb *musb)
@@ -348,126 +319,49 @@ void musb_platform_reset(struct musb *musb)
 	musb_writew(mbase, MUSB_SWRST,swrst);
 }
 
-void usb_check_connect(void)
+static void usb_check_connect(void)
 {
-#ifndef CONFIG_MT6589_FPGA
-	if (is_usb_connected())
-		mt_usb_connect();
+#ifndef FPGA_PLATFORM
+	if (usb_cable_connected())
+        mt_usb_connect();
 #endif
 }
 
-void musb_sync_with_bat(struct musb *musb, int usb_state)
+bool is_switch_charger(void)
 {
-#ifndef CONFIG_MT6589_FPGA
+#ifdef SWITCH_CHARGER
+	return true;
+#else
+	return false;
+#endif
+}
+
+void pmic_chrdet_int_en(int is_on)
+{
+#ifndef FPGA_PLATFORM
+	upmu_interrupt_chrdet_int_en(is_on);
+#endif
+}
+
+void musb_sync_with_bat(struct musb *musb,int usb_state)
+{
+#ifndef FPGA_PLATFORM
+    DBG(0,"BATTERY_SetUSBState, state=%d\n",usb_state);
 	BATTERY_SetUSBState(usb_state);
 	wake_up_bat();
 #endif
 }
 
-void musb_platform_enable(struct musb *musb)
+/*-------------------------------------------------------------------------*/
+static irqreturn_t generic_interrupt(int irq, void *__hci)
 {
-	unsigned long flags;
+	unsigned long	flags;
+	irqreturn_t	retval = IRQ_NONE;
+	struct musb	*musb = __hci;
 
-	printk("%s, %d, %d\n", __func__, mtk_usb_power, musb->power);
+	spin_lock_irqsave(&musb->lock, flags);
 
-	if (musb->power == true)
-		return;
-
-	flags = musb_readl(mtk_musb->mregs, USB_L1INTM);
-
-	// mask ID pin, so "open clock" and "set flag" won't be interrupted. ISR may call clock_disable.
-	musb_writel(mtk_musb->mregs, USB_L1INTM, (~IDDIG_INT_STATUS) & flags);
-
-  if(platform_init_first){
-  	DBG(0,"usb init first\n\r");
-  	musb->is_host = true;
-  }
-
-	if (!mtk_usb_power) {
-		if (down_interruptible(&power_clock_lock))
-			xlog_printk(ANDROID_LOG_ERROR, "USB20", "%s: busy, Couldn't get power_clock_lock\n" \
-				, __func__);
-#ifndef CONFIG_MT6589_FPGA
-		enable_pll(UNIVPLL, "USB_PLL");
-
-		printk("%s, enable UPLL before connect\n", __func__);
-#endif
-
-		mdelay(10);
-
-		usb_phy_recover();
-
-		mtk_usb_power = true;
-
-		up(&power_clock_lock);
-	}
-	musb->power = true;
-
-	musb_writel(mtk_musb->mregs,USB_L1INTM,flags);
-}
-
-void musb_platform_disable(struct musb *musb)
-{
-	printk("%s, %d, %d\n", __func__, mtk_usb_power, musb->power);
-
-	if(musb->power == false)
-        return;
-
-	if(platform_init_first){
-  	DBG(0,"usb init first\n\r");
-  	musb->is_host = false;
-  	platform_init_first = false;
-  }
-
-	if (mtk_usb_power) {
-		if (down_interruptible(&power_clock_lock))
-			xlog_printk(ANDROID_LOG_ERROR, "USB20", "%s: busy, Couldn't get power_clock_lock\n" \
-				, __func__);
-
-	//Modification for ALPS00408742
-	mtk_usb_power = false;
-	smp_mb();
-	//printk("%s, line %d: %d, %d, before savecurrent\n", __func__, __LINE__, mtk_usb_power, musb->power);
-	//Modification for ALPS00408742
-	usb_phy_savecurrent();
-
-#ifndef CONFIG_MT6589_FPGA
-
-	disable_pll(UNIVPLL,"USB_PLL");
-
-	//printk("%s, disable VUSB and UPLL before disconnect\n", __func__);
-#endif
-	mtk_usb_power = false;
-
-	//Modification for ALPS00408742
-	smp_mb();
-	//Modification for ALPS00408742
-	up(&power_clock_lock);
-	}
-
-	musb->power = false;
-}
-
-void musb_generic_disable(struct musb *musb)
-{
-	void __iomem	*mbase = musb->mregs;
-
-	/* disable interrupts */
-	musb_writeb(mbase, MUSB_INTRUSBE, 0);
-	musb_writew(mbase, MUSB_INTRTXE, 0);
-	musb_writew(mbase, MUSB_INTRRXE, 0);
-
-	/* off */
-	//musb_writeb(mbase, MUSB_DEVCTL, 0);
-
-	/*  flush pending interrupts */
-	musb_writew(musb->mregs,MUSB_INTRRX,0xFFFF);
-	musb_writew(musb->mregs,MUSB_INTRTX,0xFFFF);
-	musb_writeb(musb->mregs,MUSB_INTRUSB,0xEF);
-}
-
-void musb_read_clear_generic_interrupt(struct musb *musb)
-{
+	/* musb_read_clear_generic_interrupt */
 	musb->int_usb = musb_readb(musb->mregs, MUSB_INTRUSB) & musb_readb(musb->mregs, MUSB_INTRUSBE);
 	musb->int_tx = musb_readw(musb->mregs, MUSB_INTRTX) & musb_readw(musb->mregs, MUSB_INTRTXE);
 	musb->int_rx = musb_readw(musb->mregs, MUSB_INTRRX) & musb_readw(musb->mregs, MUSB_INTRRXE);
@@ -475,31 +369,25 @@ void musb_read_clear_generic_interrupt(struct musb *musb)
 	musb_writew(musb->mregs,MUSB_INTRRX,musb->int_rx);
 	musb_writew(musb->mregs,MUSB_INTRTX,musb->int_tx);
 	musb_writeb(musb->mregs,MUSB_INTRUSB,musb->int_usb);
+	/* musb_read_clear_generic_interrupt */
+
+	if (musb->int_usb || musb->int_tx || musb->int_rx)
+		retval = musb_interrupt(musb);
+
+	spin_unlock_irqrestore(&musb->lock, flags);
+
+	return retval;
 }
 
-u8 musb_read_clear_dma_interrupt(struct musb *musb)
+static irqreturn_t mt_usb_interrupt(int irq, void *dev_id)
 {
-	u8 int_hsdma = 0;
-	int_hsdma = musb_readb(musb->mregs, MUSB_HSDMA_INTR);
-
-	mb();
-	musb_writeb(musb->mregs,MUSB_HSDMA_INTR,int_hsdma);
-
-	return int_hsdma;
-}
-extern u32 sw_deboun_time ;
-
-irqreturn_t mt_usb_interrupt(int irq, void *dev_id)
-{
-  irqreturn_t tmp_status;
-  irqreturn_t status = IRQ_NONE;
+    irqreturn_t tmp_status;
+    irqreturn_t status = IRQ_NONE;
 	struct musb	*musb = (struct musb*)dev_id;
 	u32 usb_l1_ints;
-#ifdef CONFIG_USB_MTK_OTG
-  u32 usb_l1_ploy;
-#endif
-	usb_l1_ints= musb_readl(musb->mregs, USB_L1INTS) & musb_readl(musb->mregs,USB_L1INTM);
-	DBG(3,"usb interrupt assert %x\n",usb_l1_ints);
+
+	usb_l1_ints= musb_readl(musb->mregs,USB_L1INTS)&musb_readl(mtk_musb->mregs,USB_L1INTM); //gang  REVISIT
+	DBG(1,"usb interrupt assert %x %x  %x %x %x\n",usb_l1_ints,musb_readl(mtk_musb->mregs,USB_L1INTM),musb_readb(musb->mregs, MUSB_INTRUSBE),musb_readw(musb->mregs,MUSB_INTRTX),musb_readw(musb->mregs,MUSB_INTRTXE));
 
 	if ((usb_l1_ints & TX_INT_STATUS) || (usb_l1_ints & RX_INT_STATUS) || (usb_l1_ints & USBCOM_INT_STATUS)) {
 		if((tmp_status = generic_interrupt(irq, musb)) != IRQ_NONE)
@@ -512,20 +400,9 @@ irqreturn_t mt_usb_interrupt(int irq, void *dev_id)
 	}
 
 #ifdef 	CONFIG_USB_MTK_OTG
-	if(usb_l1_ints&IDDIG_INT_STATUS) {
-	    usb_l1_ploy = musb_readl(mtk_musb->mregs,USB_L1INTP);
-	    DBG(0,"MUSB:id pin interrupt assert,polarity=0x%x\n",usb_l1_ploy);
-		if(usb_l1_ploy & IDDIG_INT_STATUS)
-            usb_l1_ploy &= (~IDDIG_INT_STATUS);
-		else
-            usb_l1_ploy |= IDDIG_INT_STATUS;
-
-        musb_writel(mtk_musb->mregs,USB_L1INTP,usb_l1_ploy);
-		musb_writel(mtk_musb->mregs,USB_L1INTM,(~IDDIG_INT_STATUS)&musb_readl(mtk_musb->mregs,USB_L1INTM));
-
-        schedule_delayed_work(&mtk_musb->id_pin_work,sw_deboun_time*HZ/1000);
+	if(usb_l1_ints & IDDIG_INT_STATUS) {
+		mt_usb_iddig_int(musb);
 		status = IRQ_HANDLED;
-		DBG(1,"MUSB:id pin interrupt assert\n");
 	}
 #endif
 
@@ -575,24 +452,24 @@ static ssize_t mt_usb_store_cmode(struct device* dev, struct device_attribute *a
 			mt_usb_disconnect();
 			cable_mode = cmode;
 			msleep(10);
-			//ALPS00114502
-			//check that "if USB cable connected and than call mt_usb_connect"
-			//Then, the Bat_Thread won't be always wakeup while no USB/chatger cable and IPO mode
-			//mt_usb_connect();
+			/* check that "if USB cable connected and than call mt_usb_connect" */
+			/* Then, the Bat_Thread won't be always wakeup while no USB/chatger cable and IPO mode */
 			usb_check_connect();
-			//ALPS00114502
 
 #ifdef CONFIG_USB_MTK_OTG
 			if(cmode == CABLE_MODE_CHRG_ONLY) {
 				if(mtk_musb && mtk_musb->is_host) { // shut down USB host for IPO
+					if (wake_lock_active(&mtk_musb->usb_lock))
+                        wake_unlock(&mtk_musb->usb_lock);
+					musb_platform_set_vbus(mtk_musb, 0);
 					musb_stop(mtk_musb);
+					MUSB_DEV_MODE(mtk_musb);
 					/* Think about IPO shutdown with A-cable, then switch to B-cable and IPO bootup. We need a point to clear session bit */
 					musb_writeb(mtk_musb->mregs, MUSB_DEVCTL, (~MUSB_DEVCTL_SESSION)&musb_readb(mtk_musb->mregs,MUSB_DEVCTL));
-				} else {
-					switch_int_to_host_and_mask(); // mask ID pin interrupt even if A-cable is not plugged in
 				}
+				switch_int_to_host_and_mask(mtk_musb); // mask ID pin interrupt even if A-cable is not plugged in
 			} else {
-				switch_int_to_host(); // resotre ID pin interrupt
+				switch_int_to_host(mtk_musb); // resotre ID pin interrupt
 			}
 #endif
 			if(mtk_musb) {
@@ -605,11 +482,11 @@ static ssize_t mt_usb_store_cmode(struct device* dev, struct device_attribute *a
 
 DEVICE_ATTR(cmode,  0664, mt_usb_show_cmode, mt_usb_store_cmode);
 
-#ifdef CONFIG_MT6589_FPGA
+#ifdef FPGA_PLATFORM
 static struct i2c_client *usb_i2c_client = NULL;
 static const struct i2c_device_id usb_i2c_id[] = {{"mtk-usb",0},{}};
 
-static struct i2c_board_info __initdata usb_i2c_dev = { I2C_BOARD_INFO("mtk-usb", 0x60)};
+static struct i2c_board_info __initdata usb_i2c_dev = {I2C_BOARD_INFO("mtk-usb", 0x60)};
 
 
 void USB_PHY_Write_Register8(UINT8 var,  UINT8 addr)
@@ -617,7 +494,7 @@ void USB_PHY_Write_Register8(UINT8 var,  UINT8 addr)
 	char buffer[2];
 	buffer[0] = addr;
 	buffer[1] = var;
-	i2c_master_send(usb_i2c_client, &buffer, 2);
+	i2c_master_send(usb_i2c_client, buffer, 2);
 }
 
 UINT8 USB_PHY_Read_Register8(UINT8 addr)
@@ -666,10 +543,10 @@ static int usb_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
 
 }
 
-static int usb_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info) {
+/*static int usb_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info) {
     strcpy(info->type, "mtk-usb");
     return 0;
-}
+}*/
 
 static int usb_i2c_remove(struct i2c_client *client) {return 0;}
 
@@ -677,28 +554,25 @@ static int usb_i2c_remove(struct i2c_client *client) {return 0;}
 struct i2c_driver usb_i2c_driver = {
     .probe = usb_i2c_probe,
     .remove = usb_i2c_remove,
-    .detect = usb_i2c_detect,
+    /*.detect = usb_i2c_detect,*/
     .driver = {
     	.name = "mtk-usb",
     },
     .id_table = usb_i2c_id,
 };
 
-int add_usb_i2c_driver()
+static int add_usb_i2c_driver(void)
 {
 	i2c_register_board_info(0, &usb_i2c_dev, 1);
-	if(i2c_add_driver(&usb_i2c_driver)!=0)
-	{
+	if (i2c_add_driver(&usb_i2c_driver)!=0) {
 		printk("[MUSB]usb_i2c_driver initialization failed!!\n");
 		return -1;
-	}
-	else
-	{
+	} else {
 		printk("[MUSB]usb_i2c_driver initialization succeed!!\n");
 	}
 	return 0;
 }
-#endif //End of CONFIG_MT6589_FPGA
+#endif //End of FPGA_PLATFORM
 
 void musb_check_mpu_violation(u32 addr, int wr_vio)
 {
@@ -717,52 +591,209 @@ void musb_check_mpu_violation(u32 addr, int wr_vio)
     printk(KERN_CRIT "DMA_CNTLch7 %04x,DMA_ADDRch7 %08x,DMA_COUNTch7 %08x \n",musb_readw(mregs, 0x274),musb_readl(mregs,0x278),musb_readl(mregs,0x27C));
 }
 
-
-int __init musb_platform_init(struct musb *musb)
+static int mt_usb_init(struct musb *musb)
 {
-	int err;
-#ifdef CONFIG_USB_MTK_HDRC_HCD
-	if (is_host_enabled(musb)) {
-		musb->board_set_vbus = mtk_set_vbus;
-		#ifndef CONFIG_MT6589_FPGA
-		#ifndef MTK_BQ24196_SUPPORT
-		mt_set_gpio_mode(GPIO_OTG_DRVVBUS_PIN,GPIO_OTG_DRVVBUS_PIN_M_GPIO);//should set GPIO2 as gpio mode.
-		mt_set_gpio_dir(GPIO_OTG_DRVVBUS_PIN,GPIO_DIR_OUT);
-		mt_get_gpio_pull_enable(GPIO_OTG_DRVVBUS_PIN);
-		mt_set_gpio_pull_select(GPIO_OTG_DRVVBUS_PIN,GPIO_PULL_UP);
-		#endif
-		#endif
+	DBG(0,"mt_usb_init \n");
+
+    usb_nop_xceiv_register();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+    musb->xceiv = usb_get_phy(USB_PHY_TYPE_USB2);
+#else
+    musb->xceiv = usb_get_transceiver();
+#endif
+    musb->nIrq = MT6589_USB0_IRQ_ID;
+    musb->dma_irq= (int)SHARE_IRQ;
+    musb->fifo_cfg = fifo_cfg;
+    musb->fifo_cfg_size = ARRAY_SIZE(fifo_cfg);
+    musb->dyn_fifo = true;
+    musb->power = false;
+    musb->is_host = false;
+    musb->fifo_size = 8*1024;
+
+    wake_lock_init(&musb->usb_lock, WAKE_LOCK_SUSPEND, "USB suspend lock");
+
+#ifndef FPGA_PLATFORM
+    hwPowerOn(MT65XX_POWER_LDO_VUSB, VOL_3300, "VUSB_LDO");
+    printk("%s, enable VBUS_LDO \n", __func__);
+#endif
+
+    mt_usb_enable(musb);
+
+    musb->isr = mt_usb_interrupt;
+    musb_writel(musb->mregs,MUSB_HSDMA_INTR,0xff | (0xff << DMA_INTR_UNMASK_SET_OFFSET));
+    DBG(0,"musb platform init %x\n",musb_readl(musb->mregs,MUSB_HSDMA_INTR));
+    musb_writel(musb->mregs,USB_L1INTM,TX_INT_STATUS | RX_INT_STATUS | USBCOM_INT_STATUS | DMA_INT_STATUS);//gang
+
+    setup_timer(&musb_idle_timer, musb_do_idle, (unsigned long) musb);
+
+#ifdef CONFIG_USB_MTK_OTG
+	mt_usb_otg_init(musb);
+#endif
+
+    return 0;
+}
+
+static int mt_usb_exit(struct musb *musb)
+{
+    del_timer_sync(&musb_idle_timer);
+	return 0;
+}
+
+static const struct musb_platform_ops mt_usb_ops = {
+	.init		= mt_usb_init,
+	.exit		= mt_usb_exit,
+	/*.set_mode	= mt_usb_set_mode,*/
+	.try_idle	= mt_usb_try_idle,
+	.enable		= mt_usb_enable,
+	.disable	= mt_usb_disable,
+	.set_vbus	= mt_usb_set_vbus,
+	.vbus_status = mt_usb_get_vbus_status
+};
+
+static u64 mt_usb_dmamask = DMA_BIT_MASK(32);
+
+static int mt_usb_probe(struct platform_device *pdev)
+{
+	struct musb_hdrc_platform_data	*pdata = pdev->dev.platform_data;
+	struct platform_device		*musb;
+	struct mt_usb_glue		*glue;
+	int				ret = -ENOMEM;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+	int				musbid;
+#endif
+
+    glue = kzalloc(sizeof(*glue), GFP_KERNEL);
+	if (!glue) {
+		dev_err(&pdev->dev, "failed to allocate glue context\n");
+		goto err0;
+	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+	/* get the musb id */
+	musbid = musb_get_id(&pdev->dev, GFP_KERNEL);
+	if (musbid < 0) {
+		dev_err(&pdev->dev, "failed to allocate musb id\n");
+		ret = -ENOMEM;
+		goto err1;
 	}
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+	musb = platform_device_alloc("musb-hdrc", PLATFORM_DEVID_AUTO);
+#else
+	musb = platform_device_alloc("musb-hdrc", musbid);
+#endif
+	if (!musb) {
+		dev_err(&pdev->dev, "failed to allocate musb device\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+		goto err1;
+#else
+		goto err2;
+#endif
+	}
 
-	musb->nIrq = MT6589_USB0_IRQ_ID;
-	musb->dma_irq= (int)SHARE_IRQ;
-	musb->fifo_cfg = fifo_cfg;
-	musb->fifo_cfg_size = ARRAY_SIZE(fifo_cfg);
-	musb->fifo_cfg_host = fifo_cfg_host;
-	musb->fifo_cfg_host_size = ARRAY_SIZE(fifo_cfg_host);
-	mtk_musb->power = FALSE;
-	mtk_musb->is_host = FALSE;
-	mtk_musb->fifo_size = 8*1024;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+	musb->id			= musbid;
+#endif
+	musb->dev.parent		= &pdev->dev;
+	musb->dev.dma_mask		= &mt_usb_dmamask;
+	musb->dev.coherent_dma_mask	= mt_usb_dmamask;
 
-	#ifndef CONFIG_MT6589_FPGA
-	hwPowerOn(MT65XX_POWER_LDO_VUSB, VOL_3300, "VUSB_LDO");
-	printk("%s, enable VBUS_LDO \n", __func__);
-	#endif
+	glue->dev			= &pdev->dev;
+	glue->musb			= musb;
 
-	musb_platform_enable(musb);
-        emi_mpu_notifier_register(MST_ID_MMPERI_1, musb_check_mpu_violation);
+	pdata->platform_ops		= &mt_usb_ops;
 
-	musb->isr = mt_usb_interrupt;
-	musb_writel(musb->mregs,MUSB_HSDMA_INTR,0xff | (0xff << DMA_INTR_UNMASK_SET_OFFSET));
-	DBG(2,"musb platform init %x\n",musb_readl(musb->mregs,MUSB_HSDMA_INTR));
-	musb_writel(musb->mregs,USB_L1INTM,TX_INT_STATUS | RX_INT_STATUS | USBCOM_INT_STATUS | DMA_INT_STATUS);
-	err = device_create_file(musb->controller,&dev_attr_cmode);
+	platform_set_drvdata(pdev, glue);
+
+	ret = platform_device_add_resources(musb, pdev->resource,
+			pdev->num_resources);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to add resources\n");
+		goto err3;
+	}
+
+	ret = platform_device_add_data(musb, pdata, sizeof(*pdata));
+	if (ret) {
+		dev_err(&pdev->dev, "failed to add platform_data\n");
+		goto err3;
+	}
+
+	ret = platform_device_add(musb);
+
+	if (ret) {
+		dev_err(&pdev->dev, "failed to register musb device\n");
+		goto err3;
+	}
+
+    ret = device_create_file(&pdev->dev, &dev_attr_cmode);
+#ifdef MTK_UART_USB_SWITCH
+	ret = device_create_file(&pdev->dev,&dev_attr_portmode);
+	ret = device_create_file(&pdev->dev,&dev_attr_tx);
+	ret = device_create_file(&pdev->dev,&dev_attr_rx);
+	ret = device_create_file(&pdev->dev,&dev_attr_uartpath);
+#endif
+
+    if (ret) {
+		dev_err(&pdev->dev, "failed to create musb device\n");
+		goto err3;
+	}
+
 	return 0;
+
+err3:
+	platform_device_put(musb);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+err2:
+	musb_put_id(&pdev->dev, musbid);
+#endif
+
+err1:
+	kfree(glue);
+
+err0:
+	return ret;
 }
 
-int musb_platform_exit(struct musb *musb)
+static int mt_usb_remove(struct platform_device *pdev)
 {
+	struct mt_usb_glue		*glue = platform_get_drvdata(pdev);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0)
+	platform_device_unregister(glue->musb);
+#else
+	musb_put_id(&pdev->dev, glue->musb->id);
+	platform_device_del(glue->musb);
+	platform_device_put(glue->musb);
+#endif
+	kfree(glue);
+
 	return 0;
 }
+
+static struct platform_driver mt_usb_driver = {
+	.remove		= mt_usb_remove,
+	.probe		= mt_usb_probe,
+	.driver		= {
+		.name	= "mt_usb",
+	},
+};
+
+static int __init usb20_init(void)
+{
+	DBG(0,"usb20 init\n");
+
+#ifdef FPGA_PLATFORM
+    add_usb_i2c_driver();
+#endif
+
+	return platform_driver_register(&mt_usb_driver);
+}
+fs_initcall(usb20_init);
+
+static void __exit usb20_exit(void)
+{
+	platform_driver_unregister(&mt_usb_driver);
+}
+module_exit(usb20_exit)

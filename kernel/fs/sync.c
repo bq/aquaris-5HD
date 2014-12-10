@@ -22,7 +22,6 @@
 #undef FEATURE_PRINT_FSYNC_PID
 #endif
 #include <linux/xlog.h>
-#include <mach/mt_io_logger.h>
 
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
@@ -217,13 +216,6 @@ static int __sync_filesystem(struct super_block *sb, int wait)
 #ifdef FEATURE_PRINT_FSYNC_PID
 	char b[BDEVNAME_SIZE];
 #endif 
-	/*
-	 * This should be safe, as we require bdi backing to actually
-	 * write out data in the first place
-	 */
-	if (sb->s_bdi == &noop_backing_dev_info)
-		return 0;
-
 	if (sb->s_qcop && sb->s_qcop->quota_sync)
 		sb->s_qcop->quota_sync(sb, -1, wait);
 
@@ -276,61 +268,67 @@ int sync_filesystem(struct super_block *sb)
 }
 EXPORT_SYMBOL_GPL(sync_filesystem);
 
-static void sync_one_sb(struct super_block *sb, void *arg)
+static void sync_inodes_one_sb(struct super_block *sb, void *arg)
 {
 	if (!(sb->s_flags & MS_RDONLY))
-		__sync_filesystem(sb, *(int *)arg);
+		sync_inodes_sb(sb);
 }
-/*
- * Sync all the data for all the filesystems (called by sys_sync() and
- * emergency sync)
- */
-static void sync_filesystems(int wait)
+
+static void sync_fs_one_sb(struct super_block *sb, void *arg)
 {
-	iterate_supers(sync_one_sb, &wait);
+	if (!(sb->s_flags & MS_RDONLY) && sb->s_op->sync_fs)
+		sb->s_op->sync_fs(sb, *(int *)arg);
+}
+
+static void fdatawrite_one_bdev(struct block_device *bdev, void *arg)
+{
+	filemap_fdatawrite(bdev->bd_inode->i_mapping);
+}
+
+static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
+{
+	filemap_fdatawait(bdev->bd_inode->i_mapping);
 }
 
 /*
- * sync everything.  Start out by waking pdflush, because that writes back
- * all queues in parallel.
+ * Sync everything. We start by waking flusher threads so that most of
+ * writeback runs on all devices in parallel. Then we sync all inodes reliably
+ * which effectively also waits for all flusher threads to finish doing
+ * writeback. At this point all data is on disk so metadata should be stable
+ * and we tell filesystems to sync their metadata via ->sync_fs() calls.
+ * Finally, we writeout all block devices because some filesystems (e.g. ext2)
+ * just write metadata (such as inodes or bitmaps) to block device page cache
+ * and do not sync it on their own in ->sync_fs().
  */
 SYSCALL_DEFINE0(sync)
 {
-#if IO_LOGGER_ENABLE
-	unsigned long long time1 = 0,timeoffset = 0;
-if(unlikely(en_IOLogger())){
-	time1 = sched_clock();
-	AddIOTrace(IO_LOGGER_MSG_VFS_NO_ARG,vfs_sync,0);
-}
-#endif
+	int nowait = 0, wait = 1;
+
 	wakeup_flusher_threads(0, WB_REASON_SYNC);
-	sync_filesystems(0);
-	sync_filesystems(1);
+	iterate_supers(sync_inodes_one_sb, NULL);
+	iterate_supers(sync_fs_one_sb, &nowait);
+	iterate_supers(sync_fs_one_sb, &wait);
+	iterate_bdevs(fdatawrite_one_bdev, NULL);
+	iterate_bdevs(fdatawait_one_bdev, NULL);
 	if (unlikely(laptop_mode))
 		laptop_sync_completion();
-#if IO_LOGGER_ENABLE
-if(unlikely(en_IOLogger())){	
-	timeoffset = sched_clock()-time1;
-	if(BEYOND_TRACE_LOG_TIME(timeoffset))
-	{
-		 AddIOTrace(IO_LOGGER_MSG_VFS_NO_ARG_END,vfs_sync,timeoffset);	
-		 if(BEYOND_DUMP_LOG_TIME(timeoffset))
-			DumpIOTrace(timeoffset);
-		
-	}
-}
-#endif
 	return 0;
 }
 
 static void do_sync_work(struct work_struct *work)
 {
+	int nowait = 0;
+
 	/*
 	 * Sync twice to reduce the possibility we skipped some inodes / pages
 	 * because they were temporarily locked
 	 */
-	sync_filesystems(0);
-	sync_filesystems(0);
+	iterate_supers(sync_inodes_one_sb, &nowait);
+	iterate_supers(sync_fs_one_sb, &nowait);
+	iterate_bdevs(fdatawrite_one_bdev, NULL);
+	iterate_supers(sync_inodes_one_sb, &nowait);
+	iterate_supers(sync_fs_one_sb, &nowait);
+	iterate_bdevs(fdatawrite_one_bdev, NULL);
 	printk("Emergency Sync complete\n");
 	kfree(work);
 }

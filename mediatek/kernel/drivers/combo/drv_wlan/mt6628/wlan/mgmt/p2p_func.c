@@ -1436,7 +1436,7 @@ p2pFuncValidateAuth (
         prAuthFrame = (P_WLAN_AUTH_FRAME_T)prSwRfb->pvHeader;
 
 
-        if (prP2pBssInfo->eCurrentOPMode != OP_MODE_ACCESS_POINT) {
+        if ((prP2pBssInfo->eCurrentOPMode != OP_MODE_ACCESS_POINT) || (prP2pBssInfo->eIntendOPMode != OP_MODE_NUM)) {
             /* We are not under AP Mode yet. */
             fgReplyAuth = FALSE;
             DBGLOG(P2P, WARN, ("Current OP mode is not under AP mode. (%d)\n", prP2pBssInfo->eCurrentOPMode));
@@ -1491,6 +1491,7 @@ p2pFuncValidateAuth (
             /* GROUP limit full. */
             /* P2P 3.2.8 */
             DBGLOG(P2P, WARN, ("Group Limit Full. (%d)\n", (INT_16)prP2pBssInfo->rStaRecOfClientList.u4NumElem));
+			bssRemoveStaRecFromClientList(prAdapter, prP2pBssInfo, prStaRec);
             cnmStaRecFree(prAdapter, prStaRec, FALSE);
             break;
         }
@@ -2004,10 +2005,7 @@ p2pFuncIsAPMode (
     IN P_P2P_FSM_INFO_T prP2pFsmInfo
     )
 {
-    if (prP2pFsmInfo) {      
-        if(prP2pFsmInfo->fgIsWPSMode == 1){
-            return FALSE;
-        }
+    if (prP2pFsmInfo) {
         return prP2pFsmInfo->fgIsApMode;
     }
     else {
@@ -2277,6 +2275,8 @@ p2pFuncParseBeaconContent (
                                 (u2SubTypeVersion == VERSION_WPA)) {
                             kalP2PSetCipher(prAdapter->prGlueInfo, IW_AUTH_CIPHER_TKIP);
                             ucNewSecMode = TRUE;
+                            kalMemCopy(prP2pSpecificBssInfo->aucWpaIeBuffer, pucIE, IE_SIZE(pucIE));
+                            prP2pSpecificBssInfo->u2WpaIeLen = IE_SIZE(pucIE);
                         }
                         else if ((ucOuiType == VENDOR_OUI_TYPE_WPS)) {
                             kalP2PUpdateWSC_IE(prAdapter->prGlueInfo, 0, pucIE, IE_SIZE(pucIE));
@@ -2826,7 +2826,6 @@ p2pFuncProcessP2pProbeRsp (
                 {
                     UINT_8 ucOuiType = 0;
                     UINT_16 u2SubTypeVersion = 0;
-#if! CFG_SUPPORT_WFD
 
                     
                     if (rsnParseCheckForWFAInfoElem(prAdapter, pucIEBuf, &ucOuiType, &u2SubTypeVersion)) {
@@ -2845,9 +2844,7 @@ p2pFuncProcessP2pProbeRsp (
                         }
 
                     }
-					
-
-
+#if! CFG_SUPPORT_WFD
                     else {
                         if((prAdapter->prGlueInfo->prP2PInfo->u2VenderIELen+IE_SIZE(pucIEBuf))<512) {
                             kalMemCopy(prAdapter->prGlueInfo->prP2PInfo->aucVenderIE, pucIEBuf, IE_SIZE(pucIEBuf));
@@ -3268,7 +3265,7 @@ p2pFuncCalculateWSC_IELenForAssocRsp (
         return 0;
     }
 
-    return kalP2PCalWSC_IELen(prAdapter->prGlueInfo, 0);
+    return kalP2PCalWSC_IELen(prAdapter->prGlueInfo, 2);
 } /* p2pFuncCalculateP2p_IELenForAssocRsp */
 
 
@@ -3288,7 +3285,7 @@ p2pFuncGenerateWSC_IEForAssocRsp (
     }
 	DBGLOG(P2P, TRACE, ("p2pFuncGenerateWSC_IEForAssocRsp\n"));
 
-    u2IELen = (UINT_16)kalP2PCalWSC_IELen(prAdapter->prGlueInfo, 0);
+    u2IELen = (UINT_16)kalP2PCalWSC_IELen(prAdapter->prGlueInfo, 2);
 
     pucBuffer = (PUINT_8)((UINT_32)prMsduInfo->prPacket +
                           (UINT_32)prMsduInfo->u2FrameLength);
@@ -3297,7 +3294,7 @@ p2pFuncGenerateWSC_IEForAssocRsp (
 
     // TODO: Check P2P FSM State.
     kalP2PGenWSC_IE(prAdapter->prGlueInfo,
-                   0,
+                   2,
                    pucBuffer);
 
     prMsduInfo->u2FrameLength += u2IELen;
@@ -3620,7 +3617,7 @@ p2pFuncGetSpecAttri (
 
             if (prP2pIE) {
 
-                ASSERT(prP2pIE>pucIE);
+                ASSERT((UINT_32)prP2pIE > (UINT_32)pucIE);
 
                 u2BufferLenLeft = u2BufferLen - (UINT_16)(  ((UINT_32)prP2pIE) - ((UINT_32)pucIEBuf));
 
@@ -3898,6 +3895,8 @@ WLAN_STATUS wfdChangeMediaState(
 #if CFG_SUPPORT_WFD
 
 	P_WFD_CFG_SETTINGS_T prWfdCfgSettings = (P_WFD_CFG_SETTINGS_T)NULL;
+	if (prAdapter->fgIsP2PRegistered == FALSE)
+		return WLAN_STATUS_SUCCESS;
     prWfdCfgSettings = &prAdapter->rWifiVar.prP2pFsmInfo->rWfdConfigureSettings;
 
     if ((prWfdCfgSettings->ucWfdEnable) &&
@@ -3925,9 +3924,23 @@ WLAN_STATUS wfdChangeMediaState(
 
 
 
+BOOLEAN
+p2pFuncIsChannelGrant (
+    IN P_ADAPTER_T prAdapter
+    )
+{
+    P_P2P_FSM_INFO_T prP2pFsmInfo = (P_P2P_FSM_INFO_T)NULL;
+
+    if (prAdapter == NULL)
+        return FALSE;
+
+    prP2pFsmInfo = prAdapter->rWifiVar.prP2pFsmInfo;
 
 
+    if (prP2pFsmInfo == NULL) 
+        return FALSE;
 
-
-
+    return (prP2pFsmInfo->eCurrentState == P2P_STATE_CHNL_ON_HAND);
+    
+} /* p2pFuncIsChannelGrant */
 

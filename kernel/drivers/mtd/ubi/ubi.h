@@ -43,7 +43,6 @@
 #include <asm/pgtable.h>
 
 #include "ubi-media.h"
-#include "scan.h"
 
 /* Maximum number of supported UBI devices */
 #define UBI_MAX_DEVICES 32
@@ -131,6 +130,17 @@ enum {
 	MOVE_RETRY,
 };
 
+/*
+ * Return codes of the fastmap sub-system
+ *
+ * UBI_NO_FASTMAP: No fastmap super block was found
+ * UBI_BAD_FASTMAP: A fastmap was found but it's unusable
+ */
+enum {
+	UBI_NO_FASTMAP = 1,
+	UBI_BAD_FASTMAP,
+};
+
 /**
  * struct ubi_wl_entry - wear-leveling entry.
  * @u.rb: link in the corresponding (free/used) RB-tree
@@ -196,6 +206,44 @@ struct ubi_rename_entry {
 
 struct ubi_volume_desc;
 
+
+#ifdef CONFIG_MTD_UBI_FASTMAP
+/**
+ * struct ubi_fastmap_layout - in-memory fastmap data structure.
+ * @e: PEBs used by the current fastmap
+ * @to_be_tortured: if non-zero tortured this PEB
+ * @used_blocks: number of used PEBs
+ * @max_pool_size: maximal size of the user pool
+ * @max_wl_pool_size: maximal size of the pool used by the WL sub-system
+ */
+struct ubi_fastmap_layout {
+	struct ubi_wl_entry *e[UBI_FM_MAX_BLOCKS];
+	int to_be_tortured[UBI_FM_MAX_BLOCKS];
+	int used_blocks;
+	int max_pool_size;
+	int max_wl_pool_size;
+};
+
+/**
+ * struct ubi_fm_pool - in-memory fastmap pool
+ * @pebs: PEBs in this pool
+ * @used: number of used PEBs
+ * @size: total number of PEBs in this pool
+ * @max_size: maximal size of the pool
+ *
+ * A pool gets filled with up to max_size.
+ * If all PEBs within the pool are used a new fastmap will be written
+ * to the flash and the pool gets refilled with empty PEBs.
+ *
+ */
+struct ubi_fm_pool {
+	int pebs[UBI_FM_MAX_POOL_SIZE];
+	int used;
+	int size;
+	int max_size;
+};
+#endif
+
 /**
  * struct ubi_volume - UBI volume description data structure.
  * @dev: device object to make use of the the Linux device model
@@ -222,8 +270,6 @@ struct ubi_volume_desc;
  * @upd_ebs: how many eraseblocks are expected to be updated
  * @ch_lnum: LEB number which is being changing by the atomic LEB change
  *           operation
- * @ch_dtype: data persistency type which is being changing by the atomic LEB
- *            change operation
  * @upd_bytes: how many bytes are expected to be received for volume update or
  *             atomic LEB change
  * @upd_received: how many bytes were already received for volume update or
@@ -270,7 +316,6 @@ struct ubi_volume {
 
 	int upd_ebs;
 	int ch_lnum;
-	int ch_dtype;
 	long long upd_bytes;
 	long long upd_received;
 	void *upd_buf;
@@ -334,9 +379,21 @@ struct ubi_wl_entry;
  * @ltree: the lock tree
  * @alc_mutex: serializes "atomic LEB change" operations
  *
+ * @fm_disabled: non-zero if fastmap is disabled (default)
+ * @fm: in-memory data structure of the currently used fastmap
+ * @fm_pool: in-memory data structure of the fastmap pool
+ * @fm_wl_pool: in-memory data structure of the fastmap pool used by the WL
+ *		sub-system
+ * @fm_mutex: serializes ubi_update_fastmap() and protects @fm_buf
+ * @fm_buf: vmalloc()'d buffer which holds the raw fastmap
+ * @fm_size: fastmap size in bytes
+ * @fm_sem: allows ubi_update_fastmap() to block EBA table changes
+ * @fm_work: fastmap work queue
+ *
  * @used: RB-tree of used physical eraseblocks
  * @erroneous: RB-tree of erroneous used physical eraseblocks
  * @free: RB-tree of free physical eraseblocks
+ * @free_count: Contains the number of elements in @free
  * @scrub: RB-tree of physical eraseblocks which need scrubbing
  * @pq: protection queue (contain physical eraseblocks which are temporarily
  *      protected from the wear-leveling worker)
@@ -418,12 +475,40 @@ struct ubi_device {
 	int max_ec;
 	/* Note, mean_ec is not updated run-time - should be fixed */
 	int mean_ec;
+//MTK start: wl/ec status
+	uint64_t ec_sum;
+	int wl_count;
+	uint64_t wl_size;
+	int scrub_count;
+	uint64_t scrub_size;
+	int wl_th;
+	int torture;
+	atomic_t ec_count;
+	atomic_t move_retry;
+	atomic_t lbb;
+//MTK end
 
 	/* EBA sub-system's stuff */
 	unsigned long long global_sqnum;
 	spinlock_t ltree_lock;
 	struct rb_root ltree;
 	struct mutex alc_mutex;
+
+//MTK start: for fastmap
+	/* Fastmap stuff */
+	int fm_disabled;
+#ifdef CONFIG_MTD_UBI_FASTMAP
+	struct ubi_fastmap_layout *fm;
+	struct ubi_fm_pool fm_pool;
+	struct ubi_fm_pool fm_wl_pool;
+	struct rw_semaphore fm_sem;
+	struct mutex fm_mutex;
+	void *fm_buf;
+	size_t fm_size;
+	struct work_struct fm_work;
+#endif
+	int free_count;
+//MTK: end
 
 	/* Wear-leveling sub-system's stuff */
 	struct rb_root used;
@@ -475,6 +560,157 @@ struct ubi_device {
 	struct mutex ckvol_mutex;
 
 	struct ubi_debug_info *dbg;
+#ifdef CONFIG_BLB
+	int next_offset;
+	int leb_scrub;
+	void *databuf;
+	void *oobbuf;
+#endif
+
+};
+
+/**
+ * struct ubi_scan_leb - scanning information about a physical eraseblock.
+ * @ec: erase counter (%UBI_SCAN_UNKNOWN_EC if it is unknown)
+ * @pnum: physical eraseblock number
+ * @lnum: logical eraseblock number
+ * @scrub: if this physical eraseblock needs scrubbing
+ * @copy_flag: this LEB is a copy (@copy_flag is set in VID header of this LEB)
+ * @sqnum: sequence number
+ * @u: unions RB-tree or @list links
+ * @u.rb: link in the per-volume RB-tree of &struct ubi_scan_leb objects
+ * @u.list: link in one of the eraseblock lists
+ *
+ * One object of this type is allocated for each physical eraseblock during
+ * scanning.
+ */
+struct ubi_scan_leb {
+	int ec;
+	int pnum;
+	int lnum;
+	unsigned int scrub:1;
+	unsigned int copy_flag:1;
+	unsigned long long sqnum;
+	union {
+		struct rb_node rb;
+		struct list_head list;
+	} u;
+};
+
+/**
+ * struct ubi_scan_volume - scanning information about a volume.
+ * @vol_id: volume ID
+ * @highest_lnum: highest logical eraseblock number in this volume
+ * @leb_count: number of logical eraseblocks in this volume
+ * @vol_type: volume type
+ * @used_ebs: number of used logical eraseblocks in this volume (only for
+ *            static volumes)
+ * @last_data_size: amount of data in the last logical eraseblock of this
+ *                  volume (always equivalent to the usable logical eraseblock
+ *                  size in case of dynamic volumes)
+ * @data_pad: how many bytes at the end of logical eraseblocks of this volume
+ *            are not used (due to volume alignment)
+ * @compat: compatibility flags of this volume
+ * @rb: link in the volume RB-tree
+ * @root: root of the RB-tree containing all the eraseblock belonging to this
+ *        volume (&struct ubi_scan_leb objects)
+ *
+ * One object of this type is allocated for each volume during scanning.
+ */
+struct ubi_scan_volume {
+	int vol_id;
+	int highest_lnum;
+	int leb_count;
+	int vol_type;
+	int used_ebs;
+	int last_data_size;
+	int data_pad;
+	int compat;
+	struct rb_node rb;
+	struct rb_root root;
+};
+
+/**
+ * struct ubi_scan_info - UBI scanning information.
+ * @volumes: root of the volume RB-tree
+ * @corr: list of corrupted physical eraseblocks
+ * @free: list of free physical eraseblocks
+ * @erase: list of physical eraseblocks which have to be erased
+ * @alien: list of physical eraseblocks which should not be used by UBI (e.g.,
+ *         those belonging to "preserve"-compatible internal volumes)
+ * @waiting: list of physical eraseblocks which mabybe fix by BACKUP_LSB
+ * @corr_peb_count: count of PEBs in the @corr list
+ * @empty_peb_count: count of PEBs which are presumably empty (contain only
+ *                   0xFF bytes)
+ * @alien_peb_count: count of PEBs in the @alien list
+ * @bad_peb_count: count of bad physical eraseblocks
+ * @maybe_bad_peb_count: count of bad physical eraseblocks which are not marked
+ *                       as bad yet, but which look like bad
+ * @vols_found: number of volumes found during scanning
+ * @highest_vol_id: highest volume ID
+ * @is_empty: flag indicating whether the MTD device is empty or not
+ * @min_ec: lowest erase counter value
+ * @max_ec: highest erase counter value
+ * @max_sqnum: highest sequence number value
+ * @mean_ec: mean erase counter value
+ * @ec_sum: a temporary variable used when calculating @mean_ec
+ * @ec_count: a temporary variable used when calculating @mean_ec
+ * @scan_leb_slab: slab cache for &struct ubi_scan_leb objects
+ *
+ * This data structure contains the result of scanning and may be used by other
+ * UBI sub-systems to build final UBI data structures, further error-recovery
+ * and so on.
+ */
+struct ubi_scan_info {
+	struct rb_root volumes;
+	struct list_head corr;
+	struct list_head free;
+	struct list_head erase;
+	struct list_head alien;
+#ifdef CONFIG_BLB
+	struct list_head waiting;
+#endif
+	int corr_peb_count;
+	int empty_peb_count;
+	int alien_peb_count;
+	int bad_peb_count;
+	int maybe_bad_peb_count;
+	int vols_found;
+	int highest_vol_id;
+	int is_empty;
+	int min_ec;
+	int max_ec;
+	unsigned long long max_sqnum;
+	int mean_ec;
+	uint64_t ec_sum;
+	int ec_count;
+	struct kmem_cache *scan_leb_slab;
+};
+
+/**
+ * struct ubi_work - UBI work description data structure.
+ * @list: a link in the list of pending works
+ * @func: worker function
+ * @e: physical eraseblock to erase
+ * @vol_id: the volume ID on which this erasure is being performed
+ * @lnum: the logical eraseblock number
+ * @torture: if the physical eraseblock has to be tortured
+ * @anchor: produce a anchor PEB to by used by fastmap
+ *
+ * The @func pointer points to the worker function. If the @cancel argument is
+ * not zero, the worker has to free the resources and exit immediately. The
+ * worker has to return zero in case of success and a negative error code in
+ * case of failure.
+ */
+struct ubi_work {
+	struct list_head list;
+	int (*func)(struct ubi_device *ubi, struct ubi_work *wrk, int cancel);
+	/* The below fields are only relevant to erasure works */
+	struct ubi_wl_entry *e;
+	int vol_id;
+	int lnum;
+	int torture;
+	int anchor;
 };
 
 #include "debug.h"
@@ -520,29 +756,40 @@ void ubi_calculate_reserved(struct ubi_device *ubi);
 int ubi_check_pattern(const void *buf, uint8_t patt, int size);
 
 /* eba.c */
+#ifdef CONFIG_BLB
+int ubi_get_compat(const struct ubi_device *ubi, int vol_id);
+#endif
 int ubi_eba_unmap_leb(struct ubi_device *ubi, struct ubi_volume *vol,
 		      int lnum);
 int ubi_eba_read_leb(struct ubi_device *ubi, struct ubi_volume *vol, int lnum,
 		     void *buf, int offset, int len, int check);
 int ubi_eba_write_leb(struct ubi_device *ubi, struct ubi_volume *vol, int lnum,
-		      const void *buf, int offset, int len, int dtype);
+		      const void *buf, int offset, int len);
 int ubi_eba_write_leb_st(struct ubi_device *ubi, struct ubi_volume *vol,
-			 int lnum, const void *buf, int len, int dtype,
-			 int used_ebs);
+			 int lnum, const void *buf, int len, int used_ebs);
 int ubi_eba_atomic_leb_change(struct ubi_device *ubi, struct ubi_volume *vol,
-			      int lnum, const void *buf, int len, int dtype);
+			      int lnum, const void *buf, int len);
 int ubi_eba_copy_leb(struct ubi_device *ubi, int from, int to,
-		     struct ubi_vid_hdr *vid_hdr);
+		     struct ubi_vid_hdr *vid_hdr, int do_wl);
 int ubi_eba_init_scan(struct ubi_device *ubi, struct ubi_scan_info *si);
+unsigned long long next_sqnum(struct ubi_device *ubi);
+int self_check_eba(struct ubi_device *ubi, struct ubi_scan_info *ai_fastmap,
+                   struct ubi_scan_info *ai_scan);
 
 /* wl.c */
-int ubi_wl_get_peb(struct ubi_device *ubi, int dtype);
+int ubi_wl_get_peb(struct ubi_device *ubi);
 int ubi_wl_put_peb(struct ubi_device *ubi, int pnum, int torture);
 int ubi_wl_flush(struct ubi_device *ubi);
 int ubi_wl_scrub_peb(struct ubi_device *ubi, int pnum);
 int ubi_wl_init_scan(struct ubi_device *ubi, struct ubi_scan_info *si);
 void ubi_wl_close(struct ubi_device *ubi);
 int ubi_thread(void *u);
+struct ubi_wl_entry *ubi_wl_get_fm_peb(struct ubi_device *ubi, int anchor);
+int ubi_wl_put_fm_peb(struct ubi_device *ubi, struct ubi_wl_entry *used_e,
+                      int lnum, int torture);
+int ubi_is_erase_work(struct ubi_work *wrk);
+void ubi_refill_pools(struct ubi_device *ubi);
+int ubi_ensure_anchor_pebs(struct ubi_device *ubi);
 
 /* io.c */
 int ubi_io_read(const struct ubi_device *ubi, void *buf, int pnum, int offset,
@@ -560,6 +807,13 @@ int ubi_io_read_vid_hdr(struct ubi_device *ubi, int pnum,
 			struct ubi_vid_hdr *vid_hdr, int verbose);
 int ubi_io_write_vid_hdr(struct ubi_device *ubi, int pnum,
 			 struct ubi_vid_hdr *vid_hdr);
+#ifdef CONFIG_BLB
+int ubi_backup_init_scan(struct ubi_device *ubi, struct ubi_scan_info *si);
+int ubi_io_read_oob(const struct ubi_device *ubi, void *databuf, void *oobbuf,
+		    int pnum, int offset);
+int ubi_io_write_oob(const struct ubi_device *ubi, void *databuf, void *oobbuf,
+		    int pnum, int offset);
+#endif
 
 /* build.c */
 int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num, int vid_hdr_offset);
@@ -573,11 +827,36 @@ int ubi_volume_notify(struct ubi_device *ubi, struct ubi_volume *vol,
 int ubi_notify_all(struct ubi_device *ubi, int ntype,
 		   struct notifier_block *nb);
 int ubi_enumerate_volumes(struct notifier_block *nb);
+void free_internal_volumes(struct ubi_device *ubi);
 
 /* kapi.c */
 void ubi_do_get_device_info(struct ubi_device *ubi, struct ubi_device_info *di);
 void ubi_do_get_volume_info(struct ubi_device *ubi, struct ubi_volume *vol,
 			    struct ubi_volume_info *vi);
+
+/* scan.c */
+int compare_lebs(struct ubi_device *ubi, const struct ubi_scan_leb *seb,
+			int pnum, const struct ubi_vid_hdr *vid_hdr);
+int attach_by_scanning(struct ubi_device *ubi, int force_scan);
+int ubi_scan_add_used(struct ubi_device *ubi, struct ubi_scan_info *si,
+		int pnum, int ec, const struct ubi_vid_hdr *vid_hdr,
+		int bitflips);
+struct ubi_scan_volume *ubi_scan_find_sv(const struct ubi_scan_info *si,
+		int vol_id);
+void ubi_scan_rm_volume(struct ubi_scan_info *si, struct ubi_scan_volume *sv);
+struct ubi_scan_leb *ubi_scan_get_free_peb(struct ubi_device *ubi,
+		struct ubi_scan_info *si);
+int ubi_scan_erase_peb(struct ubi_device *ubi, const struct ubi_scan_info *si,
+		int pnum, int ec);
+int ubi_scan(struct ubi_device *ubi, struct ubi_scan_info *si, int start);
+void ubi_scan_destroy_si(struct ubi_scan_info *si);
+
+
+/* fastmap.c */
+size_t ubi_calc_fm_size(struct ubi_device *ubi);
+int ubi_update_fastmap(struct ubi_device *ubi);
+int ubi_scan_fastmap(struct ubi_device *ubi, struct ubi_scan_info *si,
+		int fm_anchor);
 
 /*
  * ubi_rb_for_each_entry - walk an RB-tree.
@@ -592,6 +871,21 @@ void ubi_do_get_volume_info(struct ubi_device *ubi, struct ubi_volume *vol,
 	     rb;                                                             \
 	     rb = rb_next(rb),                                               \
 	     pos = (rb ? container_of(rb, typeof(*pos), member) : NULL))
+
+/*
+ * ubi_scan_move_to_list - move a PEB from the volume tree to a list.
+ *
+ * @sv: volume scanning information
+ * @seb: scanning eraseblock information
+ * @list: the list to move to
+ */
+static inline void ubi_scan_move_to_list(struct ubi_scan_volume *sv,
+					 struct ubi_scan_leb *seb,
+					 struct list_head *list)
+{
+		rb_erase(&seb->u.rb, &sv->root);
+		list_add_tail(&seb->u.list, list);
+}
 
 /**
  * ubi_zalloc_vid_hdr - allocate a volume identifier header object.

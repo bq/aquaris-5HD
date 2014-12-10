@@ -86,6 +86,8 @@ Only the three quirks included above are recognized at this point:
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.AMR.WB" type="audio/amr-wb" />
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.ADPCM" type="audio/x-adpcm-ms" />
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.ADPCM" type="audio/x-adpcm-dvi-ima" />
+        <MediaCodec name="OMX.MTK.AUDIO.DECODER.GSM" type="audio/gsm" />
+        <MediaCodec name="OMX.MTK.AUDIO.DECODER.RAW" type="audio/raw" />
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.AAC" type="audio/mp4a-latm" />
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.G711" type="audio/g711-alaw" >
             <Quirk name="decoder-lies-about-number-of-channels" />
@@ -98,6 +100,7 @@ Only the three quirks included above are recognized at this point:
         </MediaCodec>
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.FLAC" type="audio/flac" />
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.WMA" type="audio/x-ms-wma" />
+        <MediaCodec name="OMX.MTK.AUDIO.DECODER.WMAPRO" type="audio/x-ms-wmapro" />
         <MediaCodec name="OMX.MTK.AUDIO.DECODER.APE" type="audio/ape" >
             <Quirk name="decoder-lies-about-number-of-channels" />
             <Quirk name="supports-multiple-frames-per-input-buffer" />
@@ -108,13 +111,14 @@ Only the three quirks included above are recognized at this point:
         <MediaCodec name="OMX.MTK.VIDEO.DECODER.AVC" type="video/avc" >
             <Quirk name="wants-NAL-fragments" />
         </MediaCodec>
+        <MediaCodec name="OMX.google.vp9.decoder" type="video/x-vnd.on2.vp9" />
         <MediaCodec name="OMX.MTK.VIDEO.DECODER.VPX" type="video/x-vnd.on2.vp8" />
         <MediaCodec name="OMX.MTK.VIDEO.DECODER.VC1" type="video/x-ms-wmv" />
-        <MediaCodec name="OMX.MTK.VIDEO.DECODER.MPEG2" type="video/mpeg2" />
         <MediaCodec name="OMX.MTK.VIDEO.DECODER.DIVX" type="video/divx" />
         <MediaCodec name="OMX.MTK.VIDEO.DECODER.DIVX3" type="video/divx3" />
         <MediaCodec name="OMX.MTK.VIDEO.DECODER.XVID" type="video/xvid" />
         <MediaCodec name="OMX.google.aac.decoder" type="audio/mp4a-latm" />
+        <MediaCodec name="OMX.MTK.VIDEO.DECODER.MJPEG" type="video/x-motion-jpeg" />
     </Decoders>
 
     <Encoders>

@@ -1,4 +1,4 @@
-#include <asm/atomic.h>
+
 
 #include "osal_typedef.h"
 #include "osal.h"
@@ -15,15 +15,17 @@
 
 INT32 gBtmDbgLevel = STP_BTM_LOG_INFO;
 
-#define STP_BTM_LOUD_FUNC(fmt, arg...)   if(gBtmDbgLevel >= STP_BTM_LOG_LOUD){ printk(KERN_DEBUG PFX_BTM "%s: "  fmt, __FUNCTION__ ,##arg);}
-#define STP_BTM_DBG_FUNC(fmt, arg...)    if(gBtmDbgLevel >= STP_BTM_LOG_DBG){ printk(KERN_DEBUG PFX_BTM "%s: "  fmt, __FUNCTION__ ,##arg);}
-#define STP_BTM_INFO_FUNC(fmt, arg...)   if(gBtmDbgLevel >= STP_BTM_LOG_INFO){ printk(PFX_BTM "[I]%s: "  fmt, __FUNCTION__ ,##arg);}
-#define STP_BTM_WARN_FUNC(fmt, arg...)   if(gBtmDbgLevel >= STP_BTM_LOG_WARN){ printk(PFX_BTM "[W]%s: "  fmt, __FUNCTION__ ,##arg);}
-#define STP_BTM_ERR_FUNC(fmt, arg...)    if(gBtmDbgLevel >= STP_BTM_LOG_ERR){  printk(PFX_BTM "[E]%s(%d):ERROR! "   fmt, __FUNCTION__ , __LINE__, ##arg);}
-#define STP_BTM_TRC_FUNC(f)              if(gBtmDbgLevel >= STP_BTM_LOG_DBG){ printk(KERN_DEBUG PFX_BTM "<%s> <%d>\n", __FUNCTION__, __LINE__);}
+#define STP_BTM_LOUD_FUNC(fmt, arg...)   if(gBtmDbgLevel >= STP_BTM_LOG_LOUD){ osal_dbg_print(PFX_BTM "%s: "  fmt, __FUNCTION__ ,##arg);}
+#define STP_BTM_DBG_FUNC(fmt, arg...)    if(gBtmDbgLevel >= STP_BTM_LOG_DBG){ osal_dbg_print(PFX_BTM "%s: "  fmt, __FUNCTION__ ,##arg);}
+#define STP_BTM_INFO_FUNC(fmt, arg...)   if(gBtmDbgLevel >= STP_BTM_LOG_INFO){ osal_dbg_print(PFX_BTM "[I]%s: "  fmt, __FUNCTION__ ,##arg);}
+#define STP_BTM_WARN_FUNC(fmt, arg...)   if(gBtmDbgLevel >= STP_BTM_LOG_WARN){ osal_dbg_print(PFX_BTM "[W]%s: "  fmt, __FUNCTION__ ,##arg);}
+#define STP_BTM_ERR_FUNC(fmt, arg...)    if(gBtmDbgLevel >= STP_BTM_LOG_ERR){  osal_dbg_print(PFX_BTM "[E]%s(%d):ERROR! "   fmt, __FUNCTION__ , __LINE__, ##arg);}
+#define STP_BTM_TRC_FUNC(f)              if(gBtmDbgLevel >= STP_BTM_LOG_DBG){ osal_dbg_print(PFX_BTM "<%s> <%d>\n", __FUNCTION__, __LINE__);}
 
 INT32 gDumplogflag = 0;
-extern void dump_uart_history(void);//uart export API
+#if WMT_PLAT_ALPS
+extern void dump_uart_history(void);
+#endif
 
 
 #define ASSERT(expr)
@@ -31,7 +33,7 @@ extern void dump_uart_history(void);//uart export API
 MTKSTP_BTM_T stp_btm_i;
 MTKSTP_BTM_T *stp_btm = &stp_btm_i;
 
-const char *g_btm_op_name[]={
+const PCHAR g_btm_op_name[]={
         "STP_OPID_BTM_RETRY",
         "STP_OPID_BTM_RST",
         "STP_OPID_BTM_DBG_DUMP",
@@ -39,9 +41,9 @@ const char *g_btm_op_name[]={
     };
 
 #if 0
-static char *_stp_pkt_type(int type){
+static PCHAR _stp_pkt_type(INT32 type){
 
-    static char s[10]; 
+    static CHAR s[10]; 
 
     switch(type){
         case WMT_TASK_INDX:
@@ -93,7 +95,7 @@ static INT32 _stp_btm_put_dump_to_nl(void)
             pkt = (STP_PACKET_T  *)buf;
             hdr = &pkt->hdr;
             if (hdr->dbg_type == STP_DBG_FW_DMP){
-                memcpy(&tmp[index], pkt->raw, pkt->hdr.len);
+                osal_memcpy(&tmp[index], pkt->raw, pkt->hdr.len);
 
                 if(pkt->hdr.len <= 1500)
                 {
@@ -101,7 +103,7 @@ static INT32 _stp_btm_put_dump_to_nl(void)
                     tmp[index + pkt->hdr.len + 1] = '\0';
 
                     //printk("\n%s\n+++\n", tmp);
-                    rc = stp_dbg_nl_send((char *)&tmp, 2);
+                    rc = stp_dbg_nl_send((PCHAR)&tmp, 2);
 
                     while(rc){
                        nl_retry++;                       
@@ -109,8 +111,8 @@ static INT32 _stp_btm_put_dump_to_nl(void)
                             break;
                        }                       
                        STP_BTM_WARN_FUNC("**dump send fails, and retry again.**\n");
-                       msleep(3);
-                       rc = stp_dbg_nl_send((char *)&tmp, 2);
+                       osal_sleep_ms(3);
+                       rc = stp_dbg_nl_send((PCHAR)&tmp, 2);
                        if(!rc){
                           STP_BTM_WARN_FUNC("****retry again ok!**\n");
                        }
@@ -118,14 +120,14 @@ static INT32 _stp_btm_put_dump_to_nl(void)
                     //schedule();
                 } else {
                     STP_BTM_INFO_FUNC("dump entry length is over long\n");
-                    BUG_ON(0);
+                    osal_bug_on(0);
                 }
                 retry = 0;
             }
         }else
         {
             retry ++;
-            msleep(100);
+            osal_sleep_ms(100);
         }
     }while((remain > 0) || (retry < 2));
 
@@ -153,7 +155,7 @@ static INT32 _stp_btm_put_dump_to_aee(void)
             pkt = (STP_PACKET_T*)buf;
             hdr = &pkt->hdr;
             if (hdr->dbg_type == STP_DBG_FW_DMP) {
-                memcpy(&tmp[0], pkt->raw, pkt->hdr.len);
+                osal_memcpy(&tmp[0], pkt->raw, pkt->hdr.len);
 
                 if (pkt->hdr.len <= 1500) {
                     tmp[pkt->hdr.len] = '\n';
@@ -162,15 +164,16 @@ static INT32 _stp_btm_put_dump_to_aee(void)
                     ret = stp_dbg_aee_send(tmp, pkt->hdr.len, 0);                 
                 } else {
                     STP_BTM_INFO_FUNC("dump entry length is over long\n");
-                    BUG_ON(0);
+                    osal_bug_on(0);
                 }
                 retry = 0;
             }
+			retry = 0;
         } else {  
             retry ++;
-            msleep(100);
+            osal_sleep_ms(20);
         }
-    }while ((remain > 0) || (retry < 2));
+    }while ((remain > 0) || (retry < 10));
 
     STP_BTM_INFO_FUNC("Exit..\n");
     return ret;
@@ -241,6 +244,7 @@ static INT32 _stp_btm_handler(MTKSTP_BTM_T *stp_btm, P_STP_BTM_OP pStpOp)
             // Flush dump data, and reset compressor
             STP_BTM_INFO_FUNC("Flush dump data\n");
             wcn_core_dump_flush(0);
+			mtk_wcn_stp_coredump_timeout_handle();
         break;
         
         default:
@@ -346,7 +350,7 @@ INT32 _stp_btm_put_act_op (
 {
     INT32 bRet = 0;
     INT32 bCleanup = 0;
-    long wait_ret = -1;
+    LONG wait_ret = -1;
 
     P_OSAL_SIGNAL pSignal = NULL;
 
@@ -453,7 +457,9 @@ static INT32 _stp_btm_proc (void *pvData)
         if(gDumplogflag)
         {
             //printk("enter place1\n");    
+            #if WMT_PLAT_ALPS
             dump_uart_history();
+            #endif
             gDumplogflag = 0;
             continue;
         }
@@ -744,7 +750,7 @@ INT32 stp_notify_btm_dump(MTKSTP_BTM_T *stp_btm)
     //printk("%s:enter++\n",__func__);
 	if(NULL == stp_btm)
 	{
-	    printk("%s: NULL POINTER\n",__func__);
+	    osal_dbg_print("%s: NULL POINTER\n",__func__);
 	    return -1;
 	}
 	else
@@ -754,4 +760,46 @@ INT32 stp_notify_btm_dump(MTKSTP_BTM_T *stp_btm)
 	    return 0;
   }
 }
+
+static inline INT32 _stp_btm_do_fw_assert(MTKSTP_BTM_T *stp_btm){
+
+	INT32 status = -1;
+	INT32 j = 0;
+	MTK_WCN_BOOL bRet = MTK_WCN_BOOL_FALSE;
+	//send assert command
+	STP_BTM_INFO_FUNC("trigger stp assert process\n");
+	bRet = stp_btm->wmt_notify(BTM_TRIGGER_STP_ASSERT_OP);
+	if (MTK_WCN_BOOL_TRUE == bRet)
+	{
+	do {  
+        if(0 != mtk_wcn_stp_coredump_start_get()){
+            status = 0;
+            break;
+        }
+		j++;
+		STP_BTM_INFO_FUNC("Wait for assert message (%d)\n", j);
+		
+        if(j > 150) 
+            break;   
+		osal_sleep_ms(20); 
+
+    } while(1);
+	}
+	else
+	{
+		status = -1;
+		STP_BTM_INFO_FUNC("trigger stp assert failed\n");
+	}
+    if (0 == status)
+		STP_BTM_INFO_FUNC("trigger stp assert succeed\n");
+    return status;
+	
+}
+
+
+INT32 stp_notify_btm_do_fw_assert(MTKSTP_BTM_T *stp_btm)
+{
+	return _stp_btm_do_fw_assert(stp_btm);
+}
+
 

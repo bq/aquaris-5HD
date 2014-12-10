@@ -80,7 +80,7 @@ void disp_scl_enable_relay_mode(BOOL enable, unsigned src_width, unsigned src_he
 #define DSCL_HRZ_FACTOR_FLD_HRZ_FACTOR                         REG_FLD(24, 0)
 
 #ifndef REG_BASE_C_MODULE
-#define DSCL_HRZ_OFFSET_FLD_HRZ_OFFSET                         REG_FLD(23, 0)
+#define DSCL_HRZ_OFFSET_FLD_HRZ_OFFSET                         REG_FLD(24, 0)
 #else
 #define DSCL_HRZ_OFFSET_FLD_HRZ_OFFSET                         REG_FLD(32, 0)
 #endif
@@ -98,7 +98,7 @@ void disp_scl_enable_relay_mode(BOOL enable, unsigned src_width, unsigned src_he
 #define DSCL_VRZ_FACTOR_FLD_VRZ_FACTOR                         REG_FLD(24, 0)
 
 #ifndef REG_BASE_C_MODULE
-#define DSCL_VRZ_OFFSET_FLD_VRZ_OFFSET                         REG_FLD(23, 0)
+#define DSCL_VRZ_OFFSET_FLD_VRZ_OFFSET                         REG_FLD(24, 0)
 #else
 #define DSCL_VRZ_OFFSET_FLD_VRZ_OFFSET                         REG_FLD(32, 0)
 #endif

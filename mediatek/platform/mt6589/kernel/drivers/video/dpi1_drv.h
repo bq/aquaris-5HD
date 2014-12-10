@@ -52,6 +52,8 @@ DPI_STATUS DPI1_EnableSeqOutput(BOOL enable);
 DPI_STATUS DPI1_SetRGBOrder(DPI_RGB_ORDER input, DPI_RGB_ORDER output);
 
 DPI_STATUS DPI1_ConfigPixelClk(DPI_POLARITY polarity, UINT32 divisor, UINT32 duty);
+DPI_STATUS DPI1_ConfigBG(BOOL enable, UINT32 BG_W, UINT32 GB_H);
+DPI_STATUS DPI1_ConfigInRBSwap(BOOL enable);
 DPI_STATUS DPI1_ConfigDataEnable(DPI_POLARITY polarity);
 DPI_STATUS DPI1_ConfigVsync(DPI_POLARITY polarity,
                            UINT32 pulseWidth, UINT32 backPorch, UINT32 frontPorch);

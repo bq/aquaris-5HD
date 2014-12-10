@@ -40,11 +40,11 @@ config NFC_WILINK
 	  Say Y here to compile support for Texas Instrument's NFC WiLink driver
 	  into the kernel or say M to compile it as module.
 
-config NFC_MSR3110
-	tristate "MSR3110 NFC driver"
-	default n
-	---help---
-	MSR3110 NFC support.
+#config NFC_MSR3110
+#	tristate "MSR3110 NFC driver"
+#	default n
+#	---help---
+#	MSR3110 NFC support.
 
 config NFC_MT6605
 	tristate "MT6605 NFC driver"

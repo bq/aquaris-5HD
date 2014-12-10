@@ -1022,7 +1022,7 @@ int yaffs2_scan_backwards(struct yaffs_dev *dev)
 	int is_unlinked;
 	u8 *chunk_data;
 
-	int file_size;
+	u32 file_size;
 	int is_shrink;
 	int found_chunks;
 	int equiv_id;

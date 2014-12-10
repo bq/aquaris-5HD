@@ -21,7 +21,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 #if 0
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -460,6 +460,9 @@ void matv_driver_init(void)
 
 }
 
+#define GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN GPIO108 //
+#define GPIO_CAMERA_SERIAL_CLK_PIN GPIO61 //
+
 static long matv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int *user_data_addr;
@@ -548,9 +551,45 @@ static long matv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			//MATV_LOGD("**** mt519x matv ioctl : set pwr = %d\n",user_data_addr[0]);
 #ifdef 	GPIO_MATV_PWR_ENABLE			
             if(matv_in_data[0]!=0)
-                mt_set_gpio_out(GPIO_MATV_PWR_ENABLE, GPIO_OUT_ONE);
+            {
+               mt_set_gpio_out(GPIO_MATV_PWR_ENABLE, GPIO_OUT_ONE);
+
+#if 0
+			   mt_set_gpio_mode(GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN,0);
+			   mt_set_gpio_dir(GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN,GPIO_DIR_OUT);
+			   mt_set_gpio_out(GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN,1);	
+#endif
+			   
+               #ifdef GPIO_ANT_SW_PIN
+			   mt_set_gpio_mode(GPIO_ANT_SW_PIN,GPIO_ANT_SW_PIN_M_GPIO);
+			   mt_set_gpio_dir(GPIO_ANT_SW_PIN,GPIO_DIR_OUT);
+			   mt_set_gpio_out(GPIO_ANT_SW_PIN,GPIO_OUT_ONE);
+			   printk("GPIO_ANT_SW_PIN switch to 1 \n");
+               #endif
+#if 0			
+               mt_set_gpio_mode(GPIO_CAMERA_SERIAL_CLK_PIN,GPIO_MODE_02);	
+#endif               
+            }
             else
-                mt_set_gpio_out(GPIO_MATV_PWR_ENABLE, GPIO_OUT_ZERO);
+            {
+               mt_set_gpio_out(GPIO_MATV_PWR_ENABLE, GPIO_OUT_ZERO);
+
+#if 0
+			   mt_set_gpio_mode(GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN,0);
+			   mt_set_gpio_dir(GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN,GPIO_DIR_OUT);
+			   mt_set_gpio_out(GPIO_MAIN_CAMERA_12V_POWER_CTRL_PIN,0);
+#endif
+			   
+               #ifdef GPIO_ANT_SW_PIN
+               mt_set_gpio_mode(GPIO_ANT_SW_PIN,GPIO_ANT_SW_PIN_M_GPIO);
+               mt_set_gpio_dir(GPIO_ANT_SW_PIN,GPIO_DIR_OUT);
+               mt_set_gpio_out(GPIO_ANT_SW_PIN,GPIO_OUT_ZERO);
+               #endif
+						   
+#if 0						   
+               mt_set_gpio_mode(GPIO_CAMERA_SERIAL_CLK_PIN,GPIO_MODE_01);								
+#endif               
+			}
 #endif            
             break;
         case MATV_SET_RST:
@@ -575,7 +614,10 @@ static long matv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                mt_set_gpio_dir(GPIO_MATV_I2S_DAT_PIN, GPIO_DIR_OUT);
                mt_set_gpio_pull_enable(GPIO_MATV_I2S_DAT_PIN,true);
                mt_set_gpio_out(GPIO_MATV_I2S_DAT_PIN, GPIO_OUT_ZERO);
-               printk("force I2s data pin low \n");
+               printk("force I2s data pin low \n");			   
+			   //mt_set_gpio_mode(GPIO_CAMERA_SERIAL_CLK_PIN,GPIO_MODE_02);			   
+               //printk("GPIO_CAMERA_SERIAL_CLK_PIN,mode2 \n");
+			   
                //~
             }
             else if (matv_in_data[0]==1) {
@@ -588,7 +630,15 @@ static long matv_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                mt_set_gpio_mode(GPIO_MATV_I2S_DAT_PIN,GPIO_MATV_I2S_DAT_PIN_M_I2SIN_DAT);
 			   #endif
 
-			   mt_set_gpio_pull_enable(GPIO_MATV_I2S_DAT_PIN,false);
+               #ifdef GPIO_MATV_I2S_DAT_PIN_M_I2S_IN_DAT
+               mt_set_gpio_mode(GPIO_MATV_I2S_DAT_PIN,GPIO_MATV_I2S_DAT_PIN_M_I2S_IN_DAT);
+               #endif
+
+               #ifdef GPIO_MATV_I2S_DAT_PIN_M_I2SIN1_DATA_IN
+               mt_set_gpio_mode(GPIO_MATV_I2S_DAT_PIN,GPIO_MATV_I2S_DAT_PIN_M_I2SIN1_DATA_IN);
+               #endif
+			   
+               mt_set_gpio_pull_enable(GPIO_MATV_I2S_DAT_PIN,false);
                mt_set_gpio_out(GPIO_MATV_I2S_DAT_PIN, GPIO_OUT_ZERO); 
                printk("put I2S data pin back \n");   
                //~  

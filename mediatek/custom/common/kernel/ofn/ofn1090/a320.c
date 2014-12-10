@@ -34,13 +34,15 @@
 #include <mach/irqs.h>
 #include <asm/io.h>
 #include <linux/platform_device.h>
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/workqueue.h>
 #include <cust_gpio_usage.h>
 #include <cust_eint.h>
 #include <cust_ofn.h>
 #include "a320.h"
 #include <linux/slab.h>
+
+#define POWER_NONE_MACRO MT65XX_POWER_NONE
 
 /******************************************************************************
  * configuration
@@ -63,25 +65,13 @@
 /******************************************************************************
  * extern functions
 *******************************************************************************/
-#ifdef MT6575
-extern void mt65xx_eint_unmask(unsigned int line);
-extern void mt65xx_eint_mask(unsigned int line);
-extern void mt65xx_eint_set_polarity(kal_uint8 eintno, kal_bool ACT_Polarity);
-extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
-extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
-extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
-                                     kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
-                                     kal_bool auto_umask);
-#endif
-
-#ifdef MT6577
-	extern void mt65xx_eint_unmask(unsigned int line);
-	extern void mt65xx_eint_mask(unsigned int line);
-	extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
-	extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
-	extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
-	extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
-#endif
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
 /******************************************************************************
  * local functions
 *******************************************************************************/
@@ -706,7 +696,7 @@ static void a320_power(struct ofn_hw *hw, unsigned int on)
 {
     static unsigned int power_on = 0;
 
-    if (hw->power_id != MT65XX_POWER_NONE) {        
+    if (hw->power_id != POWER_NONE_MACRO) {        
         AVA_LOG("power %s\n", on ? "on" : "off");
         if (power_on == on) {
             AVA_LOG("ignore power control: %d\n", on);
@@ -741,12 +731,10 @@ int a320_setup_eint(struct a320_priv *obj, void (*eint_motion)(void))
     mt_set_gpio_pull_enable(GPIO_OFN_EINT_PIN, TRUE);
     mt_set_gpio_pull_select(GPIO_OFN_EINT_PIN, GPIO_PULL_UP);
 
-    mt65xx_eint_set_sens(CUST_EINT_OFN_NUM, CUST_EINT_OFN_SENSITIVE);
-    mt65xx_eint_set_polarity(CUST_EINT_OFN_NUM, CUST_EINT_OFN_POLARITY);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_OFN_NUM, CUST_EINT_OFN_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_OFN_NUM, CUST_EINT_OFN_DEBOUNCE_EN, CUST_EINT_OFN_POLARITY, eint_motion, 0);
+  mt_eint_set_hw_debounce(CUST_EINT_OFN_NUM, CUST_EINT_OFN_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_OFN_NUM, CUST_EINT_OFN_TYPE, eint_motion, 0);
 
-    mt65xx_eint_unmask(CUST_EINT_OFN_NUM);
+	mt_eint_unmask(CUST_EINT_OFN_NUM); 
     return 0;
 }
 
@@ -866,7 +854,7 @@ exit:
     if (err) 
         a320_reset_and_init(obj->client);
     if (!atomic_read(&obj->suspended))
-        mt65xx_eint_unmask(CUST_EINT_OFN_NUM);      
+        mt_eint_unmask(CUST_EINT_OFN_NUM);      
     else
         AVA_LOG("ignore unmask\n");
 }
@@ -1082,11 +1070,11 @@ static int a320_reset_and_init(struct i2c_client* client)
     
     /*set device to shutdown*/
     mt_set_gpio_out(GPIO_OFN_DWN_PIN, GPIO_OUT_ONE);
-    mt65xx_eint_mask(CUST_EINT_OFN_NUM);
+    mt_eint_mask(CUST_EINT_OFN_NUM);
     a320_power(obj->hw, 0);
     
     /*re-init the devices*/
-    mt65xx_eint_unmask(CUST_EINT_OFN_NUM);
+    mt_eint_unmask(CUST_EINT_OFN_NUM);
     a320_power(obj->hw, 1);
     if ((err = a320_init_client(obj->client))) {
         AVA_ERR("initialize client fail!!\n");
@@ -1141,7 +1129,7 @@ static void a320_early_suspend(struct early_suspend *h)
     }
     atomic_set(&obj->suspended, 1);
     mt_set_gpio_out(GPIO_OFN_DWN_PIN, GPIO_OUT_ONE);
-    mt65xx_eint_mask(CUST_EINT_OFN_NUM);
+    mt_eint_mask(CUST_EINT_OFN_NUM);
     a320_power(obj->hw, 0);
 }
 /*----------------------------------------------------------------------------*/
@@ -1157,7 +1145,7 @@ static void a320_late_resume(struct early_suspend *h)
     }
     
     atomic_set(&obj->suspended, 0);
-    mt65xx_eint_unmask(CUST_EINT_OFN_NUM);
+    mt_eint_unmask(CUST_EINT_OFN_NUM);
     a320_power(obj->hw, 1);
     if ((err = a320_init_client(obj->client))) {
         AVA_ERR("initialize client fail!!\n");

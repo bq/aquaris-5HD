@@ -1,2 +1,0 @@
-on property:ro.build.type=eng
-    write /proc/sys/fs/suid_dumpable 2

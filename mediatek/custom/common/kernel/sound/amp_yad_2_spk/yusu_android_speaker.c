@@ -21,24 +21,9 @@
 #include <linux/delay.h>
 #include "yusu_android_speaker.h"
 
-#if defined(MT6575)
 #include <mach/mt_gpio.h>
 #include <mach/mt_typedefs.h>
-#include <mach/mt_clock_manager.h>
-#include <mach/mt_pmic_feature_api.h>
-#include <linux/pmic6326_sw.h>
 
-#elif defined(MT6577)
-#include <mach/mt_gpio.h>
-#include <mach/mt_typedefs.h>
-#include <mach/mt_clock_manager.h>
-#include <mach/mt_pmic_feature_api.h>
-#include <linux/pmic6326_sw.h>
-
-#elif defined(MT6589)
-#include <mach/mt_gpio.h>
-#include <mach/mt_typedefs.h>
-#endif
 /*****************************************************************************
 *                C O M P I L E R      F L A G S
 ******************************************************************************

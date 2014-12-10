@@ -119,6 +119,10 @@ on post-fs
     chown system system /system/data
     chmod 0777 /system/data
 
+    # We chown/chmod /data again so because mount is run as root + defaults
+    chown system system /data
+    chmod 0771 /data
+
     # Same reason as /data above
     chown system cache /cache
     chmod 0770 /cache
@@ -174,15 +178,9 @@ on post-fs
     chown dhcp dhcp /data/misc/dhcp
 
     # device info interface
-    insmod /system/lib/modules/devinfo.ko
     mknod /dev/devmap c 196 0;
     chmod 0444 /dev/devmap
-    chown root media /dev/devmap
-
-    # load driver base driver
-    insmod /system/lib/modules/mtk_drvb_75.ko
-    mknod /dev/drvb c 176 0
-    chmod 0666 /dev/drvb
+    chown root system /dev/devmap
 
 ## Custom pos-fs area (START)
 # Please add custom fs operation below
@@ -190,44 +188,6 @@ on post-fs
 #
 # Connectivity related modules and character device nodes (Begin)
 #
-
-    #/dev/ttyMT2 for 662x_launcher
-    chmod 0660 /dev/ttyMT2
-    chown system system /dev/ttyMT2
-
-    chmod 0660 /dev/ttyMT1
-    chown system system /dev/ttyMT1
-
-    # STP, WMT, GPS, FM and BT Driver
-    insmod /system/lib/modules/mtk_hif_sdio.ko
-    insmod /system/lib/modules/mtk_stp_wmt.ko
-    insmod /system/lib/modules/mtk_stp_uart.ko
-    insmod /system/lib/modules/mtk_stp_gps.ko
-    insmod /system/lib/modules/mtk_stp_bt.ko
-    insmod /system/lib/modules/mtk_fm_drv.ko
-    #insmod /system/lib/modules/mtk_fm_priv.ko
-    insmod /system/lib/modules/mtk_wmt_wifi.ko
-
-    # Create char device file for WMT, GPS, BT, FM, WIFI
-    mknod /dev/stpwmt c 190 0;
-    mknod /dev/stpgps c 191 0;
-    mknod /dev/stpbt  c 192 0;
-    mknod /dev/fm     c 193 0;
-    chmod 0660 /dev/stpwmt
-    chown system system /dev/stpwmt
- 
-    mknod /dev/wmtWifi c 153 0
-    chmod 0666 /dev/wmtWifi
-
-    # BT
-    chmod 0660 /dev/stpbt
-    chown bluetooth radio /dev/stpbt
-
-    # FM Radio device, FIXME: this is not a proper way to set permissions
-    chmod 0666 /dev/fm
-    # GPS
-    chmod 0666 /dev/gps
-    chmod 0660 /dev/stpgps
 
     # WiFi
     mkdir /data/misc/wifi 0770 wifi wifi
@@ -264,9 +224,12 @@ on post-fs
     mkdir /data/nvram/md  0770 root nvram
     mkdir /data/nvram/md2 0770 root nvram
 
-    insmod /system/lib/modules/ccci_plat.ko
-    insmod /system/lib/modules/ccci.ko
-    chown ccci ccci /sys/class/BOOT/BOOT/boot/md
+#  Build-in Modified - S
+#   insmod /system/lib/modules/ccci_plat.ko
+#   insmod /system/lib/modules/ccci.ko
+#  Build-in Modified - E
+#   chown ccci ccci /sys/class/BOOT/BOOT/boot/md
+    chown ccci ccci /sys/kernel/ccci/boot
     # M4U
     #insmod /system/lib/modules/m4u.ko
     #mknod /dev/M4U_device c 188 0
@@ -280,18 +243,18 @@ on post-fs
     chmod 0666 /dev/gyroscope
 
     #VideoCodec
-    insmod /system/lib/modules/vcodec_kernel_driver.ko
+    #insmod /system/lib/modules/vcodec_kernel_driver.ko
     mknod /dev/Vcodec c 189 0
     chmod 0666 /dev/Vcodec
 
 
     mkdir /data/amit/
 
-    # GPIO
-    chmod 0666 /dev/mtgpio
 ## Custom pos_fs area (END) 
 
 on boot
+    start drvbd
+
 # basic network init
     ifup lo
     hostname localhost
@@ -328,6 +291,11 @@ on property:ro.debuggable=1
 # adbd is controlled via property triggers in init.<platform>.usb.rc
 service adbd /sbin/adbd
     class core
+
+service drvbd /system/bin/drvbd
+    class main
+    user system
+    group system
 
 ## Custom service area (START)
 # Please add custom service below
@@ -381,10 +349,6 @@ service factory_with_image /system/bin/logwrapper /sbin/factory
 #
 # Connectivity related services (Begin)
 #
-service 662x_launcher /system/bin/logwrapper /system/bin/6620_launcher -b 4000000 -p /system/etc/firmware/ -d /dev/ttyMT2
-    user system
-    group system
-    oneshot
 
 service wlanLoader /system/bin/wlan_loader
     user root

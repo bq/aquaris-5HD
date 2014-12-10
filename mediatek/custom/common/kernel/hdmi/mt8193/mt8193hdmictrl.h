@@ -687,6 +687,9 @@ extern u8 bCheckPordHotPlug(u8 bMode);
 extern void vSetHDMITxPLLTrigger(void);
 extern void vResetHDMIPLL(void);
 extern void vHotPlugPinInit(void);
-
+extern void vBlackHDMIOnly(void);
+extern void vUnBlackHDMIOnly(void);
+extern void UnMuteHDMIAudio(void);
+extern void MuteHDMIAudio(void);
 #endif
 #endif

@@ -14,7 +14,7 @@
 #include <linux/ioctl.h>
 
 /* 7-bit addr: 0x10 (SDO connected to GND); 0x11 (SDO connected to VDDIO) */
-#define BMA255_I2C_ADDR				0x10
+#define BMA255_I2C_ADDR				0x11
 /* chip ID */
 #define BMA255_FIXED_DEVID			0xFA
 

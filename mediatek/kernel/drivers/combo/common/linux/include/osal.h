@@ -31,13 +31,15 @@
 #include <linux/kthread.h>
 #include <linux/jiffies.h>
 #include <linux/slab.h>
-#ifdef WMT_PLAT_ALPS
+#if defined(WMT_PLAT_ALPS) && WMT_PLAT_ALPS
 #include <linux/aee.h>
 #endif
 #include <linux/kfifo.h>
 #include <linux/wakelock.h>
 #include <linux/log2.h>
 #include <osal_typedef.h>
+#include <asm/atomic.h>
+
 /*******************************************************************************
 *                         C O M P I L E R   F L A G S
 ********************************************************************************
@@ -259,9 +261,13 @@ extern char * osal_strncpy(char *dst, const char *src, UINT32 len);
 extern char * osal_strcat(char *dst, const char *src);
 extern char * osal_strncat(char *dst, const char *src, UINT32 len);
 extern char * osal_strchr(const char *str, UINT8 c);
+extern char *osal_strnstr(char *str1, const char *str2, int n);
 extern char * osal_strsep(char **str, const char *c);
+extern void osal_bug_on(unsigned long val);
+
 extern LONG osal_strtol(const char *str, char **c, UINT32 adecimal);
 extern INT32 osal_snprintf(char *buf, UINT32 len, const char*fmt, ...);
+extern char *osal_strstr(char *str1, const char *str2);
 
 extern INT32 osal_print(const char *str, ...);
 extern INT32 osal_dbg_print(const char *str, ...);
@@ -275,7 +281,7 @@ extern VOID* osal_memset(VOID *buf, INT32 i, UINT32 len);
 extern VOID* osal_memcpy(VOID *dst, const VOID *src, UINT32 len);
 extern INT32 osal_memcmp(const VOID *buf1, const VOID *buf2, UINT32 len);
 
-extern INT32 osal_msleep(UINT32 ms);
+extern INT32 osal_sleep_ms(UINT32 ms);
 
 extern INT32 osal_timer_create(P_OSAL_TIMER);
 extern INT32 osal_timer_start(P_OSAL_TIMER, UINT32);

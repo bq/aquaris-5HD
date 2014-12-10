@@ -401,8 +401,9 @@ void my_mem_dump(int *mem, int size,void (*end)(void),char *fmt,...);
 
 #define CCCI_IOC_MAGIC 'C'
 #define CCCI_IOC_MD_RESET				_IO(CCCI_IOC_MAGIC, 0)
-#define CCCI_IOC_PCM_BASE_ADDR			_IOR(CCCI_IOC_MAGIC, 2, unsigned int)
-#define CCCI_IOC_PCM_LEN				_IOR(CCCI_IOC_MAGIC, 3, unsigned int)
+#define CCCI_IOC_GET_MD_STATE			_IOR(CCCI_IOC_MAGIC, 1, unsigned int) // audio
+#define CCCI_IOC_PCM_BASE_ADDR			_IOR(CCCI_IOC_MAGIC, 2, unsigned int) // audio
+#define CCCI_IOC_PCM_LEN				_IOR(CCCI_IOC_MAGIC, 3, unsigned int) // audio
 #define CCCI_IOC_FORCE_MD_ASSERT		_IO(CCCI_IOC_MAGIC, 4)
 #define CCCI_IOC_ALLOC_MD_LOG_MEM		_IO(CCCI_IOC_MAGIC, 5)
 #define CCCI_IOC_DO_MD_RST				_IO(CCCI_IOC_MAGIC, 6)

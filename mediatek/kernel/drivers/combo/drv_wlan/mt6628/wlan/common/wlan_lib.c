@@ -1590,7 +1590,7 @@ wlanAdapterStart (
                 UINT_32     u4MailBox0;
 
                 nicGetMailbox(prAdapter, 0, &u4MailBox0);
-                DBGLOG(INIT, ERROR, ("Waiting for Ready bit: Timeout, ID=%d\n",
+                DBGLOG(INIT, ERROR, ("Waiting for Ready bit: Timeout, ID=%lu\n",
                         (u4MailBox0 & 0x0000FFFF)));
                 u4Status = WLAN_STATUS_FAILURE;
                 break;
@@ -1647,6 +1647,8 @@ wlanAdapterStart (
             /* 4. query for NIC capability */
             wlanQueryNicCapability(prAdapter);
 #endif
+			/* 4.1 query for compiler flags */
+			wlanQueryCompileFlags(prAdapter);
 
             /* 5. Override network address */
             wlanUpdateNetworkAddress(prAdapter);
@@ -1699,7 +1701,7 @@ wlanAdapterStart (
 
         prAdapter->u4MaxSpLen = prRegInfo->u4MaxSpLen;
 
-        DBGLOG(INIT, TRACE, ("[1] fgEnArpFilter:0x%x, u4UapsdAcBmp:0x%x, u4MaxSpLen:0x%x",
+        DBGLOG(INIT, TRACE, ("[1] fgEnArpFilter:0x%lx, u4UapsdAcBmp:0x%lx, u4MaxSpLen:0x%lx",
                 prAdapter->fgEnArpFilter,
                 prAdapter->u4UapsdAcBmp,
                 prAdapter->u4MaxSpLen));
@@ -1756,7 +1758,16 @@ wlanAdapterStart (
 #else
         prAdapter->u4PowerMode = ENUM_PSP_CONTINUOUS_ACTIVE;
 #endif
+        {/*CR:WCNAE00007101*/
+            struct net_device *prDev = prAdapter->prGlueInfo->prDevHandler;
 
+            if (prDev != NULL) {
+                glBusSetIrq(prDev, NULL, prAdapter->prGlueInfo);
+            }
+            else {
+                printk(KERN_INFO "Skip glBusSetIrq because of the prDev\n");
+            }
+        }
         nicConfigPowerSaveProfile(
             prAdapter,
             NETWORK_TYPE_AIS_INDEX, //FIXIT
@@ -2213,7 +2224,7 @@ wlanSendCommand (
 
             if (prCmdInfo->fgSetQuery) {
                 HAL_MCR_WR(prAdapter,
-                        (prCmdAccessReg->u4Address & BITS(2,31)), //address is in DWORD unit
+                        (unsigned)(prCmdAccessReg->u4Address & BITS(2,31)), //address is in DWORD unit
                         prCmdAccessReg->u4Data);
             }
             else {
@@ -2225,7 +2236,7 @@ wlanSendCommand (
                 prEventAccessReg->u4Address = u4Address;
 
                 HAL_MCR_RD(prAdapter,
-                       prEventAccessReg->u4Address & BITS(2,31), //address is in DWORD unit
+                       (unsigned)(prEventAccessReg->u4Address & BITS(2,31)), //address is in DWORD unit
                        &prEventAccessReg->u4Data);
             }
         }
@@ -3936,7 +3947,7 @@ wlanProcessSecurityFrame(
             QUEUE_REMOVE_HEAD(&prAdapter->rFreeCmdList, prCmdInfo, P_CMD_INFO_T);
             KAL_RELEASE_SPIN_LOCK(prAdapter, SPIN_LOCK_CMD_RESOURCE);
 
-            DBGLOG(RSN, INFO, ("T1X len=%d\n", u4PacketLen));
+            DBGLOG(RSN, INFO, ("T1X len=%lu\n", u4PacketLen));
 
             if (prCmdInfo) {
                 P_STA_RECORD_T          prStaRec;
@@ -4434,6 +4445,112 @@ wlanQueryNicCapability(
     DBGLOG(INIT, INFO, (" RF CAL FAIL  = (%d),BB CAL FAIL  = (%d)\n",
             prEventNicCapability->ucRfCalFail ,prEventNicCapability->ucBbCalFail ));
 #endif
+    return WLAN_STATUS_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+/*!
+* @brief This function is called to retrieve compiler flag from firmware
+*
+* @param prAdapter      Pointer of Adapter Data Structure
+*
+* @return WLAN_STATUS_SUCCESS
+*         WLAN_STATUS_FAILURE
+*/
+/*----------------------------------------------------------------------------*/
+WLAN_STATUS
+wlanQueryCompileFlag(
+    IN P_ADAPTER_T prAdapter, 
+    IN UINT_32 u4QueryID,
+    OUT PUINT_32 pu4CompilerFlag
+    )
+{
+    UINT_8 ucCmdSeqNum;
+    P_CMD_INFO_T prCmdInfo;
+    P_WIFI_CMD_T prWifiCmd;
+    UINT_32 u4RxPktLength;
+    UINT_8 aucBuffer[sizeof(WIFI_EVENT_T) + sizeof(CMD_SW_DBG_CTRL_T)];
+    P_HIF_RX_HEADER_T prHifRxHdr;
+    P_WIFI_EVENT_T prEvent;
+    P_CMD_SW_DBG_CTRL_T prCmdNicCompileFlag, prEventNicCompileFlag;
+
+    ASSERT(prAdapter);
+
+    DEBUGFUNC(__FUNCTION__);
+
+    // 1. Allocate CMD Info Packet and its Buffer
+    prCmdInfo = cmdBufAllocateCmdInfo(prAdapter, CMD_HDR_SIZE + sizeof(CMD_SW_DBG_CTRL_T));
+    if (!prCmdInfo) {
+        DBGLOG(INIT, ERROR, ("Allocate CMD_INFO_T ==> FAILED.\n"));
+        return WLAN_STATUS_FAILURE;
+    }
+
+    // increase command sequence number
+    ucCmdSeqNum = nicIncreaseCmdSeqNum(prAdapter);
+
+    // compose CMD_BUILD_CONNECTION cmd pkt
+    prCmdInfo->eCmdType = COMMAND_TYPE_GENERAL_IOCTL;
+    prCmdInfo->u2InfoBufLen = CMD_HDR_SIZE + sizeof(CMD_SW_DBG_CTRL_T);
+    prCmdInfo->pfCmdDoneHandler = NULL;
+    prCmdInfo->fgIsOid = FALSE;
+    prCmdInfo->ucCID = CMD_ID_SW_DBG_CTRL;
+    prCmdInfo->fgSetQuery = FALSE;
+    prCmdInfo->fgNeedResp = TRUE;
+    prCmdInfo->fgDriverDomainMCR = FALSE;
+    prCmdInfo->ucCmdSeqNum = ucCmdSeqNum;
+    prCmdInfo->u4SetInfoLen = 0;
+
+    // Setup WIFI_CMD_T
+    prWifiCmd = (P_WIFI_CMD_T)(prCmdInfo->pucInfoBuffer);
+    prWifiCmd->u2TxByteCount_UserPriority = prCmdInfo->u2InfoBufLen;
+    prWifiCmd->ucCID = prCmdInfo->ucCID;
+    prWifiCmd->ucSetQuery = prCmdInfo->fgSetQuery;
+    prWifiCmd->ucSeqNum = prCmdInfo->ucCmdSeqNum;
+
+    // Fill up SW CR
+    prCmdNicCompileFlag = (P_CMD_SW_DBG_CTRL_T)(prWifiCmd->aucBuffer);
+    
+    prCmdNicCompileFlag->u4Id = u4QueryID;
+
+    wlanSendCommand(prAdapter, prCmdInfo);
+    cmdBufFreeCmdInfo(prAdapter, prCmdInfo);
+
+    if(nicRxWaitResponse(prAdapter,
+                1,
+                aucBuffer,
+                sizeof(WIFI_EVENT_T) + sizeof(CMD_SW_DBG_CTRL_T),
+                &u4RxPktLength) != WLAN_STATUS_SUCCESS) {
+        return WLAN_STATUS_FAILURE;
+    }
+
+    // header checking ..
+    prHifRxHdr = (P_HIF_RX_HEADER_T)aucBuffer;
+    if(prHifRxHdr->u2PacketType != HIF_RX_PKT_TYPE_EVENT) {
+        return WLAN_STATUS_FAILURE;
+    }
+
+    prEvent = (P_WIFI_EVENT_T)aucBuffer;
+    if(prEvent->ucEID != EVENT_ID_SW_DBG_CTRL) {
+        return WLAN_STATUS_FAILURE;
+    }
+
+    prEventNicCompileFlag = (P_CMD_SW_DBG_CTRL_T)(prEvent->aucBuffer);
+
+    *pu4CompilerFlag = prEventNicCompileFlag->u4Data;
+
+    return WLAN_STATUS_SUCCESS;
+}
+
+WLAN_STATUS
+wlanQueryCompileFlags(
+    IN P_ADAPTER_T prAdapter
+    )
+{
+    wlanQueryCompileFlag(prAdapter, 0xA0240000, &prAdapter->u4FwCompileFlag0);
+    wlanQueryCompileFlag(prAdapter, 0xA0240001, &prAdapter->u4FwCompileFlag1);
+
+    DBGLOG(INIT, TRACE, ("Compile Flags: 0x%08lx 0x%08lx\n", prAdapter->u4FwCompileFlag0, prAdapter->u4FwCompileFlag1));
+
     return WLAN_STATUS_SUCCESS;
 }
 
@@ -5034,6 +5151,7 @@ wlanTxPendingPackets (
     ASSERT(pfgHwAccess);
 
     // <1> dequeue packet by txDequeuTxPackets()
+    /* Note: prMsduInfo is a packet list queue */
     KAL_ACQUIRE_SPIN_LOCK(prAdapter, SPIN_LOCK_QM_TX_QUEUE);
     prMsduInfo = qmDequeueTxPackets(prAdapter, &prTxCtrl->rTc);
     KAL_RELEASE_SPIN_LOCK(prAdapter, SPIN_LOCK_QM_TX_QUEUE);
@@ -5546,4 +5664,129 @@ wlanCheckSystemConfiguration (
 
     return WLAN_STATUS_SUCCESS;
 }
+WLAN_STATUS 
+wlanoidQueryStaStatistics (
+    IN P_ADAPTER_T  prAdapter,
+    IN PVOID        pvQueryBuffer,
+    IN UINT_32      u4QueryBufferLen,
+    OUT PUINT_32    pu4QueryInfoLen
+    )
+{
+	WLAN_STATUS rResult = WLAN_STATUS_FAILURE;
+	P_STA_RECORD_T prStaRec, prTempStaRec;
+	P_PARAM_GET_STA_STATISTICS prQueryStaStatistics;
+    UINT_8 ucStaRecIdx;
+    P_QUE_MGT_T prQM = &prAdapter->rQM;
+    CMD_GET_STA_STATISTICS_T rQueryCmdStaStatistics;
+    UINT_8 ucIdx;
+	
+	do {
+        ASSERT(pvQueryBuffer);
+
+        //4 1. Sanity test
+        if ((prAdapter == NULL) || (pu4QueryInfoLen == NULL)) {
+            break;
+        }
+
+		if ((u4QueryBufferLen) && (pvQueryBuffer == NULL)) {
+			break;
+		}
+
+		if (u4QueryBufferLen < sizeof(PARAM_GET_STA_STA_STATISTICS)) {
+			*pu4QueryInfoLen = sizeof(PARAM_GET_STA_STA_STATISTICS);
+			rResult = WLAN_STATUS_BUFFER_TOO_SHORT;
+			break;
+		}
+			 		
+		prQueryStaStatistics = (P_PARAM_GET_STA_STATISTICS)pvQueryBuffer;
+        *pu4QueryInfoLen = sizeof(PARAM_GET_STA_STA_STATISTICS);
+
+        //4 5. Get driver global QM counter
+        for(ucIdx = TC0_INDEX; ucIdx <= TC3_INDEX; ucIdx++) {
+            prQueryStaStatistics->au4TcAverageQueLen[ucIdx] = prQM->au4AverageQueLen[ucIdx];
+            prQueryStaStatistics->au4TcCurrentQueLen[ucIdx] = prQM->au4CurrentTcResource[ucIdx];
+        }
+
+        //4 2. Get StaRec by MAC address
+        prStaRec = NULL;
+        
+        for(ucStaRecIdx = 0; ucStaRecIdx < CFG_NUM_OF_STA_RECORD; ucStaRecIdx++){
+            prTempStaRec = &(prAdapter->arStaRec[ucStaRecIdx]);
+            if(prTempStaRec->fgIsValid && prTempStaRec->fgIsInUse){
+                if(EQUAL_MAC_ADDR(prTempStaRec->aucMacAddr, prQueryStaStatistics->aucMacAddr)){
+                    prStaRec = prTempStaRec;
+                    break;
+                }
+            }
+        }
+
+        if(!prStaRec) {
+            rResult = WLAN_STATUS_INVALID_DATA;
+            break;
+        }
+
+        prQueryStaStatistics->u4Flag |= BIT(0);
+
+        #if CFG_ENABLE_PER_STA_STATISTICS
+        //4 3. Get driver statistics
+        prQueryStaStatistics->u4TxTotalCount = prStaRec->u4TotalTxPktsNumber;
+        prQueryStaStatistics->u4TxExceedThresholdCount = prStaRec->u4ThresholdCounter;
+        prQueryStaStatistics->u4TxMaxTime = prStaRec->u4MaxTxPktsTime;
+        if(prStaRec->u4TotalTxPktsNumber) {
+            prQueryStaStatistics->u4TxAverageProcessTime = (prStaRec->u4TotalTxPktsTime / prStaRec->u4TotalTxPktsNumber);
+        }
+        else {
+            prQueryStaStatistics->u4TxAverageProcessTime = 0;
+        }
+
+        for(ucIdx = TC0_INDEX; ucIdx <= TC3_INDEX; ucIdx++) {
+            prQueryStaStatistics->au4TcResourceEmptyCount[ucIdx] = prQM->au4QmTcResourceEmptyCounter[prStaRec->ucNetTypeIndex][ucIdx];
+            /* Reset */
+            prQM->au4QmTcResourceEmptyCounter[prStaRec->ucNetTypeIndex][ucIdx] = 0;
+        }
+
+        //4 4.1 Reset statistics
+        prStaRec->u4ThresholdCounter = 0;
+        prStaRec->u4TotalTxPktsNumber = 0;
+        prStaRec->u4TotalTxPktsTime = 0;
+        prStaRec->u4MaxTxPktsTime = 0;
+        #endif
+
+        for(ucIdx = TC0_INDEX; ucIdx <= TC3_INDEX; ucIdx++) {
+            prQueryStaStatistics->au4TcQueLen[ucIdx] = prStaRec->arTxQueue[ucIdx].u4NumElem;
+        }
+        
+        rResult = WLAN_STATUS_SUCCESS;
+
+        //4 6. Ensure FW supports get station link status
+        if(prAdapter->u4FwCompileFlag0 & COMPILE_FLAG0_GET_STA_LINK_STATUS) {
+
+            rQueryCmdStaStatistics.ucIndex = prStaRec->ucIndex;
+            COPY_MAC_ADDR(rQueryCmdStaStatistics.aucMacAddr, prQueryStaStatistics->aucMacAddr);
+            rQueryCmdStaStatistics.ucReadClear = TRUE;
+            
+            rResult = wlanSendSetQueryCmd(prAdapter,
+                            CMD_ID_GET_STA_STATISTICS,
+                            FALSE,
+                            TRUE,
+                            TRUE,
+                            nicCmdEventQueryStaStatistics,
+                            nicOidCmdTimeoutCommon,
+                            sizeof(CMD_GET_STA_STATISTICS_T),
+                            (PUINT_8)&rQueryCmdStaStatistics,
+                            pvQueryBuffer,
+                            u4QueryBufferLen
+                            );
+            
+            prQueryStaStatistics->u4Flag |= BIT(1);
+        }
+        else {
+            rResult = WLAN_STATUS_NOT_SUPPORTED;
+        }
+        
+	} while (FALSE);
+    
+	return rResult;
+} /* wlanoidQueryP2pVersion */
+
 

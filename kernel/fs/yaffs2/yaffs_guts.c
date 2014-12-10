@@ -4097,7 +4097,7 @@ void yaffs_resize_file_down(struct yaffs_obj *obj, loff_t new_size)
 int yaffs_resize_file(struct yaffs_obj *in, loff_t new_size)
 {
 	struct yaffs_dev *dev = in->my_dev;
-	int old_size = in->variant.file_variant.file_size;
+	loff_t old_size = in->variant.file_variant.file_size;
 
 	yaffs_flush_file_cache(in);
 	yaffs_invalidate_whole_cache(in);
@@ -4833,7 +4833,7 @@ int yaffs_get_obj_name(struct yaffs_obj *obj, YCHAR * name, int buffer_size)
 	return strnlen(name, YAFFS_MAX_NAME_LENGTH);
 }
 
-int yaffs_get_obj_length(struct yaffs_obj *obj)
+u32 yaffs_get_obj_length(struct yaffs_obj *obj)
 {
 	/* Dereference any hard linking */
 	obj = yaffs_get_equivalent_obj(obj);

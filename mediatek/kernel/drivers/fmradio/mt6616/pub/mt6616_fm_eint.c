@@ -25,7 +25,7 @@
 #include "fm_err.h"
 #include "fm_eint.h"
 
-#ifdef MT6516
+#if 0//def MT6516
 #include <mach/mt6516_eint.h>
 #include <mach/mt6516_gpio.h>
 #else
@@ -46,7 +46,7 @@ struct fm_eint_interface {
 };
 
 
-#ifdef MT6516
+#if 0//def MT6516
 extern void MT6516_EINTIRQUnmask(fm_u32 line);
 extern void MT6516_EINTIRQMask(fm_u32 line);
 extern void MT6516_EINT_Set_HW_Debounce(fm_u8 eintno, fm_u32 ms);
@@ -57,7 +57,7 @@ extern void MT6516_EINT_Registration(fm_u8 eintno, kal_bool Dbounce_En,
 #endif
 
 static struct fm_eint_interface fm_eint_ops = {
-#ifdef MT6516
+#if 0//def MT6516
     .mask = MT6516_EINTIRQMask,
     .unmask = MT6516_EINTIRQUnmask,
     .set_hw_debounce = MT6516_EINT_Set_HW_Debounce,

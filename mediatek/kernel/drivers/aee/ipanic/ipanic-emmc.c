@@ -1,15 +1,20 @@
 #ifdef MTK_EMMC_SUPPORT
 
+#include <linux/err.h>
+#include <linux/kmsg_dump.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/aee.h>
 #include "ipanic.h"
 #include <linux/delay.h>
-#include <sd_misc.h>
+#include <linux/mmc/sd_misc.h>
+#include <linux/mrdump.h>
+#include <mach/wd_api.h>
 #define EMMC_BLOCK_SIZE 512
 
-static u8 *emmc_bounce;
+u8 *emmc_bounce;
+extern u8 *log_temp;
 
 static int in_panic = 0;
 extern int msdc_init_panic(int dev);
@@ -19,6 +24,10 @@ extern int card_dump_func_read(unsigned char* buf, unsigned int len, unsigned lo
 #ifdef MTK_MMPROFILE_SUPPORT
 extern unsigned int MMProfileGetDumpSize(void);
 extern void MMProfileGetDumpBuffer(unsigned int Start, unsigned int *pAddr, unsigned int *pSize);
+#endif
+
+#ifdef CONFIG_MTK_WQ_DEBUG
+extern int mt_dump_wq_debugger(void);
 #endif
 
 char *emmc_allocate_and_read(int offset, int length)
@@ -34,12 +43,15 @@ char *emmc_allocate_and_read(int offset, int length)
 	buff = kzalloc(size, GFP_KERNEL);
 	if (buff != NULL) {
 		if (card_dump_func_read(buff, size, offset, DUMP_INTO_BOOT_CARD_IPANIC) != 0) {
+		  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG,
+			      "%s: read from IPANIC data failed(offset:%d,size:%d)\n", __FUNCTION__, offset, size);
 			kfree(buff);
-			buff = NULL;
+		  return NULL;
 		}
 	}
 	else {
 		xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: Cannot allocate buffer to read(len:%d)\n", __FUNCTION__, length);
+		return NULL;
 	}
 	ipanic_block_scramble(buff, size);
 	return buff;
@@ -111,7 +123,7 @@ static struct aee_oops *emmc_ipanic_oops_copy(void)
             oops->userspace_info = emmc_allocate_and_read(hdr->userspace_info_offset, hdr->userspace_info_length);
             oops->userspace_info_len = hdr->userspace_info_length;
             if (oops->userspace_info == NULL) {
-                xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read usrespace info failed\n", __FUNCTION__);
+	      xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read usrespace info failed, invalid length 0x%x\n", __FUNCTION__, oops->userspace_info_len);
                 goto error_return;
             }
         }
@@ -120,21 +132,20 @@ static struct aee_oops *emmc_ipanic_oops_copy(void)
 		oops->android_main = emmc_allocate_and_read(hdr->android_main_offset, hdr->android_main_length);
 		oops->android_main_len  = hdr->android_main_length;
 		if (oops->android_main == NULL)	{
-			xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read android_main failed\n", __FUNCTION__);
+		  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read android_main failed, invalid length 0x%x\n", __FUNCTION__, oops->android_main_len);
 			goto error_return;
 		}
 		
 		oops->android_radio  = emmc_allocate_and_read(hdr->android_radio_offset, hdr->android_radio_length);
 		oops->android_radio_len = hdr->android_radio_length;
 		if (oops->android_radio == NULL) {
-			xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read android_radio failed\n", __FUNCTION__);
-			goto error_return;
+		  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read android_radio failed, invalid length 0x%x\n", __FUNCTION__, oops->android_radio_len);
 		}		    
 		
 		oops->android_system = emmc_allocate_and_read(hdr->android_system_offset, hdr->android_system_length);
 		oops->android_system_len = hdr->android_system_length;
 		if (oops->android_system == NULL) {
-			xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read android_system failed\n", __FUNCTION__);
+		  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read android_system failed, invalid length 0x%x\n", __FUNCTION__, oops->android_system_len);
 			goto error_return;
 		}
 
@@ -148,6 +159,18 @@ static struct aee_oops *emmc_ipanic_oops_copy(void)
 		if (oops->mmprofile == NULL) {
 		  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read mmprofile failed, offset - 0x%x, length - 0x%x\n", __FUNCTION__, oops->mmprofile, oops->mmprofile_len);
 		}
+
+		if (hdr->mini_rdump_length == 0) {
+		  oops->mini_rdump = NULL;
+		  oops->mini_rdump_len = 0;
+		} else {
+		  oops->mini_rdump = emmc_allocate_and_read(hdr->mini_rdump_offset, hdr->mini_rdump_length);
+		  oops->mini_rdump_len = hdr->mini_rdump_length;
+		}
+		if (oops->mini_rdump == NULL) {
+		  xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: read mini_rdump failed, offset - 0x%x, length - 0x%x\n", __FUNCTION__, oops->mini_rdump, oops->mini_rdump_len);
+		}
+		
 		xlog_printk(ANDROID_LOG_DEBUG, IPANIC_LOG_TAG, "ipanic_oops_copy return OK\n");
 		kfree(hdr);
 		return oops;
@@ -163,7 +186,7 @@ error_return:
 	return NULL;
 }
 
-static int emmc_ipanic_write(void *buf, int off, int len)
+int emmc_ipanic_write(void *buf, int off, int len)
 {
 	int rem = len & (EMMC_BLOCK_SIZE - 1);
 	len = len & ~(EMMC_BLOCK_SIZE - 1);
@@ -179,6 +202,34 @@ static int emmc_ipanic_write(void *buf, int off, int len)
 			return -1;
 	}
 	return len + rem;
+}
+
+void* ipanic_next_write(void* (*next)(void *data, unsigned char *buffer, size_t sz_buf, int *size),
+		 void *data, int off, size_t *sz_total) {
+	void* errno = 0;
+	size_t size = 0;
+	unsigned char *ipanic_buffer = emmc_bounce;
+	size_t sz_ipanic_buffer = PAGE_SIZE;
+	
+	errno = next(data, ipanic_buffer, sz_ipanic_buffer, &size);
+	if (IS_ERR(errno))
+		return errno;
+	
+	for (*sz_total = 0; size != 0; *sz_total += size) {
+		if (off & (EMMC_BLOCK_SIZE - 1))
+			return ERR_PTR(-2); /*invalid offset, not block aligned*/
+		ipanic_block_scramble(ipanic_buffer, size);
+		if (size != sz_ipanic_buffer) {
+			memset(ipanic_buffer + size, 0, sz_ipanic_buffer - size);
+		}
+		if (card_dump_func_write(ipanic_buffer, ALIGN(size, EMMC_BLOCK_SIZE), off, DUMP_INTO_BOOT_CARD_IPANIC))
+			return ERR_PTR(-1);
+		off += size;
+		errno = next(data, ipanic_buffer, sz_ipanic_buffer, &size);
+		if (IS_ERR(errno))
+			return errno;
+	}
+	return 0;
 }
 
 
@@ -248,37 +299,6 @@ static int ipanic_write_all_android_buf(int offset, struct ipanic_header *hdr)
 	return offset;
 }
 
-static int ipanic_write_log_buf(unsigned int off, int log_copy_start, int log_copy_end)
-{
-	int saved_oip;
-	int rc, rc2;
-	unsigned int last_chunk = 0, copy_count = 0;
-
-	while (!last_chunk) {
-		saved_oip = oops_in_progress;
-		oops_in_progress = 1;
-        rc = log_buf_copy2(emmc_bounce, PAGE_SIZE, log_copy_start, log_copy_end);
-		BUG_ON(rc < 0);
-		log_copy_start += rc;
-		copy_count += rc;
-		if (rc != PAGE_SIZE)
-			last_chunk = rc;
-
-		oops_in_progress = saved_oip;
-		if (rc <= 0)
-			break;
-
-		rc2 = emmc_ipanic_write(emmc_bounce, off, rc);
-		if (rc2 <= 0) {
-			xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG,
-			       "aee-ipanic: Flash write failed (%d)\n", rc2);
-			return rc2;
-		}
-		off += rc2;
-	}
-	return copy_count;
-}
-
 static int panic_dump_user_info(char *buf, size_t size, unsigned copy_count)
 {
 	size_t distance = 0;
@@ -329,13 +349,14 @@ static void ipanic_write_mmprofile(int offset, struct ipanic_header *hdr)
   unsigned int index = 0;
   unsigned int pbuf = 0;
   unsigned int bufsize = 0;
+  unsigned int mmprofile_dump_size = 0;
 
   offset = ALIGN(offset, EMMC_BLOCK_SIZE);
   hdr->mmprofile_offset = offset;
 
 #ifdef MTK_MMPROFILE_SUPPORT
   
-  unsigned int mmprofile_dump_size = MMProfileGetDumpSize();
+  mmprofile_dump_size = MMProfileGetDumpSize();
   if (mmprofile_dump_size == 0 || mmprofile_dump_size > IPANIC_OOPS_MMPROFILE_LENGTH_LIMIT) {
     xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: ignore INVALID MMProfile dump size 0x%x", mmprofile_dump_size);
     return;
@@ -350,7 +371,7 @@ static void ipanic_write_mmprofile(int offset, struct ipanic_header *hdr)
 
     index += bufsize;
 
-    rc = emmc_ipanic_write(pbuf, offset, bufsize);
+    rc = emmc_ipanic_write((char*)pbuf, offset, bufsize);
     if (rc < 0) {
       xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: Error writing MMProfile to emmc! (%d)\n", __func__, rc);
       hdr->mmprofile_length = 0;
@@ -369,22 +390,27 @@ static void ipanic_write_mmprofile(int offset, struct ipanic_header *hdr)
 /*XXX Note: 2012/11/19 mtk_wdt_restart prototype is 
 * different on 77 and 89 platform. the owner promise to modify it
 */
-enum wk_wdt_type {
-	WK_WDT_LOC_TYPE,
-	WK_WDT_EXT_TYPE,
-	WK_WDT_LOC_TYPE_NOLOCK,
-	WK_WDT_EXT_TYPE_NOLOCK,
-	
-};
-extern void mtk_wdt_restart(enum wk_wdt_type type);
-
 static void ipanic_kick_wdt(void)
 {
-    mtk_wdt_restart(WK_WDT_LOC_TYPE);
-    mtk_wdt_restart(WK_WDT_EXT_TYPE);
+    int res=0;
+	struct wd_api*wd_api = NULL;
+    res = get_wd_api(&wd_api);
+    if(res)
+	{
+	  //aee_wdt_printf("ipanic_kick_wdt, get wd api error\n");
+	}
+	else
+	{
+	  wd_api->wd_restart(WD_TYPE_NOLOCK);
+	}
 }
+
 static spinlock_t ipanic_lock;
 extern  void ipanic_save_current_tsk_info(void);
+extern struct ipanic_log_index ipanic_detail_start, ipanic_detail_end;
+extern struct ipanic_log_index ipanic_get_log_start(void);
+extern struct ipanic_log_index ipanic_get_log_end(void);
+extern int ipanic_write_log_buf(unsigned int off, struct ipanic_log_index start, struct ipanic_log_index end);
 /*Note: for smp safe, any ensuing function call shouldn't enable irq*/
 static int emmc_ipanic(struct notifier_block *this, unsigned long event,
 		      void *ptr)
@@ -393,6 +419,10 @@ static int emmc_ipanic(struct notifier_block *this, unsigned long event,
 	struct ipanic_header iheader;
 
     aee_wdt_dump_info();
+
+#ifdef CONFIG_MTK_WQ_DEBUG
+	mt_dump_wq_debugger();
+#endif
 
     /*In case many core run here concurrently*/
     spin_lock(&ipanic_lock);
@@ -448,10 +478,7 @@ static int emmc_ipanic(struct notifier_block *this, unsigned long event,
 	iheader.console_offset = ALIGN(iheader.oops_detail_offset + iheader.oops_detail_length,
 				       EMMC_BLOCK_SIZE);
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
-	if (log_end > __LOG_BUF_LEN)
-		iheader.console_length = ipanic_write_log_buf(iheader.console_offset, log_end-__LOG_BUF_LEN, log_end);
-	else
-		iheader.console_length = ipanic_write_log_buf(iheader.console_offset, 0, log_end);
+	iheader.console_length = ipanic_write_log_buf(iheader.console_offset, ipanic_get_log_start(), ipanic_get_log_end());
 	if (iheader.console_length < 0) {
 		xlog_printk(ANDROID_LOG_ERROR, IPANIC_LOG_TAG, "%s: Error writing console to panic log! (%d)\n", __func__,
 		       iheader.console_length);
@@ -475,6 +502,9 @@ static int emmc_ipanic(struct notifier_block *this, unsigned long event,
 	ipanic_write_mmprofile(iheader.android_system_offset + iheader.android_system_length, &iheader);
 
 	ipanic_kick_wdt();
+
+	iheader.mini_rdump_offset = IPANIC_MRDUMP_OFFSET;
+	iheader.mini_rdump_length = MRDUMP_MINI_BUF_SIZE;
 	/*
 	 * Finally write the ipanic header
 	 */
@@ -532,10 +562,11 @@ static struct ipanic_ops emmc_ipanic_ops = {
 
 int __init aee_emmc_ipanic_init(void)
 {
-    spin_lock_init(&ipanic_lock);
+	spin_lock_init(&ipanic_lock);
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
 	register_ipanic_ops(&emmc_ipanic_ops);
 	emmc_bounce = (u8 *) __get_free_page(GFP_KERNEL);
+	log_temp = (u8 *) __get_free_page(GFP_KERNEL);
 	xlog_printk(ANDROID_LOG_INFO, IPANIC_LOG_TAG, "aee-emmc-ipanic: startup, partition assgined %s\n",
 		       AEE_IPANIC_PLABEL);
 	return 0;

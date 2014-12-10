@@ -568,7 +568,11 @@ redo1:
 			int error, atomic = 1;
 
 			if (!page) {
-				page = alloc_page(GFP_HIGHUSER & ~__GFP_HIGHMEM);
+				#ifndef CONFIG_MTK_PAGERECORDER
+					page = alloc_page(GFP_HIGHUSER & ~__GFP_HIGHMEM);
+				#else
+					page = alloc_page_nopagedebug(GFP_HIGHUSER & ~__GFP_HIGHMEM);
+				#endif
 				if (unlikely(!page)) {
 					ret = ret ? : -ENOMEM;
 					break;
@@ -859,6 +863,9 @@ static int
 pipe_rdwr_open(struct inode *inode, struct file *filp)
 {
 	int ret = -ENOENT;
+
+	if (!(filp->f_mode & (FMODE_READ|FMODE_WRITE)))
+		return -EINVAL;
 
 	mutex_lock(&inode->i_mutex);
 

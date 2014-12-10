@@ -104,15 +104,34 @@
 #define EINT_AP_MAXNUMBER 192
 //#define EINT_MAX_CHANNEL 192
 #define EINT_MAX_CHANNEL 217
-#define MT65XX_EINT_POL_NEG (0)
-#define MT65XX_EINT_POL_POS (1)
+#define MT_EINT_POL_NEG (0)
+#define MT_EINT_POL_POS (1)
 #define MAX_HW_DEBOUNCE_CNT 16
 #define MAX_DEINT_CNT 8
+#define EINTF_TRIGGER_RISING     0x00000001
+#define EINTF_TRIGGER_FALLING    0x00000002
+#define EINTF_TRIGGER_HIGH       0x00000004
+#define EINTF_TRIGGER_LOW        0x00000008
 
 /*
  * Define function prototypes.
  */
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
+extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
 
+#define mt65xx_eint_mask                mt_eint_mask
+#define mt65xx_eint_unmask              mt_eint_unmask
+#define mt65xx_eint_set_hw_debounce     mt_eint_set_hw_debounce
+#define mt65xx_eint_set_polarity        mt_eint_set_polarity
+#define mt65xx_eint_set_sens            mt_eint_set_sens
+#define mt65xx_eint_print_status        mt_eint_print_status
+/*
 extern void mt65xx_eint_mask(unsigned int eint_num);
 extern void mt65xx_eint_unmask(unsigned int eint_num);
 extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
@@ -120,5 +139,6 @@ extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
 extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
 extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
 extern int mt65xx_eint_init(void);
+*/
 extern void mt_eint_print_status(void);
 #endif  /*!__EINT_H__ */

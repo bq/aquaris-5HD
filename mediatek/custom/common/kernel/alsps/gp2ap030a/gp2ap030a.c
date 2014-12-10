@@ -25,7 +25,6 @@
 #include <linux/platform_device.h>
 #include <asm/atomic.h>
 
-#include <mach/mt_devs.h>
 #include <mach/mt_typedefs.h>
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
@@ -57,15 +56,6 @@
 * extern functions 
 *******************************************************************************/
 
-#ifdef MT6577
-		extern void mt65xx_eint_unmask(unsigned int line);
-		extern void mt65xx_eint_mask(unsigned int line);
-		extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
-		extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
-		extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
-		extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
-#endif
-#ifdef MT6575
 		extern void mt65xx_eint_unmask(unsigned int line);
 		extern void mt65xx_eint_mask(unsigned int line);
 		extern void mt65xx_eint_set_polarity(kal_uint8 eintno, kal_bool ACT_Polarity);
@@ -75,7 +65,6 @@
 											 kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
 											 kal_bool auto_umask);
 		
-#endif
 
 /*----------------------------------------------------------------------------*/
 static int gp2ap030a_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id); 
@@ -86,7 +75,7 @@ static int gp2ap030a_i2c_resume(struct i2c_client *client);
 
 /*----------------------------------------------------------------------------*/
 static const struct i2c_device_id gp2ap030a_i2c_id[] = {{GP2AP030A_DEV_NAME,0},{}};
-static struct i2c_board_info __initdata i2c_gp2ap030a={ I2C_BOARD_INFO(GP2AP030A_DEV_NAME, 0x39)};
+static struct i2c_board_info __initdata i2c_gp2ap030a={ I2C_BOARD_INFO(GP2AP030A_DEV_NAME,MAG_GP2AP030A_I2C_ADDR>>1)};
 /*----------------------------------------------------------------------------*/
 struct gp2ap030a_priv {
 	struct alsps_hw  *hw;
@@ -114,6 +103,7 @@ struct gp2ap030a_priv {
 	u16			ps;
 	u16			als_level_num;
 	u16			als_value_num;
+	u32			ps_distance;
 	u32			als_level[C_CUST_ALS_LEVEL-1];
 	u32			als_value[C_CUST_ALS_LEVEL];
 	int			als_mode ;
@@ -191,7 +181,7 @@ typedef enum {
 #define CUST_EINT_ALS_NUM              3
 #define CUST_EINT_ALS_DEBOUNCE_CN      0
 #define CUST_EINT_ALS_POLARITY         CUST_EINT_POLARITY_LOW
-#define CUST_EINT_ALS_SENSITIVE        CUST_EINT_LEVEL_SENSITIVE
+#define CUST_EINT_ALS_SENSITIVE        CUST_EINT_EDGE_SENSITIVE//CUST_EINT_LEVEL_SENSITIVE
 #define CUST_EINT_ALS_DEBOUNCE_EN      CUST_EINT_DEBOUNCE_DISABLE
 #endif
 
@@ -202,9 +192,9 @@ static u8 gp2ap_init_data[12] = {
 	/* Reg1 PRST:01 RES_A:100 RANGE_A:011 */
 	( PRST_4 | RES_A_14 | RANGE_A_8 ),
 	/* Reg2 INTTYPE:0 RES_P:011 RANGE_P:010 */
-	( INTTYPE_L | RES_P_10 | RANGE_P_4 ),
+	( INTTYPE_P| RES_P_10 | RANGE_P_4 ),
 	/* Reg3 INTVAL:0 IS:11 PIN:11 FREQ:0 */
-	( INTVAL_0 | IS_110 | PIN_DETECT | FREQ_327_5 ),
+	( INTVAL_0 | IS_110 | PIN_INT_PS | FREQ_327_5 ),
 	/* Reg.4 TL[7:0]:0x00 */
 	0x00,
 	/* Reg.5 TL[15:8]:0x00 */
@@ -316,15 +306,15 @@ int gp2ap030a_enable_ps(struct i2c_client *client, int enable)
 			err =gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
 			value = ( u8 )( PRST_4 | RES_A_14 | RANGE_A_8 );
 			err =gp2ap_i2c_write( REG_ADR_01, &value, client ) ;
-			value = ( INTVAL_0 | IS_110 | PIN_DETECT | FREQ_327_5 );
+			value = ( INTVAL_0 | IS_110 | PIN_INT_PS | FREQ_327_5 );
 			err =gp2ap_i2c_write( REG_ADR_03, &value, client ) ;
 			value = ( OP_RUN | OP_CONTINUOUS | OP_PS_ALS ) ;	// ALS & PS mode
 			err =gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
 		}
-		value = (INTTYPE_L );
+		value = ( INTTYPE_P| RES_P_10 | RANGE_P_4 );
 		err =gp2ap_i2c_write( REG_ADR_02, &value, client ) ;
 
-		
+		#if 0
 		th_l = atomic_read(&obj->ps_thd_val_low);
 		th_h = atomic_read(&obj->ps_thd_val_high);
 		value = ( u8 )( th_l & 0x000000ff ) ;
@@ -342,7 +332,8 @@ int gp2ap030a_enable_ps(struct i2c_client *client, int enable)
 		value = ( u8 )( ( th_h	& 0x0000ff00 ) >> 8 ) ;
 		obj->regData[REG_ADR_0B] = value ;
 		err =gp2ap_i2c_write( REG_ADR_0B, &value, client ) ;
-
+		#else
+		#endif
 		atomic_set(&obj->ps_deb_on, 1);
 		atomic_set(&obj->ps_deb_end, jiffies+atomic_read(&obj->ps_debounce)/(1000/HZ));
 		set_bit(CMC_BIT_PS,  &obj->pending_intr);
@@ -358,7 +349,7 @@ int gp2ap030a_enable_ps(struct i2c_client *client, int enable)
 		{
 			value = OP_SHUTSOWN ;	// shutdown
 			err =gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
-			value = ( INTVAL_0 | IS_110 | PIN_DETECT | FREQ_327_5 );
+			value = ( INTVAL_0 | IS_110 | PIN_INT_PS | FREQ_327_5 );
 			err =gp2ap_i2c_write( REG_ADR_03, &value, client ) ;
 			value = ( OP_RUN | OP_CONTINUOUS | OP_ALS ) ;		// ALS mode
 			err =gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
@@ -382,7 +373,7 @@ int gp2ap030a_enable_als(struct i2c_client *client, int enable)
 			gp2ap_i2c_write( REG_ADR_03, &value, client ) ;
 			
 			gp2ap_init_device( obj );
-			value = ( INTVAL_0 | IS_110 | PIN_DETECT | FREQ_327_5 );
+			value = ( INTVAL_0 | IS_110 | PIN_INT_PS | FREQ_327_5 );
 			gp2ap_i2c_write( REG_ADR_03, &value, client ) ;
 			value = ( OP_RUN | OP_CONTINUOUS | OP_ALS ) ;		// ALS mode
 			gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
@@ -392,9 +383,8 @@ int gp2ap030a_enable_als(struct i2c_client *client, int enable)
 			value = OP_SHUTSOWN ; // shutdown
 			gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
 			value = ( u8 )( PRST_4 | RES_A_14 | RANGE_A_8 );
-			value = ( u8 )( RES_A_14 | RANGE_A_8 ) | ( rdata & 0xC0 ) ;
 			gp2ap_i2c_write( REG_ADR_01, &value, client ) ;
-			value = ( INTVAL_0 | IS_110 | PIN_DETECT | FREQ_327_5 );
+			value = ( INTVAL_0 | IS_110 | PIN_INT_PS | FREQ_327_5 );
 			gp2ap_i2c_write( REG_ADR_03, &value, client ) ;
 			value = ( OP_RUN | OP_CONTINUOUS | OP_PS_ALS ) ;	// ALS & PS mode
 			gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
@@ -414,7 +404,7 @@ int gp2ap030a_enable_als(struct i2c_client *client, int enable)
 		{
 			value = OP_SHUTSOWN ; // shutdown
 			gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
-			value = ( INTVAL_16 | IS_110 | PIN_DETECT | FREQ_327_5 );
+			value = ( INTVAL_16 | IS_110 | PIN_INT_PS | FREQ_327_5 );
 			gp2ap_i2c_write( REG_ADR_03, &value, client ) ;
 			value = ( OP_RUN | OP_CONTINUOUS | OP_PS ) ;		// PS mode
 			gp2ap_i2c_write( REG_ADR_00, &value, client ) ;
@@ -579,7 +569,7 @@ static int gp2ap030a_get_ps_value(struct gp2ap030a_priv *obj, u16 ps)
 	int val = 0;
 	int mask = atomic_read(&obj->ps_mask);
 	int invalid = 0;
-
+	#if 0
 	if(ps > atomic_read(&obj->ps_thd_val_high))
 	{
 		val = 0;  /*close*/
@@ -588,7 +578,18 @@ static int gp2ap030a_get_ps_value(struct gp2ap030a_priv *obj, u16 ps)
 	{
 		val = 1;  /*far away*/
 	}
-	
+	#else
+	if(ps >= 0x0C)
+	{
+		val = 0;  /*close*/
+		
+	}
+	else if(ps <= 0x0B)
+	{
+		val = 1;  /*far away*/
+		
+	}
+	#endif
 	if(atomic_read(&obj->ps_suspend))
 	{
 		invalid = 1;
@@ -1077,10 +1078,9 @@ static int gp2ap030a_check_intr(struct i2c_client *client)
 	struct gp2ap030a_priv *obj = i2c_get_clientdata(client);
 	int res;
 	u8 buffer[2];
-	u8			rdata[18] ;
 
-	if (mt_get_gpio_in(GPIO_ALS_EINT_PIN) == 1) /*skip if no interrupt*/  
-		return 0;
+	//if (mt_get_gpio_in(GPIO_ALS_EINT_PIN) == 1) /*skip if no interrupt*/  
+	//	return 0;
 #if 0
 	res = hwmsen_read_byte_sr(client,REG_ADR_00,buffer);
 	if(res < 0)
@@ -1129,7 +1129,9 @@ static void gp2ap030a_eint_work(struct work_struct *work)
 	
 	hwm_sensor_data sensor_data;
 	int res = 0;
-	
+	u8		value ;
+	u8			rdata ;
+
 	msleep( 20 ) ;
 
 	res = gp2ap030a_check_intr(obj->client);
@@ -1173,6 +1175,43 @@ static void gp2ap030a_eint_work(struct work_struct *work)
 	  sensor_data.values[0] = gp2ap030a_get_ps_value(obj, obj->ps);
 	  sensor_data.value_divide = 1;
 	  sensor_data.status = SENSOR_STATUS_ACCURACY_MEDIUM;
+#if 1
+	  APS_ERR("gp2ap030a_get_ps_value  obj->ps_distance: %d,val :%d\n",  obj->ps_distance, sensor_data.values[0]);
+	  if(obj->ps_distance != sensor_data.values[0])
+	  {
+		  obj->ps_distance = sensor_data.values[0];
+		  value = OP_SHUTSOWN ;
+		  gp2ap_i2c_write( REG_ADR_00, &value, obj->client ) ;
+		  
+		  //hwmsen_read_block(obj->client,REG_ADR_01,&rdata,0x01);
+		  
+		  if( sensor_data.values[0] == 0 )
+		  { // detection = Falling Edge
+			  //value = PRST_1 | ( rdata & 0x3F ) ;
+			  value = ( u8 )( PRST_1 | RES_A_14 | RANGE_A_8 );
+			  gp2ap_i2c_write( REG_ADR_01, &value, obj->client ) ;
+		  }
+		  else
+		  { // none Detection
+			  //value = PRST_4 | ( rdata & 0x3F ) ;
+			  value = ( u8 )( PRST_4 | RES_A_14 | RANGE_A_8 );
+			  gp2ap_i2c_write( REG_ADR_01, &value, obj->client ) ;
+		  }
+		  
+		  if(1 == test_bit(CMC_BIT_ALS,  &obj->enable))
+		  {
+			  value = ( OP_RUN | OP_CONTINUOUS | OP_PS_ALS|0x0C ) ;
+		  }
+		  else
+		  {
+			  value = ( OP_RUN | OP_CONTINUOUS | OP_PS|0x0C ) ;
+		  }
+		  gp2ap_i2c_write( REG_ADR_00, &value, obj->client ) ;
+	  
+	  }
+	  
+#endif
+
 	  //let up layer to know
 	  if((res = hwmsen_get_interrupt_data(ID_PROXIMITY, &sensor_data)))
 	  {
@@ -1181,7 +1220,6 @@ static void gp2ap030a_eint_work(struct work_struct *work)
 	  }
 	}
 
-	
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);
 	return;
 	EXIT_INTR_ERR:
@@ -1200,7 +1238,14 @@ static void gp2ap030a_eint_func(void)
 	}	
 	schedule_work(&obj->eint_work);
 }
+/*
+please note that set EINT_ALS_POLARITY as CUST_EINT_POLARITY_LOW
+And CUST_EINT_ALS_SENSITIVE        CUST_EINT_EDGE_SENSITIVE
 
+#define CUST_EINT_ALS_POLARITY         CUST_EINT_POLARITY_LOW
+#define CUST_EINT_ALS_SENSITIVE        CUST_EINT_EDGE_SENSITIVE
+
+*/
 int gp2ap030a_setup_eint(struct i2c_client *client)
 {
 	struct gp2ap030a_priv *obj = i2c_get_clientdata(client);        
@@ -1721,6 +1766,7 @@ static int gp2ap030a_i2c_probe(struct i2c_client *client, const struct i2c_devic
 	obj->als_level_num = sizeof(obj->hw->als_level)/sizeof(obj->hw->als_level[0]);
 	obj->als_value_num = sizeof(obj->hw->als_value)/sizeof(obj->hw->als_value[0]);
 	obj->als_mode = LOW_LUX_MODE;
+	obj->ps_distance = 1;/*far*/
 	/*-----------------------------value need to be confirmed-----------------------------------------*/
 	
 	BUG_ON(sizeof(obj->als_level) != sizeof(obj->hw->als_level));
@@ -1884,7 +1930,10 @@ static struct platform_driver gp2ap030a_alsps_driver = {
 static int __init gp2ap030a_init(void)
 {
 	APS_FUN();
-	i2c_register_board_info(0, &i2c_gp2ap030a, 1);
+	
+	struct alsps_hw *hw = get_cust_alsps_hw();
+	APS_LOG("%s: i2c_number=%d\n", __func__,hw->i2c_num); 
+	i2c_register_board_info(hw->i2c_num, &i2c_gp2ap030a, 1);
 	if(platform_driver_register(&gp2ap030a_alsps_driver))
 	{
 		APS_ERR("failed to register driver");

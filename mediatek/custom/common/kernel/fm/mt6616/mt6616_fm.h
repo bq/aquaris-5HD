@@ -44,7 +44,7 @@
 #include <linux/string.h>
 
 
-#ifdef  MT6516
+#ifdef  0//MT6516
 #include <mach/mt6516_gpio.h>
 #include <mach/mt6516_typedefs.h>
 #define MT6616_I2C_PORT      2

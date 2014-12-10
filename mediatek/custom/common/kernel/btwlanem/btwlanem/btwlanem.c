@@ -53,17 +53,8 @@ extern void mt_bt_power_off(void);
 extern void mt_wifi_power_on(void);
 extern void mt_wifi_power_off(void);
 
-#ifdef MT6516
-extern void MT6516_EINTIRQUnmask(unsigned int line);
-extern void MT6516_EINTIRQMask(unsigned int line);
-#define mt65xx_eint_mask(line) MT6516_EINTIRQMask(line)
-#define mt65xx_eint_unmask(line) MT6516_EINTIRQUnmask(line)
-
-#else 
 extern void mt65xx_eint_mask(unsigned int eint_num);
 extern void mt65xx_eint_unmask(unsigned int eint_num);
-#endif
-
 
 wait_queue_head_t eint_wait;
 int eint_gen;

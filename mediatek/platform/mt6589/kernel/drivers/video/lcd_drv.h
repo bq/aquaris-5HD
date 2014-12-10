@@ -169,12 +169,7 @@ typedef enum {
    LCD_LAYER_ALL = 0xFFFFFFFF,
 } LCD_LAYER_ID;
 
-/* Layer Designation */
-#define ASSERT_LAYER    (LCD_LAYER_3)
 extern unsigned int FB_LAYER;    // default LCD layer
-#define DISP_DEFAULT_UI_LAYER_ID LCD_LAYER_3
-#define DISP_CHANGED_UI_LAYER_ID LCD_LAYER_2
-
 
 typedef enum {
     LCD_LAYER_FORMAT_RGB888     = 0,
@@ -357,6 +352,7 @@ LCD_STATUS LCD_LayerSetSize(LCD_LAYER_ID id, UINT32 width, UINT32 height);
 LCD_STATUS LCD_Layer3D_Enable(LCD_LAYER_ID id, BOOL enable);
 LCD_STATUS LCD_Layer3D_R1st(LCD_LAYER_ID id, BOOL r_first);
 LCD_STATUS LCD_Layer3D_landscape(LCD_LAYER_ID id, BOOL landscape);
+LCD_STATUS LCD_Layer3D_Prepare(LCD_LAYER_ID id, INT32 *new_id_offset, BOOL enable);
 LCD_STATUS LCD_LayerSet3D(LCD_LAYER_ID id, BOOL enable, BOOL r_first, BOOL landscape);
 BOOL LCD_Is3DEnabled(void);
 BOOL LCD_Is3DLandscapeMode(void);
@@ -466,7 +462,8 @@ void LCD_WaitTE(void);
 void LCD_InitVSYNC(unsigned int vsync_interval);
 void LCD_PauseVSYNC(bool enable);
 void LCD_GetVsyncCnt(void);
-void LCD_DumpLayer(void);;
+void LCD_DumpLayer(void);
+unsigned int LCD_Check_LCM(UINT32 color);
 // ---------------------------------------------------------------------------
 
 #ifdef __cplusplus

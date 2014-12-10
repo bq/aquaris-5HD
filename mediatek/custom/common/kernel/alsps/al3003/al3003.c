@@ -43,26 +43,42 @@
 
 
 
+/******************************************************************************
+ * extern functions  ruo modify
+*******************************************************************************/
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
 
-extern void mt65xx_eint_unmask(unsigned int line);
+
+/** ruo modify
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
 extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
 extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
 extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+**/
 
 
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
 
+/**ruo mark
 
-#define ALSPS_REGISTER_INTERRPUT(intrrupt_handle_func)   \
-{\
-	mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE); \
-		mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY); \
-		mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN); \
-		mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, intrrupt_handle_func, 0); \
-		mt65xx_eint_unmask(CUST_EINT_ALS_NUM);	\
+#define ALSPS_REGISTER_INTERRPUT(intrrupt_handle_func)   
+{
+	mt_eint_unmask(CUST_EINT_ALS_NUM);	mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE); \
+	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY); \
+	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN); \
+	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, intrrupt_handle_func, 0); \
+	mt_eint_unmask(CUST_EINT_ALS_NUM);	\
+
 }
+**/
+
 
 
 /******************************************************************************
@@ -838,7 +854,9 @@ static void al3003_eint_work(struct work_struct *work)
 		APS_ERR("call hwmsen_get_interrupt_data fail = %d\n", err);
 	  }
 	}
-	
+
+	mt_eint_unmask(CUST_EINT_ALS_NUM);
+	/**ruo mark
 	#ifdef MT6573
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
 	#endif
@@ -846,6 +864,7 @@ static void al3003_eint_work(struct work_struct *work)
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
 	#endif
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
+	**/
 }
 
 /*----------------------------------------------------------------------------*/
@@ -855,6 +874,9 @@ int al3003_setup_eint(struct i2c_client *client)
 
 	g_al3003_ptr = obj;
 	/*configure to GPIO function, external interrupt*/
+
+	
+	
 
 	
 	mt_set_gpio_mode(GPIO_ALS_EINT_PIN, GPIO_ALS_EINT_PIN_M_EINT);
@@ -868,6 +890,12 @@ int al3003_setup_eint(struct i2c_client *client)
 	//mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
     //
+
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, al3003_eint_func, 0);
+	
+	mt_eint_unmask(CUST_EINT_ALS_NUM);	
+/**modify ruo 	
 #ifdef MT6573
 	
     mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
@@ -885,8 +913,8 @@ int al3003_setup_eint(struct i2c_client *client)
 	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, al3003_eint_func, 0);
 	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);	
 #endif 
-
-	ALSPS_REGISTER_INTERRPUT(al3003_eint_func);
+**/
+	//ALSPS_REGISTER_INTERRPUT(al3003_eint_func);
 
     return 0;
 }

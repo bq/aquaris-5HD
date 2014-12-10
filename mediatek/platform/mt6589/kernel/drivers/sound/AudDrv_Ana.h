@@ -53,6 +53,7 @@
 
 #include "AudDrv_Common.h"
 #include "AudDrv_Def.h"
+#include <mach/upmu_hw.h>
 
 
 /*****************************************************************************
@@ -116,6 +117,7 @@
 
 //---------------analog pmic  register define start --------------------------------------
 //---------------digital pmic  register define -------------------------------------------
+#if 0
 #define AFE_PMICANA_AUDIO_BASE        (0x0)
 
 #define TOP_CKPDN                 (AFE_PMICANA_AUDIO_BASE + 0x102)
@@ -175,7 +177,17 @@
 #define ZCD_CON5        (AFE_PMICANA_AUDIO_BASE + 0x742)
 #define NCP_CLKDIV_CON0        (AFE_PMICANA_AUDIO_BASE + 0x744)
 #define NCP_CLKDIV_CON1        (AFE_PMICANA_AUDIO_BASE + 0x746)
+#else
+#define AFE_PMICANA_AUDIO_BASE        (0x0)
 
+#ifndef TOP_CKPDN_SET
+#define TOP_CKPDN_SET        (AFE_PMICANA_AUDIO_BASE + 0x104)
+#endif
+#ifndef TOP_CKPDN_CLR
+#define TOP_CKPDN_CLR        (AFE_PMICANA_AUDIO_BASE + 0x106)
+#endif
+
+#endif
 
 void Ana_Set_Reg(uint32 offset,uint32 value,uint32 mask);
 uint32  Ana_Get_Reg(uint32 offset);

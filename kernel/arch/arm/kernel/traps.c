@@ -40,7 +40,6 @@
 static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
 void *vectors_page;
-extern void aee_stop_nested_panic(struct pt_regs *regs);
 
 #ifdef CONFIG_DEBUG_USER
 unsigned int user_debug;
@@ -240,17 +239,15 @@ static int __die(const char *str, int err, struct thread_info *thread, struct pt
 	static int die_counter;
 	int ret;
 
-        ipanic_oops_start();
 	printk(KERN_EMERG "Internal error: %s: %x [#%d]" S_PREEMPT S_SMP
 	       S_ISA "\n", str, err, ++die_counter);
 
 	/* trap and error numbers are mostly meaningless on ARM */
 	ret = notify_die(DIE_OOPS, str, regs, err, tsk->thread.trap_no, SIGSEGV);
-    if (ret == NOTIFY_STOP) {
-        ipanic_oops_end();
+	if (ret == NOTIFY_STOP)
         return ret;
-    }
 
+        ipanic_oops_start();
 	print_modules();
 	__show_regs(regs);
 	printk(KERN_EMERG "Process %.*s (pid: %d, stack limit = 0x%p)\n",
@@ -263,7 +260,7 @@ static int __die(const char *str, int err, struct thread_info *thread, struct pt
 		dump_instr(KERN_EMERG, regs);
 	}
 
-    ipanic_oops_end();
+        ipanic_oops_end();
 	return ret;
 }
 
@@ -382,7 +379,6 @@ static int call_undef_hook(struct pt_regs *regs, unsigned int instr)
 asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 {
 	struct thread_info *thread = current_thread_info();
-	unsigned int correction = thumb_mode(regs) ? 2 : 4;
 	unsigned int instr;
 	siginfo_t info;
 	void __user *pc;
@@ -391,18 +387,12 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 		thread->cpu_excp++;
 		if (thread->cpu_excp == 1) {
 			thread->regs_on_excp = (void *)regs;
+			aee_excp_regs = (void*)regs;
 		}
 		if (thread->cpu_excp >= 2) {
 			aee_stop_nested_panic(regs);
 		}
 	}
-
-	/*
-	 * According to the ARM ARM, PC is 2 or 4 bytes ahead,
-	 * depending whether we're in Thumb mode or not.
-	 * Correct this offset.
-	 */
-	regs->ARM_pc -= correction;
 
 	pc = (void __user *)instruction_pointer(regs);
 
@@ -418,20 +408,23 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 #endif
 			instr = *(u32 *) pc;
 	} else if (thumb_mode(regs)) {
-		get_user(instr, (u16 __user *)pc);
+		if (get_user(instr, (u16 __user *)pc))
+			goto die_sig;
 		if (is_wide_instruction(instr)) {
 			unsigned int instr2;
-			get_user(instr2, (u16 __user *)pc+1);
+			if (get_user(instr2, (u16 __user *)pc+1))
+				goto die_sig;
 			instr <<= 16;
 			instr |= instr2;
 		}
-	} else {
-		get_user(instr, (u32 __user *)pc);
+	} else if (get_user(instr, (u32 __user *)pc)) {
+		goto die_sig;
 	}
 
 	if (call_undef_hook(regs, instr) == 0)
 		goto do_undefinstr_exit;
 
+die_sig:
 #ifdef CONFIG_DEBUG_USER
 	if (user_debug & UDBG_UNDEFINED) {
 		printk(KERN_INFO "%s (%d): undefined instruction: pc=%p\n",

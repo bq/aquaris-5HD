@@ -23,7 +23,7 @@
 #define AE_BLOCK_NO  5
 #define FLARE_SCALE_UNIT (512) // 1.0 = 512
 #define FLARE_OFFSET_DOMAIN (4095) // 12bit domain
-#define AE_STABLE_THRES 3   //0.3 ev
+#define AE_STABLE_THRES 1 //3   //0.3 ev
 #define AE_WIN_OFFSET          1000   // for android window define
 #define MAX_ISP_GAIN   (10*1024)
 #define AE_HISTOGRAM_BIN (128)
@@ -44,15 +44,18 @@ typedef struct
 typedef struct
 {
     MBOOL   bEnableSaturationCheck;        //if toward high saturation scene , then reduce AE target
-    MBOOL   bEnablePreIndex;                    // decide the re-initial index after come back to camera 
+    MBOOL   bEnablePreIndex;                    // decide the re-initial index after come back to camera
     MBOOL   bEnableRotateWeighting;        // AE rotate the weighting automatically or not
     MBOOL   bEV0TriggerStrobe;
     MBOOL   bLockCamPreMeteringWin;
     MBOOL   bLockVideoPreMeteringWin;
-    MBOOL   bLockVideoRecMeteringWin;    
+    MBOOL   bLockVideoRecMeteringWin;
     MBOOL   bSkipAEinBirghtRange;            // To skip the AE in some brightness range for meter AE
     MBOOL   bPreAFLockAE;                        // Decide the do AE in the pre-AF or post-AF
     MBOOL   bStrobeFlarebyCapture;          // to Decide the strobe flare by capture image or precapture image
+    MBOOL   bEnableFaceAE;                        // Enable the Face AE or not
+    MBOOL   bEnableMeterAE;                      // Enable the Meter AE or not
+    MBOOL   bFlarMaxStepGapLimitEnable;   //enable max step gap for low light
     MUINT32 u4BackLightStrength;              // strength of backlight condtion
     MUINT32 u4OverExpStrength;               // strength of anti over exposure
     MUINT32 u4HistStretchStrength;           //strength of  histogram stretch
@@ -61,27 +64,27 @@ typedef struct
     MUINT8 uBlockNumX;                         //AE X block number
     MUINT8 uBlockNumY;                         //AE Yblock number
     MUINT8 uHist0StartBlockXRatio;       //Histogram 0 window config start block X ratio (0~100)
-    MUINT8 uHist0EndBlockXRatio;         //Histogram 0 window config end block X ratio (0~100) 
+    MUINT8 uHist0EndBlockXRatio;         //Histogram 0 window config end block X ratio (0~100)
     MUINT8 uHist0StartBlockYRatio;       //Histogram 0 window config start block Y ratio (0~100)
-    MUINT8 uHist0EndBlockYRatio;         //Histogram 0 window config end block Y ratio (0~100) 
+    MUINT8 uHist0EndBlockYRatio;         //Histogram 0 window config end block Y ratio (0~100)
     MUINT8 uHist0OutputMode;               //Histogram 0 output source mode
     MUINT8 uHist0BinMode;                    //Histogram 0 bin mode range
     MUINT8 uHist1StartBlockXRatio;       //Histogram 1 window config start block X ratio (0~100)
-    MUINT8 uHist1EndBlockXRatio;         //Histogram 1 window config end block X ratio (0~100) 
+    MUINT8 uHist1EndBlockXRatio;         //Histogram 1 window config end block X ratio (0~100)
     MUINT8 uHist1StartBlockYRatio;       //Histogram 1 window config start block Y ratio (0~100)
-    MUINT8 uHist1EndBlockYRatio;         //Histogram 1 window config end block Y ratio (0~100) 
+    MUINT8 uHist1EndBlockYRatio;         //Histogram 1 window config end block Y ratio (0~100)
     MUINT8 uHist1OutputMode;               //Histogram 1 output source mode
     MUINT8 uHist1BinMode;                    //Histogram 1 bin mode range
     MUINT8 uHist2StartBlockXRatio;       //Histogram 2 window config start block X ratio (0~100)
-    MUINT8 uHist2EndBlockXRatio;         //Histogram 2 window config end block X ratio (0~100) 
+    MUINT8 uHist2EndBlockXRatio;         //Histogram 2 window config end block X ratio (0~100)
     MUINT8 uHist2StartBlockYRatio;       //Histogram 2 window config start block Y ratio (0~100)
-    MUINT8 uHist2EndBlockYRatio;         //Histogram 2 window config end block Y ratio (0~100) 
+    MUINT8 uHist2EndBlockYRatio;         //Histogram 2 window config end block Y ratio (0~100)
     MUINT8 uHist2OutputMode;               //Histogram 2 output source mode
     MUINT8 uHist2BinMode;                    //Histogram 2 bin mode range
     MUINT8 uHist3StartBlockXRatio;       //Histogram 3 window config start block X ratio (0~100)
-    MUINT8 uHist3EndBlockXRatio;         //Histogram 3 window config end block X ratio (0~100) 
+    MUINT8 uHist3EndBlockXRatio;         //Histogram 3 window config end block X ratio (0~100)
     MUINT8 uHist3StartBlockYRatio;       //Histogram 3 window config start block Y ratio (0~100)
-    MUINT8 uHist3EndBlockYRatio;         //Histogram 3 window config end block Y ratio (0~100) 
+    MUINT8 uHist3EndBlockYRatio;         //Histogram 3 window config end block Y ratio (0~100)
     MUINT8 uHist3OutputMode;               //Histogram 3 output source mode
     MUINT8 uHist3BinMode;                      //Histogram 3 bin mode range
     MUINT8 uSatBlockCheckLow;             //saturation block check , low thres
@@ -89,10 +92,18 @@ typedef struct
     MUINT8 uSatBlockAdjustFactor;        // adjust factore , to adjust central weighting target value
     MUINT8 uMeteringYLowBound;           // metering area min Y value
     MUINT8 uMeteringYHighBound;          // metering area max Y value
+    MUINT8 uFaceYLowBound;                 // face area min Y value
+    MUINT8 uFaceYHighBound;                // face area max Y value
+    MUINT8 uFaceCentralWeight;            // face central weighting
     MUINT8 uMeteringYLowSkipRatio;     // metering area min Y value to skip AE
     MUINT8 uMeteringYHighSkipRatio;    // metering area max Y value to skip AE
     MUINT32 u4MeteringStableMax;        // for metering stable using. 100 means the stable point.
-    MUINT32 u4MeteringStableMin;          // for metering stable using. 100 means the stable point.    
+    MUINT32 u4MeteringStableMin;          // for metering stable using. 100 means the stable point.
+    MUINT32 u4MinYLowBound;                 // metering and face boundary min Y value
+    MUINT32 u4MaxYHighBound;                // metering and face boundary max Y value
+    MUINT32 u4MinCWRecommend;           // mini target value
+    MUINT32 u4MaxCWRecommend;          // max target value
+    MINT8   iMiniBVValue;                          // mini BV value.
     MINT8   uAEShutterDelayCycle;         // for AE smooth used.
     MINT8   uAESensorGainDelayCycleWShutter;
     MINT8   uAESensorGainDelayCycleWOShutter;
@@ -102,14 +113,33 @@ typedef struct
     MUINT32 u4FlareStdThrHigh;             // flare std high  256base
     MUINT32 u4FlareStdThrLow;             // flare std low    256 base
     MUINT32 u4PrvCapFlareDiff;             // step diff
+    MUINT32 u4FlareMaxStepGap_Fast;        // max step gap --fast
+    MUINT32 u4FlareMaxStepGap_Slow;        // max step gap --slow
+    MINT32  u4FlarMaxStepGapLimitBV;       //low BV start to limit step gap
+    MUINT32 u4FlareAEStableCount;           //wait AE stable counter
+
+    // v1.2
+    MUINT32 u4InStableThd;  // 0.1EV
+    MUINT32 u4OutStableThd; // 0.1EV
 }strAEParamCFG;
 
-typedef struct 
+typedef struct
 {
     MINT32 Diff_EV;     //  delta EVx10 ,different between Yavg and Ytarget     Diff_EV=    log(  Yarg/Ytarget,2)
     MINT32  Ration;        //  Yarg/Ytarget  *100
     MINT32  move_index;   // move index
 }strAEMOVE;
+typedef struct
+{
+        MUINT32 u4SpeedUpRatio;
+        MUINT32 u4GlobalRatio;
+        MUINT32 u4Bright2TargetEnd;
+        MUINT32 u4Dark2TargetStart;
+        MUINT32 u4B2TEnd;
+        MUINT32 u4B2TStart;
+        MUINT32 u4D2TEnd;
+        MUINT32 u4D2TStart;
+} strAEMovingRatio;
 
 typedef struct
 {
@@ -121,30 +151,30 @@ typedef struct
 {
     MINT8 iLEVEL1_GAIN;
     MINT8 iLEVEL2_GAIN;
-    MINT8 iLEVEL3_GAIN;   
-    MINT8 iLEVEL4_GAIN;   
-    MINT8 iLEVEL5_GAIN;   
-    MINT8 iLEVEL6_GAIN;    
-    MINT8 iLEVEL1_TARGET_DIFFERENCE;         
+    MINT8 iLEVEL3_GAIN;
+    MINT8 iLEVEL4_GAIN;
+    MINT8 iLEVEL5_GAIN;
+    MINT8 iLEVEL6_GAIN;
+    MINT8 iLEVEL1_TARGET_DIFFERENCE;
     MINT8 iLEVEL2_TARGET_DIFFERENCE;
     MINT8 iLEVEL3_TARGET_DIFFERENCE;
     MINT8 iLEVEL4_TARGET_DIFFERENCE;
     MINT8 iLEVEL5_TARGET_DIFFERENCE;
     MINT8 iLEVEL6_TARGET_DIFFERENCE;
     MINT8 iLEVEL1_GAINH;
-    MINT8 iLEVEL1_GAINL;    
+    MINT8 iLEVEL1_GAINL;
     MINT8 iLEVEL2_GAINH;
-    MINT8 iLEVEL2_GAINL;    
+    MINT8 iLEVEL2_GAINL;
     MINT8 iLEVEL3_GAINH;
-    MINT8 iLEVEL3_GAINL;    
+    MINT8 iLEVEL3_GAINL;
     MINT8 iLEVEL4_GAINH;
-    MINT8 iLEVEL4_GAINL;    
+    MINT8 iLEVEL4_GAINL;
     MINT8 iLEVEL5_GAINH;
-    MINT8 iLEVEL5_GAINL;    
+    MINT8 iLEVEL5_GAINL;
     MINT8 iLEVEL6_GAINH;
-    MINT8 iLEVEL6_GAINL;    
+    MINT8 iLEVEL6_GAINL;
     MINT8 iGAIN_DIFFERENCE_LIMITER;
-}strAELimiterTable;                 
+}strAELimiterTable;
 
 // AE statistics
 #define AE_WINDOW_NUM_X (((AWB_WINDOW_NUM_X + 3) / 4) * 4) // size of AE window line
@@ -160,6 +190,16 @@ typedef struct
     AWBAE_WINDOW_LINE_T LINE[AWB_WINDOW_NUM_Y];
     MUINT16 AE_HIST[4*AE_HISTOGRAM_BIN]; // 4 histogram x 128 bin (256 bytes)
 } AWBAE_STAT_T;
+
+/*******************************************************************************
+* Dynamic Frame Rate for Video
+******************************************************************************/
+typedef struct VdoDynamicFrameRate_S
+{
+    MBOOL   isEnableDFps;
+    MUINT32 EVThresNormal;
+    MUINT32 EVThresNight;
+} VdoDynamicFrameRate_T;
 
 //////////////////////////////////////////
 //
@@ -183,9 +223,20 @@ struct AE_PARAMETER
     strAFPlineInfo strStrobeZSDPLine;
     MUINT32 *pEVValueArray;
     strAEMOVE *pAEMovingTable;
-    strAEMOVE *pAEVideoMovingTable;    
-    strAEMOVE *pAEFaceMovingTable;    
+    strAEMOVE *pAEVideoMovingTable;
+    strAEMOVE *pAEFaceMovingTable;
+    strAEMOVE *pAETrackingMovingTable;
     strAELimiterTable strAELimiterData;
+    VdoDynamicFrameRate_T strVdoDFps;
+
+    // v1.2
+    MBOOL   bOldAESmooth;                          // Select the new or old AE smooth control
+    MBOOL   bEnableSubPreIndex;                // decide the sub camera re-initial index after come back to camera
+    MUINT32             u4VideoLPFWeight; // 0~24
+    strAEMovingRatio    *pAEMovingRatio;
+    strAEMovingRatio    *pAEVideoMovingRatio;
+    strAEMovingRatio    *pAEFaceMovingRatio;
+    strAEMovingRatio    *pAETrackingMovingRatio;
 };
 
 typedef struct AE_PARAMETER AE_PARAM_T;
@@ -268,7 +319,7 @@ typedef enum
     AE_STATE_CAPTURE,        //capture
     AE_STATE_ONE_SHOT, // one shot AE
     AE_STATE_BACKUP_PREVIEW,
-    AE_STATE_RESTORE_PREVIEW,    
+    AE_STATE_RESTORE_PREVIEW,
     AE_STATE_POST_CAPTURE,
     AE_STATE_MAX
 }eAESTATE;
@@ -285,6 +336,7 @@ typedef struct
     MBOOL          bAEStable;      // Only used in Preview/Movie
     strEvSetting  EvSetting;
     MINT32         Bv;
+    MINT32         i4EV;
     MUINT32        u4AECondition;
     MINT32         i4DeltaBV;
     MUINT32        u4ISO;          //correspoing ISO , only use in capture
@@ -394,6 +446,13 @@ typedef struct
     MUINT32 u4Weight;
 } AE_BLOCK_WINDOW_T;
 
+typedef enum
+{
+    AE_SENSOR_MAIN = 0,
+    AE_SENSOR_SUB,
+    AE_SENSOR_MAIN2
+} AE_SENSOR_DEV_T;
+
 //AE Sensor Config information
 typedef struct
 {
@@ -402,7 +461,7 @@ typedef struct
     AE_PLINETABLE_T rAEPlineTable;
     EZOOM_WINDOW_T rEZoomWin;
     MINT32 i4AEMaxBlockWidth;  // AE max block width
-    MINT32 i4AEMaxBlockHeight; // AE max block height    
+    MINT32 i4AEMaxBlockHeight; // AE max block height
     LIB3A_AE_METERING_MODE_T eAEMeteringMode;
     LIB3A_AE_MODE_T eAEMode;
     LIB3A_AECAM_MODE_T eAECamMode;
@@ -410,8 +469,9 @@ typedef struct
     LIB3A_AE_FLICKER_AUTO_MODE_T eAEAutoFlickerMode;
     LIB3A_AE_EVCOMP_T eAEEVcomp;
     LIB3A_AE_ISO_SPEED_T eAEISOSpeed;
-    MINT32    i4AEMaxFps;    
-    MINT32    i4AEMinFps;    
+    MINT32    i4AEMaxFps;
+    MINT32    i4AEMinFps;
+    AE_SENSOR_DEV_T eSensorDev;
 } AE_INITIAL_INPUT_T;
 
 #if 0
@@ -436,7 +496,7 @@ typedef struct
     MUINT16 u2FrameRate;
     MUINT32 u4RealISO;      //!<: ISO speed
     MINT16   i2FlareOffset;
-    MINT16   i2FlareGain;   // 512 is 1x 
+    MINT16   i2FlareGain;   // 512 is 1x
 }AE_MODE_CFG_T;
 
 typedef struct
@@ -451,10 +511,10 @@ typedef struct
     MBOOL bAEHistEn;
     MUINT8 uAEHistOpt;    // output source
     MUINT8 uAEHistBin;    // bin mode
-    MUINT8 uAEHistYHi;    
-    MUINT8 uAEHistYLow;    
-    MUINT8 uAEHistXHi;    
-    MUINT8 uAEHistXLow;    
+    MUINT8 uAEHistYHi;
+    MUINT8 uAEHistYLow;
+    MUINT8 uAEHistXHi;
+    MUINT8 uAEHistXLow;
 } AE_HIST_WIN_T;
 
 //AE Statistic window config
@@ -496,12 +556,11 @@ typedef struct
     MUINT32 u4AfeGain;           //!<: raw gain
     MUINT32 u4IspGain;           //!<: sensor gain
     MUINT32 u4RealISOValue;
-    MINT32   i4LightValue_x10;                    
+    MINT32   i4LightValue_x10;
     MUINT32 u4AECondition;
     LIB3A_AE_METERING_MODE_T eAEMeterMode;
     MINT16   i2FlareOffset;
     MUINT16 u2Histogrm[AE_HISTOGRAM_BIN];
 } AE_INFO_T;
-
 #endif
 

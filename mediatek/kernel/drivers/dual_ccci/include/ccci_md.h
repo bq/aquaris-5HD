@@ -16,36 +16,31 @@
 
 #ifndef __CCCI_MD_H__
 #define __CCCI_MD_H__
-
-#include <ccci.h>
-#include <ccci_cfg.h>
-
-/*
- * define constants
- */
-
+#include <linux/interrupt.h>
+#include <linux/spinlock.h>
 
 #define CCCI_SYSFS_MD_INIT "modem"
 #define CCCI_SYSFS_MD_BOOT_ATTR "boot"
 #define MD_BOOT_CMD_CHAR '0'
 #define NORMAL_BOOT_ID 0
 #define META_BOOT_ID 1
-#define MD_RUNTIME_ADDR (CCIF_BASE + 0x0140)
-#define SLEEP_CON 0xF0001204
-#define CCCI_CURRENT_VERSION 0x00000923
+//#define MD_RUNTIME_ADDR (CCIF_BASE + 0x0140)
+//#define SLEEP_CON 0xF0001204
+//#define CCCI_CURRENT_VERSION 0x00000923
 #define NR_CCCI_RESET_USER 10
 #define NR_CCCI_RESET_USER_NAME 16
 
-#define UART_MAX_PORT_NUM 8
-#define CCCI_TTY_BUFF_NR UART_MAX_PORT_NUM
+#define CCCI_UART_PORT_NUM 8
 
 #define CCCI_MD_EXCEPTION   0x1
 #define CCCI_MD_RESET     0x2
 #define CCCI_MD_BOOTUP    0x3
+#define CCCI_MD_STOP      0x4
 
 #define LOCK_MD_SLP		0x1
 #define UNLOCK_MD_SLP		0x0
 
+#define MD_IMG_MAX_CNT	0x4
 /*-----------------------------------------------------------*/
 /* Device ID assignment */
 #define CCCI_TTY_DEV_MAJOR		(169)	//(0: Modem; 1: Meta; 2:IPC)
@@ -116,7 +111,11 @@ enum {
 	MD_EE_OK_MSG_GET,
 	MD_EE_FOUND_BY_ISR,
 	MD_EE_FOUND_BY_TX,
-	MD_EE_PENDING_TOO_LONG
+	MD_EE_PENDING_TOO_LONG,
+	
+	MD_EE_INFO_OFFSET = 20,
+	MD_EE_EXCP_OCCUR = 20,
+	MD_EE_AP_MASK_I_BIT_TOO_LONG = 21,
 };
 
 enum {
@@ -126,6 +125,7 @@ enum {
 	MD_EE_CASE_TX_TRG,
 	MD_EE_CASE_ISR_TRG,
 	MD_EE_CASE_NO_RESPONSE,
+	MD_EE_CASE_AP_MASK_I_BIT_TOO_LONG,
 };
 
 
@@ -160,6 +160,8 @@ enum {
 	CCCI_MD_MSG_POWER_DOWN_REQUEST	= 0xFAF5000D,
 	CCCI_MD_MSG_SEND_BATTERY_INFO   = 0xFAF5000E,
 	CCCI_MD_MSG_NOTIFY				= 0xFAF5000F,
+	CCCI_MD_MSG_STORE_NVRAM_MD_TYPE = 0xFAF50010,
+	CCCI_MD_MSG_CFG_UPDATE		= 0xFAF50011,
 };
 
 /* MD Status, this is for user space deamon use */
@@ -307,8 +309,8 @@ typedef struct _modem_runtime
 	int PcmShareMemBase;
 	int PcmShareMemSize;
 	int UartPortNum;
-	int UartShareMemBase[UART_MAX_PORT_NUM]; // <<< Current UART_MAX_PORT_NUM is 8
-	int UartShareMemSize[UART_MAX_PORT_NUM];    
+	int UartShareMemBase[CCCI_UART_PORT_NUM]; // <<< Current UART_MAX_PORT_NUM is 8
+	int UartShareMemSize[CCCI_UART_PORT_NUM];   
 	int FileShareMemBase;
 	int FileShareMemSize;
 	int RpcShareMemBase;
@@ -441,5 +443,5 @@ extern  MD_CALL_BACK_HEAD_T md_notifier;
 
 
 
-#endif  /* !__CCCI_MD_H__ */
+#endif  // __CCCI_MD_H__
 

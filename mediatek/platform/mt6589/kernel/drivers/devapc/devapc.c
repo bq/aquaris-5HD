@@ -1113,8 +1113,8 @@ static void __exit devapc_exit(void)
 #endif
 }
 
-module_init(devapc_init);
-module_exit(devapc_exit);
+late_initcall(devapc_init);
+
 MODULE_LICENSE("GPL");
 EXPORT_SYMBOL(start_usb_protection);
 EXPORT_SYMBOL(stop_usb_protection);

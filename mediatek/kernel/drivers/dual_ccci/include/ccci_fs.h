@@ -16,8 +16,6 @@
 
 #ifndef __CCCI_FS_H__
 #define __CCCI_FS_H__
-
-
 /*
  * define IOCTL commands
  */
@@ -27,7 +25,6 @@
 
 #define  CCCI_FS_MAX_BUF_SIZE   (16384)
 #define  CCCI_FS_MAX_BUFFERS    (5)
-
 
 typedef struct
 {

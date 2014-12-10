@@ -30,8 +30,8 @@
 #include <linux/dma-mapping.h>
 #include <asm/dma-mapping.h>
 
-#include "ccci.h"
-#include "ccci_pmic.h"
+#include <ccci.h>
+#include <ccci_pmic.h>
 
 
 typedef enum

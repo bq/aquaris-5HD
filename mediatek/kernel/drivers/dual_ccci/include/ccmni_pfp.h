@@ -17,7 +17,8 @@
  *   Stanley Chou (mtk01411)
  *
  ****************************************************************************/
-
+#ifndef __CCCI_CCMNI_PFP_H__
+#define __CCCI_CCMNI_PFP_H__
 /* Compile Option to decide if DYNAMIC_MULTIPLE_FRAME encode/decode is supported or not */
 
 #define MAX_PDP_CONT_NUM          3
@@ -116,3 +117,4 @@ complete_ippkt_t* get_one_available_complete_ippkt_entry(void);
 void          release_one_used_complete_ippkt_entry(complete_ippkt_t* entry);   
 #endif
 
+#endif // __CCCI_CCMNI_PFP_H__ 

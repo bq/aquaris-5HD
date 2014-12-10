@@ -7,7 +7,7 @@ $prjmk = "mediatek/config/common/ProjectConfig.mk";
 print "\n";
 print "# begin mediatek build properties\n";
 
-foreach $prjmk ("mediatek/config/${prj}/ProjectConfig.mk", "mediatek/config/common/ProjectConfig.mk") {
+foreach $prjmk ("mediatek/config/common/ProjectConfig.mk", "mediatek/config/${prj}/ProjectConfig.mk") {
   if (!-e $prjmk) {
     die "#### Can't find $prjmk\n";
   } else {

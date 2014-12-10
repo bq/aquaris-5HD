@@ -591,6 +591,8 @@ static fm_s32 rds_g0_ps_cmp(fm_u8 addr, fm_u16 cbc, fm_u8 *fresh,
 			}
 		}
 		//if((corrBitCnt_BlkB == 0) && (corrBitCnt_BlkD == 0)) 
+		//ALPS00523685:6627 CBC sometime is unreliable
+#ifdef RDS_CBC_DEPENDENCY 
 		if(cbc==0)
         {
 			*bm |= 1<<PS_Num;	
@@ -600,6 +602,7 @@ static fm_s32 rds_g0_ps_cmp(fm_u8 addr, fm_u16 cbc, fm_u8 *fresh,
 			twice[2*PS_Num+1] = fresh[2*PS_Num+1];
 		} 
 		else 
+#endif
 		{
 			once[2*PS_Num]=fresh[2*PS_Num];
 			once[2*PS_Num+1] = fresh[2*PS_Num+1];
@@ -750,17 +753,25 @@ static fm_s32 rds_g2_rt_addr_get(fm_u16 blkB, fm_u8 *addr)
 static fm_s32 rds_g2_txtAB_get(fm_u16 blk, fm_u8 *txtAB, fm_bool *dirty)
 {
     fm_s32 ret = 0;
+	static fm_bool once_dirty = fm_false;
 
     FMR_ASSERT(txtAB);
     FMR_ASSERT(dirty);
 
+	*dirty = fm_false; 
 	if (*txtAB != ((blk&0x0010) >> 4)) 
 	{
+		if(once_dirty)
+		{
 		*txtAB = (blk & 0x0010) >> 4;
 		*dirty = fm_true; // yes, we got new txtAB code
-		WCN_DBG(FM_INF | RDSC, "changed! txtAB=%d\n", *txtAB);
+			once_dirty = fm_false;
+			WCN_DBG(FM_NTC | RDSC, "changed! txtAB=%d\n", *txtAB);
+			return ret;
+		}
+		once_dirty = fm_true;
     } else {
-        *dirty = fm_false; // txtAB is the same as last one
+		once_dirty = fm_false;	// txtAB is the same as last one
     }
 
     WCN_DBG(FM_INF | RDSC, "txtAB=%d, %s\n", *txtAB, *dirty ? "new" : "old");
@@ -861,7 +872,9 @@ static fm_s32 rds_g2_rt_cmp(fm_u8 addr, fm_u16 cbc, fm_u8 subtype, fm_u8 *fresh,
 
     if (subtype == RDS_GRP_VER_A) {
         //if (rds_cbc_get(cbc, RDS_BLK_C) == 0) 
+#ifdef RDS_CBC_DEPENDENCY
         if(cbc==0)
+#endif
         {
             once[j*addr+0] = fresh[j*addr+0];
             once[j*addr+1] = fresh[j*addr+1];
@@ -874,13 +887,16 @@ static fm_s32 rds_g2_rt_cmp(fm_u8 addr, fm_u16 cbc, fm_u8 subtype, fm_u8 *fresh,
         }
     } else if (subtype == RDS_GRP_VER_B) {
         //if (rds_cbc_get(cbc, RDS_BLK_D) == 0)
+#ifdef RDS_CBC_DEPENDENCY
 		if(cbc==0)
+#endif
         {
             once[j*addr+0] = fresh[j*addr+0];
             once[j*addr+1] = fresh[j*addr+1];
         }
     }
 
+#ifdef RDS_CBC_DEPENDENCY
     for (i = 0; i < j; i++) {
         if (fresh[j*addr+i] == once[j*addr+i]) {
             twice[j*addr+i] = once[j*addr+i]; //get the same byte 2 times
@@ -890,15 +906,18 @@ static fm_s32 rds_g2_rt_cmp(fm_u8 addr, fm_u16 cbc, fm_u8 subtype, fm_u8 *fresh,
             once[j*addr+i] = fresh[j*addr+i]; //use new val
 			WCN_DBG(FM_NTC | RDSC, "once=%d\n", j*addr+i);
         }
-#if 0
-        //if we got 0x0D twice, it means a RT end
-        if (twice[j*addr+i] == 0x0D) {
-            *end = fm_true;
-            *len = j * addr + i + 1; //record the length of RT
-			WCN_DBG(FM_NTC | RDSC, "get 0D=%d\n", *len);
-        }
-#endif        
     }
+#else
+	for (i = 0; i < j; i++) {
+		 if (twice[j*addr+i] == once[j*addr+i]) {
+			 cnt++;
+			 WCN_DBG(FM_NTC | RDSC, "twice=%d\n", j*addr+i);
+		 } else {
+			 twice[j*addr+i] = once[j*addr+i];
+			 WCN_DBG(FM_NTC | RDSC, "once=%d\n", j*addr+i);
+		 }
+	 }
+#endif    
 
     //check if we got a valid segment 4bytes for typeA, 2bytes for typeB
     if (cnt == j) {
@@ -1288,7 +1307,8 @@ static fm_s32 rds_retrieve_g0_ps(fm_u16 *block_data, fm_u8 SubType, rds_t *pstRD
 					num=0;
 					for(i=0;i<8;i++)
 					{
-						if((pstRDSData->PS_Data.PS[2][i]==0x20)||(pstRDSData->PS_Data.PS[2][i]==0x0))
+					    //even ps=0x20 and bitmap=0xF, send event to host to cover last ps.
+						if(/*(pstRDSData->PS_Data.PS[2][i]==0x20)||*/(pstRDSData->PS_Data.PS[2][i]==0x0))
 						{
 							num++;
 						}
@@ -1299,14 +1319,20 @@ static fm_s32 rds_retrieve_g0_ps(fm_u16 *block_data, fm_u8 SubType, rds_t *pstRD
 						rds_event_set(event, RDS_EVENT_PROGRAMNAME); //yes we got a new PS
 						WCN_DBG(FM_NTC | RDSC, "Yes, get an PS!\n");
 					}
+					else
+					{
+					    //clear bitmap
+                        pstRDSData->PS_Data.Addr_Cnt=0;
+					}
 				}
 				else
 				{
+				    //if px3==ps2,clear bitmap
 					pstRDSData->PS_Data.Addr_Cnt=0;
 					//clear buf
-					fm_memset(pstRDSData->PS_Data.PS[0], 0x20, 8);
-					fm_memset(pstRDSData->PS_Data.PS[1], 0x20, 8);
-					fm_memset(pstRDSData->PS_Data.PS[2], 0x20, 8);
+					fm_memset(pstRDSData->PS_Data.PS[0], 0x00, 8);
+					fm_memset(pstRDSData->PS_Data.PS[1], 0x00, 8);
+					fm_memset(pstRDSData->PS_Data.PS[2], 0x00, 8);
 				}
             }
 #if 0
@@ -1383,6 +1409,7 @@ static fm_s32 rds_retrieve_g2(fm_u16 *source, fm_u8 subtype, rds_t *target)
     fm_u8 *fresh, *once, *twice, *display;
     fm_u16 *event;
     fm_u32 *flag;
+	fm_u16 i = 0;
     static struct fm_state_machine rt_sm = {
         .state = RDS_RT_START,
         .state_get = fm_state_get,
@@ -1484,7 +1511,33 @@ static fm_s32 rds_retrieve_g2(fm_u16 *source, fm_u8 subtype, rds_t *target)
             { 
                 pos = rt_bm.bm_get_pos(&rt_bm);
                 rds_g2_rt_get_len(subtype, pos, &rt_len);
-                STATE_SET(&rt_sm, RDS_RT_GETLEN);
+
+				if(pos == -1)
+				{
+					STATE_SET(&rt_sm, RDS_RT_FINISH);
+				}
+				else
+				{
+					if(rt_addr == pos)
+					{
+	                	STATE_SET(&rt_sm, RDS_RT_GETLEN);
+	            	} 
+	            	else if(pos > rt_addr)
+	            	{
+						rt_bm.bm &= ~(1 << (rt_addr + 1));
+			    		STATE_SET(&rt_sm, RDS_RT_FINISH);
+					}
+					else						
+						STATE_SET(&rt_sm, RDS_RT_FINISH);
+				}
+
+				if(txt_end == fm_true)
+				{
+					for(i=rt_addr+1; i<rt_bm.max_addr; i++)
+					{
+						rt_bm.bm &= ~(1<<i);
+					}
+				}
             } 
             else 
             {

@@ -80,6 +80,7 @@ my $CUSTOM_MEMORY_DEVICE_HDR  = $ARGV[0]; # src\custom\<project>, need full path
 my $MEMORY_DEVICE_LIST_XLS    = $ARGV[1];
 my $PLATFORM                  = $ARGV[2]; # MTxxxx
 my $PROJECT               = $ARGV[3];
+my $MTK_EMIGEN_OUT_DIR = "$ENV{MTK_ROOT_OUT}/EMIGEN";
 
 
 print "$CUSTOM_MEMORY_DEVICE_HDR\n$MEMORY_DEVICE_LIST_XLS\n$PLATFORM\n" if ($DebugPrint == 1);
@@ -108,15 +109,15 @@ my $INFO_TAG = $CUSTOM_MEMORY_DEVICE_HDR;
 
 if ($os eq "windows")
 {
-    $CUSTOM_EMI_H =~ s/custom_MemoryDevice.h$/output\\custom_emi\.h/i;
-    $CUSTOM_EMI_C =~ s/custom_MemoryDevice.h$/output\\custom_emi\.c/i;
+    $CUSTOM_EMI_H = "$MTK_EMIGEN_OUT_DIR/inc/custom_emi.h";
+    $CUSTOM_EMI_C = "$ENV{MTK_ROOT_OUT}/PRELOADER_OBJ/custom_emi.c";
     `mkdir output` unless (-d "output");
 }
 elsif ($os eq "linux")
 {
-    $CUSTOM_EMI_H =~ s/custom_MemoryDevice.h$/custom_emi\.h/i;
-    $CUSTOM_EMI_C =~ s/inc\/custom_MemoryDevice.h$/custom_emi\.c/i;
-    $INFO_TAG     =~ s/inc\/custom_MemoryDevice.h$/MTK_Loader_Info\.tag/i;
+    $CUSTOM_EMI_H = "$MTK_EMIGEN_OUT_DIR/inc/custom_emi.h";
+    $CUSTOM_EMI_C = "$ENV{MTK_ROOT_OUT}/PRELOADER_OBJ/custom_emi.c";
+    $INFO_TAG     = "$MTK_EMIGEN_OUT_DIR/MTK_Loader_Info.tag";
 }
 
 print "$CUSTOM_EMI_H\n$CUSTOM_EMI_C\n$INFO_TAG\n" if ($DebugPrint ==1);
@@ -411,6 +412,8 @@ if ($os eq "windows")
     {
 	unlink ($CUSTOM_EMI_C);
     }
+    my $temp_path = `dirname $CUSTOM_EMI_C`;
+    `mkdir -p $temp_path`;
     open (CUSTOM_EMI_C, ">$CUSTOM_EMI_C") or &error_handler("$CUSTOM_EMI_C: file error!", __FILE__, __LINE__);
 
     print CUSTOM_EMI_C &copyright_file_header();
@@ -428,6 +431,13 @@ if ($os eq "windows")
 #****************************************************************************
 #if ($is_existed_h == 0)
 #{
+#    if ($is_existed_h == 1)
+#    {
+#        unlink ($CUSTOM_EMI_H);
+#    }
+#    my $temp_path = `dirname $CUSTOM_EMI_H`;
+#    `mkdir -p $temp_path`;
+#
 #    open (CUSTOM_EMI_H, ">$CUSTOM_EMI_H") or &error_handler("CUSTOM_EMI_H: file error!", __FILE__, __LINE__);
 #
 #   print CUSTOM_EMI_H &copyright_file_header();
@@ -1175,6 +1185,8 @@ sub write_tag()
         unlink ($INFO_TAG);
     }
     
+    my $temp_path = `dirname $INFO_TAG`;
+    `mkdir -p $temp_path`;
     open FILE,">$INFO_TAG";
     print FILE pack("a24", "MTK_BLOADER_INFO_v08");
     $filesize = $filesize + 24 ;

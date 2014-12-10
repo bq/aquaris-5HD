@@ -171,8 +171,8 @@ struct toi_boot_kernel_data toi_bkd __nosavedata
 	(1 << TOI_REPLACE_SWSUSP) |
 #endif
 	(1 << TOI_NO_FLUSHER_THREAD) |
-//	(1 << TOI_NO_MULTITHREADED_IO) |
-	(1 << TOI_LATE_CPU_HOTPLUG) |
+//    (1 << TOI_NO_MULTITHREADED_IO) |
+    (1 << TOI_LATE_CPU_HOTPLUG) |
 	(1 << TOI_PAGESET2_FULL),
 };
 EXPORT_SYMBOL_GPL(toi_bkd);
@@ -263,6 +263,12 @@ int toi_lowlevel_builtin(void)
 	error = swsusp_arch_suspend();
 	if (error)
 		printk(KERN_ERR "Error %d hibernating\n", error);
+
+#ifdef CONFIG_MTK_HIBERNATION
+    if(test_result_state(TOI_ARCH_PREPARE_FAILED)) {
+        hib_err("CAUTION: error(%d/0x%08x) \n", error, (unsigned int)toi_result);
+    }
+#endif
 
 	/* Restore control flow appears here */
 	if (!toi_in_hibernate) {

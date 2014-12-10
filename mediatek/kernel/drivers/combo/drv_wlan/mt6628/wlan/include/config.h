@@ -867,18 +867,25 @@
 ********************************************************************************
 */
 
-#ifdef MT6620
-#undef MT6620
-#endif
+/* Multiple Chip ID Definition Check */
+#if ((defined(MT6628) && defined(MT6620)) || \
+    (defined(MT6628) && defined(MT5931)) || \
+    (defined(MT6620) && defined(MT5931)))
+    
+    #ifdef MT6628
+        #warning "MT6628 is defined"
+    #endif
 
-#ifdef MT5931
-#undef MT5931
-#endif
+    #ifdef MT6620
+        #warning "MT6620 is defined"
+    #endif
 
-#ifndef MT6628
-#define MT6628
+    #ifdef MT5931
+        #warning "MT5931 is defined"
+    #endif    
+    
+    #error "Multiple chip ID defined!!"    
 #endif
-
 
 /*******************************************************************************
 *                              C O N S T A N T S
@@ -1480,9 +1487,9 @@
 
 #define CFG_STRICT_CHECK_CAPINFO_PRIVACY    0
 
-#define CFG_SUPPORT_WFD                     1
+#define CFG_SUPPORT_WFD             1
 
-#define CFG_SUPPORT_WFD_COMPOSE_IE          1
+#define CFG_SUPPORT_WFD_COMPOSE_IE     1
 
 /*------------------------------------------------------------------------------
  * Flags of Packet Lifetime Profiling Mechanism
@@ -1506,6 +1513,13 @@
  *------------------------------------------------------------------------------
  */
 #define CFG_SUPPORT_BUILD_DATE_CODE 1
+
+/*------------------------------------------------------------------------------
+ * Flags for prepare the FW compile flag
+ *------------------------------------------------------------------------------
+ */
+#define COMPILE_FLAG0_GET_STA_LINK_STATUS     (1<<0)
+#define COMPILE_FLAG0_WFD_ENHANCEMENT_PROTECT (1<<1)
 
 /*******************************************************************************
 *                             D A T A   T Y P E S

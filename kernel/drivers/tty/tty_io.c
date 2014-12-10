@@ -106,6 +106,7 @@
 #include <linux/nsproxy.h>
 
 #undef TTY_DEBUG_HANGUP
+extern void grab_pending_work(struct work_struct *work);
 
 #define TTY_PARANOIA_CHECK 1
 #define CHECK_TTY_COUNT 1
@@ -938,6 +939,14 @@ void start_tty(struct tty_struct *tty)
 
 EXPORT_SYMBOL(start_tty);
 
+/* We limit tty time update visibility to every 8 seconds or so. */
+static void tty_update_time(struct timespec *time)
+{
+	unsigned long sec = get_seconds() & ~7;
+	if ((long)(sec - time->tv_sec) > 0)
+		time->tv_sec = sec;
+}
+
 /**
  *	tty_read	-	read method for tty device files
  *	@file: pointer to tty file
@@ -974,8 +983,10 @@ static ssize_t tty_read(struct file *file, char __user *buf, size_t count,
 	else
 		i = -EIO;
 	tty_ldisc_deref(ld);
+
 	if (i > 0)
-		inode->i_atime = current_fs_time(inode->i_sb);
+		tty_update_time(&inode->i_atime);
+
 	return i;
 }
 
@@ -1078,7 +1089,7 @@ static inline ssize_t do_tty_write(
 	}
 	if (written) {
 		struct inode *inode = file->f_path.dentry->d_inode;
-		inode->i_mtime = current_fs_time(inode->i_sb);
+		tty_update_time(&inode->i_mtime);
 		ret = written;
 	}
 out:
@@ -1473,6 +1484,7 @@ static void release_one_tty(struct work_struct *work)
 	struct tty_struct *tty =
 		container_of(work, struct tty_struct, hangup_work);
 	struct tty_driver *driver = tty->driver;
+	char tty_n[64];
 
 	if (tty->ops->cleanup)
 		tty->ops->cleanup(tty);
@@ -1487,6 +1499,9 @@ static void release_one_tty(struct work_struct *work)
 
 	put_pid(tty->pgrp);
 	put_pid(tty->session);
+	printk(KERN_DEBUG "%s: grab tty(%s/%p)'s work %p before free it\n", __func__, 
+		tty_name(tty, tty_n), tty, &tty->buf.work);
+	grab_pending_work(&tty->buf.work);
 	free_tty_struct(tty);
 }
 

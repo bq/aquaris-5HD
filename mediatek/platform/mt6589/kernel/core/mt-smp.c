@@ -13,6 +13,7 @@
 #endif
 #include <mach/mt_spm_idle.h>
 #include <asm/fiq_glue.h>
+#include <mach/wd_api.h>
 
 
 #define SLAVE1_MAGIC_REG 0xF0002038
@@ -28,16 +29,6 @@
 extern void mt_secondary_startup(void);
 extern void irq_raise_softirq(const struct cpumask *mask, unsigned int irq);
 extern void mt_gic_secondary_init(void);
-#ifdef CONFIG_MTK_WD_KICKER
-enum wk_wdt_type {
-	WK_WDT_LOC_TYPE,
-	WK_WDT_EXT_TYPE,
-	WK_WDT_LOC_TYPE_NOLOCK,
-	WK_WDT_EXT_TYPE_NOLOCK,
-};
-extern void wk_start_kick_cpu_hotplug(int cpu);
-extern void mtk_wdt_restart(enum wk_wdt_type type);
-#endif
 
 extern unsigned int irq_total_secondary_cpus;
 static unsigned int is_secondary_cpu_first_boot;
@@ -69,6 +60,8 @@ int L2CTLR_get_core_count(void){
 
 void __cpuinit platform_secondary_init(unsigned int cpu)
 {
+    struct wd_api *wd_api = NULL;
+
     printk(KERN_INFO "Slave cpu init\n");
     HOTPLUG_INFO("platform_secondary_init, cpu: %d\n", cpu);
 
@@ -77,12 +70,9 @@ void __cpuinit platform_secondary_init(unsigned int cpu)
     pen_release = -1;
     smp_wmb();
 
-#ifdef CONFIG_MTK_WD_KICKER
-    printk("[WDK] cpu %d plug on platform_secondary_init++++++\n", cpu);
-    wk_start_kick_cpu_hotplug(cpu);
-    mtk_wdt_restart(WK_WDT_EXT_TYPE_NOLOCK);
-    printk("[WDK] cpu %d plug on platform_secondary_init------\n", cpu);
-#endif
+    get_wd_api(&wd_api);
+    if (wd_api)
+        wd_api->wd_cpu_hot_plug_on_notify(cpu);
 
 #ifdef CONFIG_FIQ_GLUE
     fiq_glue_resume();
@@ -104,9 +94,9 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
     unsigned long timeout;
 
     printk(KERN_CRIT "Boot slave CPU\n");
-    
+
     atomic_inc(&hotplug_cpu_count);
-    
+
     /*
      * Set synchronisation state between this boot processor
      * and the secondary one
@@ -140,7 +130,7 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
             else
             {
                 mt65xx_reg_sync_writel(virt_to_phys(mt_secondary_startup), BOOT_ADDR);
-                spm_mtcmos_ctrl_cpu1(STA_POWER_ON);
+                spm_mtcmos_ctrl_cpu1(STA_POWER_ON, 1);
             }
         #endif
             break;
@@ -155,7 +145,7 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
             else
             {
                 mt65xx_reg_sync_writel(virt_to_phys(mt_secondary_startup), BOOT_ADDR);
-                spm_mtcmos_ctrl_cpu2(STA_POWER_ON);
+                spm_mtcmos_ctrl_cpu2(STA_POWER_ON, 1);
             }
         #endif
             break;
@@ -170,7 +160,7 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
             else
             {
                 mt65xx_reg_sync_writel(virt_to_phys(mt_secondary_startup), BOOT_ADDR);
-                spm_mtcmos_ctrl_cpu3(STA_POWER_ON);
+                spm_mtcmos_ctrl_cpu3(STA_POWER_ON, 1);
             }
         #endif
             break;
@@ -181,6 +171,12 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 
     smp_cross_call(cpumask_of(cpu));
 
+    /*
+     * Now the secondary core is starting up let it run its
+     * calibrations, then wait for it to finish
+     */
+    spin_unlock(&boot_lock);
+
     timeout = jiffies + (1 * HZ);
     while (time_before(jiffies, timeout)) {
         smp_rmb();
@@ -189,12 +185,6 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 
         udelay(10);
     }
-    
-    /*
-     * Now the secondary core is starting up let it run its
-     * calibrations, then wait for it to finish
-     */
-    spin_unlock(&boot_lock);
 
     if (pen_release == -1)
     {
@@ -205,6 +195,7 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
         mt65xx_reg_sync_writel(cpu + 8, 0xf0200080);
         printk(KERN_EMERG "CPU%u, debug event: 0x%08x, debug monitor: 0x%08x\n", cpu, *(volatile u32 *)(0xf0200080), *(volatile u32 *)(0xf0200084));
         on_each_cpu((smp_call_func_t)dump_stack, NULL, 0);
+        atomic_dec(&hotplug_cpu_count);
         return -ENOSYS;
     }
 }
@@ -223,6 +214,11 @@ void __init smp_init_cpus(void)
         ncores = NR_CPUS;
     }
 
+    if (ncores == 2)
+    {
+        spm_mtcmos_ctrl_cpu3(STA_POWER_DOWN, 0);
+        spm_mtcmos_ctrl_cpu2(STA_POWER_DOWN, 0);
+    }
     for (i = 0; i < ncores; i++)
         set_cpu_possible(i, true);
 

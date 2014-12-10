@@ -18,14 +18,18 @@ on early-init
     setcon u:r:init:s0
 
     start ueventd
-    
+
 # create mountpoints
     mkdir /mnt 0775 root system
-    
-   
+
+
 
 on early_property:ro.build.type=user
     write /proc/bootprof "INIT: user build setting"
+    export BOOTCLASSPATH /system/framework/core.jar:/system/framework/core-junit.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/telephony-common.jar:/system/framework/mms-common.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/apache-xml.jar:/system/framework/mediatek-common.jar:/system/framework/mediatek-framework.jar:/system/framework/mediatek-op.jar:/system/framework/secondary-framework.jar:/system/framework/CustomProperties.jar
+
+on early_property:ro.build.type=userdebug
+    write /proc/bootprof "INIT: userdebug build setting"
     export BOOTCLASSPATH /system/framework/core.jar:/system/framework/core-junit.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/telephony-common.jar:/system/framework/mms-common.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/apache-xml.jar:/system/framework/mediatek-common.jar:/system/framework/mediatek-framework.jar:/system/framework/mediatek-op.jar:/system/framework/secondary-framework.jar:/system/framework/CustomProperties.jar
 
 on early_property:ro.build.type=eng
@@ -34,7 +38,7 @@ on early_property:ro.build.type=eng
 
 on early_property:ro.hardware=mt6589
     setprop ro.mtk.hardware mt6589
-    
+
 on init
 
 sysclktz 0
@@ -50,7 +54,7 @@ loglevel 6
     export ANDROID_ASSETS /system/app
     export ANDROID_DATA /data
     export ANDROID_STORAGE /storage
-    
+
     export ASEC_MOUNTPOINT /mnt/asec
     export LOOP_MOUNTPOINT /mnt/obb
 
@@ -60,14 +64,14 @@ loglevel 6
 
 # Right now vendor lives on the same filesystem as system,
 # but someday that may change.
-    symlink /system/vendor /vendor   
+    symlink /system/vendor /vendor
 
 # Create cgroup mount point for cpu accounting
     mkdir /acct
     mount cgroup none /acct cpuacct
     mkdir /acct/uid
 
-    
+
     mkdir /system
     mkdir /data 0771 system system
     mkdir /cache 0770 system cache
@@ -147,14 +151,14 @@ loglevel 6
 
 # Change ION driver permission
     chmod 0644 /dev/ion
-    
+
 # Change MMP driver permission
     chmod 0644 /dev/mmp
-    
+
 # change lk_env permission
     chown root system /proc/lk_env
     chmod 0660 /proc/lk_env
-   
+
 # mount different fs start
 
 on fs_property:ro.mount.fs=YAFFS
@@ -187,7 +191,7 @@ on fs_property:ro.mount.fs=EXT4
     # Mount /system rw first to give the filesystem a chance to save a checkpoint
     #mount ext4 emmc@android /system wait commit=1,data=journal,noauto_da_alloc
     mount ext4 /emmc@android /system wait commit=1,noauto_da_alloc
-    
+
     mkdir /system/secro 0600 system system
     # RIL need to do this before the folder /system changed to read only
     chown radio system /system/etc/ril
@@ -195,7 +199,7 @@ on fs_property:ro.mount.fs=EXT4
     chmod 0444 /system/etc/ril/oper.lis
     # Wifi thermal need to chmod before system is changed to read only
     chown root system /system/etc/throttle.sh
-    chmod 0750 /system/etc/throttle.sh   
+    chmod 0750 /system/etc/throttle.sh
     mount ext4 /emmc@android /system noatime ro remount wait
     exec /sbin/e2fsck -pfD /emmc@usrdata
     exec /sbin/tune2fs -O has_journal /emmc@usrdata
@@ -221,7 +225,7 @@ on fs_property:ro.mount.fs=UBIFS
     chmod 4755 /system/etc/ppp/link-down-cdma
     # Wifi thermal need to chmod before system is changed to read only
     chown root system /system/etc/throttle.sh
-    chmod 0750 /system/etc/throttle.sh   
+    chmod 0750 /system/etc/throttle.sh
 
     mkdir /system/secro 0600 system system
     mount ubifs ubi@system /system ro remount
@@ -242,7 +246,7 @@ on post-fs
     # mount shared so changes propagate into child namespaces
     mount rootfs rootfs / shared rec
     mount tmpfs tmpfs /mnt/secure private rec
-    
+
     # We chown/chmod /cache again so because mount is run as root + defaults
     chown system cache /cache
     chmod 0770 /cache
@@ -266,7 +270,7 @@ on post-fs
     #change permission for engineer mode
     chown radio system /proc/clkmgr/pll_test
     chown radio system /proc/clkmgr/pll_fsel
-    
+
     #change permission for engineer mode
     chown radio system /proc/freqhopping/dramc
     chown radio system /proc/freqhopping/dumpregs
@@ -285,11 +289,11 @@ on post-fs
     # create the lost+found directories, so as to enforce our permissions
     mkdir /cache/lost+found 0770 root root
 
-    
+
 # change owner
     chown root system /proc/bootprof
     chown root system /proc/mtprof/cputime
-    
+
 on post-fs-data
     # We chown/chmod /data again so because mount is run as root + defaults
     chown system system /data
@@ -372,26 +376,26 @@ on post-fs-data
     #setprop vold.post_fs_data_done 1
 
 # -----------------------
-# Add by MTK 
+# Add by MTK
 
-    # dhcp server 
+    # dhcp server
     mkdir /data/misc/dhcp 0770 dhcp wifi
     chown dhcp wifi /data/misc/dhcp
-    
-    # radvd  
+
+    # radvd
     mkdir /data/misc/radvd 0770 system system
     chmod 444 /etc/radvd/radvd.conf
-    
+
     # SGX
     insmod /system/lib/modules/pvrsrvkm.ko
     insmod /system/lib/modules/mtklfb.ko
-    
+
     # Permissions for System Server and daemons.
     chown root   radio  /sys/class/leds/lcd-backlight/brightness
     chown root   radio  /sys/class/leds/lcd-backlight/duty
     chown root   radio  /sys/class/leds/lcd-backlight/div
 
-    # Touch Panel 
+    # Touch Panel
     chmod 0664 /dev/touch
     chown root diag /sys/module/tpd_setting/parameters/tpd_calmat
     chown root diag /sys/module/tpd_setting/parameters/tpd_em_debounce_time
@@ -405,15 +409,15 @@ on post-fs-data
     chown root diag /sys/module/tpd_setting/parameters/tpd_em_asamp
     chown root diag /sys/module/tpd_debug/parameters/tpd_em_log
     chown root diag /sys/module/tpd_debug/parameters/tpd_em_log_to_fs
-    
+
     chmod 0660 /dev/pmem_multimedia
     chown system media /dev/pmem_multimedia
-    
+
     # watch dog kicker
     write /proc/wdk "0 20 30"
 
     # set ptmx group to non-root
-    chown root radio /dev/ptmx    
+    chown root radio /dev/ptmx
 
     # RTC
     mkdir /data/misc/rtc 0770 system system
@@ -423,35 +427,35 @@ on post-fs-data
     #mknod /dev/M4U_device c 188 0
     chmod 0444 /dev/M4U_device
     #chown system media /dev/M4U_device
-        
+
     # Sensor
     chmod 0660 /dev/hwmsensor
     chmod 0660 /dev/msensor
     chmod 0660 /dev/gsensor
     chmod 0660 /dev/als_ps
     chmod 0660 /dev/gyroscope
-    
+
     chmod 0660 /sys/devices/platform/msensor/driver/cpsopmode
     chmod 0660 /sys/devices/platform/msensor/driver/cpsreptxy
     chmod 0660 /sys/devices/platform/msensor/driver/cpsreptz
-    
+
     chown system system /dev/hwmsensor
     chown system system /dev/msensor
     chown system system /dev/gsensor
     chown system system /dev/als_ps
     chown system system /dev/gyroscope
-    
+
     #Accdet
     chown root radio /sys/devices/platform/Accdet_Driver/driver/accdet_call_state
     #VideoCodec
-    insmod /system/lib/modules/vcodec_kernel_driver.ko
+    #insmod /system/lib/modules/vcodec_kernel_driver.ko
     mknod /dev/Vcodec c 160 0
     chmod 0660 /dev/Vcodec
     chown system media /dev/Vcodec
 
     #kpd
     chown radio radio /sys/devices/platform/mtk-kpd/driver/kpd_call_state
-    
+
     mkdir /data/amit/ 0770 system system
     mkdir /data/misc/sensors 0664 system system
     mkdir /data/misc/akmd 0664 system system
@@ -461,30 +465,27 @@ on post-fs-data
     chown system /sys/class/input/input3/enable
     chown system /sys/class/input/input3/wake
     chown system /sys/class/input/input4/offsets
-    chown system /sys/class/input/input4/dynamic_matrix    
+    chown system /sys/class/input/input4/dynamic_matrix
     chown system /sys/devices/platform/msensor/driver/cpsopmode
     chown system /sys/devices/platform/msensor/driver/cpsreptxy
     chown system /sys/devices/platform/msensor/driver/cpsreptz
 
-    # GPIO
-    chmod 0664 /dev/mtgpio
-    
     # SPM SODI Enable
     chown media /proc/mcdi/sodi_en
-    chmod 0664 /proc/mcdi/sodi_en    
-    
+    chmod 0664 /proc/mcdi/sodi_en
+
         #EM eint
     chown root diag /sys/bus/platform/drivers/eint/current_eint
 
     chmod 0660 /dev/graphics/fb0
     chown system graphics /dev/graphics/fb0
-    
+
     chmod 0660 /dev/mtkfb_vsync
     chown system graphics /dev/mtkfb_vsync
 
     chmod 0660 /dev/sw_sync
     chown system graphics /dev/sw_sync
-    
+
     # EM baseband file
     chown root diag /system/bin/baseband_regdump
     chmod 4750 /system/bin/baseband_regdump
@@ -502,7 +503,7 @@ on post-fs-data
     chmod 0664 /proc/cpu_ss/cpu_ss_mode
     chmod 0664 /proc/cpu_ss/cpu_ss_period
     chmod 0664 /proc/cpu_ss/cpu_ss_period_mode
-    
+
     #EM eint
     chown root diag /sys/bus/platform/drivers/eint/current_eint
 
@@ -510,25 +511,21 @@ on post-fs-data
     mkdir /data/misc/ppp 0770 bluetooth net_bt
 
     # Android SEC related device nodes
-    insmod /system/lib/modules/sec.ko
     mknod /dev/sec c 182 0
     chmod 0660 /dev/sec
     chown root system /dev/sec
-	
+
     # FM Radio device node
     mknod /dev/fm     c 193 0;
     chmod 0660 /dev/fm
     chown system media /dev/fm
-    
-    # device apc settings
-    insmod /system/lib/modules/devapc.ko
+
 
     # device info /proc interface
-    insmod /system/lib/modules/devinfo.ko
     mknod /dev/devmap c 196 0;
-    chmod 0444 /dev/devmap
-    chown root media /dev/devmap
-    
+    chmod 0440 /dev/devmap
+    chown root system /dev/devmap
+
     # bluetooth
     mkdir /data/@btmtk 0770 bluetooth net_bt
     chown bluetooth bluetooth /dev/hid-keyboard
@@ -548,24 +545,24 @@ on post-fs-data
     chmod 0664 /dev/hdmitx
 
     # JPEG
-    chmod 0444 /dev/mtk_jpeg
-    chmod 0444 /dev/mtk_gdma
-    chmod 0444 /dev/mtk_gfmt
-    chmod 0444 /dev/mtk_almk
+    #chmod 0440 /dev/mtk_jpeg
+    #chmod 0440 /dev/mtk_gdma
+    #chmod 0440 /dev/mtk_gfmt
+    chmod 0440 /dev/mtk_almk
 
     # DISP
     chmod 0444 /dev/mtk_disp
-    
+
     #Camera
-    chmod 0664 /dev/camera-sysram
-    chmod 0664 /dev/camera-isp
-    chmod 0664 /dev/camera-pipemgr
+    chmod 0660 /dev/camera-sysram
+    chmod 0660 /dev/camera-isp
+    chmod 0660 /dev/camera-pipemgr
     chmod 0660 /dev/kd_camera_hw
     chmod 0660 /dev/kd_camera_flashlight
     chmod 0660 /dev/kd_camera_hw_bus2
     chmod 0660 /dev/FM50AF
     chmod 0660 /dev/CAM_CAL_DRV
-    
+
     chown system camera /dev/camera-sysram
     chown system camera /dev/camera-isp
     chown system camera /dev/camera-pipemgr
@@ -582,11 +579,11 @@ on post-fs-data
     # otg_test
     chown root radio /dev/mt_otg_test
     chmod 0660 /dev/mt_otg_test
-    
+
     # MDP
     chmod 0660 /dev/mt-mdp
     chown system media /dev/mt-mdp
-    
+
     # G2D
     chmod 0660 /dev/mtkg2d
     chown system media /dev/mtkg2d
@@ -596,7 +593,7 @@ on post-fs-data
 
     chmod 0660 /sys/bus/platform/drivers/mem_bw_ctrl/concurrency_scenario
     chown system media /sys/bus/platform/drivers/mem_bw_ctrl/concurrency_scenario
-    
+
     # SMI
     chmod 0660 /dev/MTK_SMI
     chown system media /dev/MTK_SMI
@@ -604,22 +601,14 @@ on post-fs-data
     #mtk_sched
     chmod 0660 /dev/mtk_sched
     chown system media /dev/mtk_sched
-   
-# End of adding by MTK drivers   
+
+# End of adding by MTK drivers
 # -----------------------
-
-on boot
-
-
-# Set this property so surfaceflinger is not started by system_init
-    setprop system_init.startsurfaceflinger 0
-
-    class_start default
 
 on ipo
 # xlog
     start xlogboot
-    
+
 # basic network init
     ifup lo
     hostname localhost
@@ -714,18 +703,16 @@ service adbd /sbin/adbd
 on property:ro.kernel.qemu=1
     start adbd
 
+service drvbd /system/bin/drvbd
+    class main
+    user system
+    group system
+
 service debuggerd /system/bin/debuggerd
     class main
 
 service mobile_log_d /system/bin/mobile_log_d
     class main
-
-# SGX init
-service pvrsrvctl /system/vendor/bin/pvrsrvctl --start
-    class main
-    user root
-    group root
-    oneshot
 
 service servicemanager /system/bin/servicemanager
     class core
@@ -738,12 +725,6 @@ service servicemanager /system/bin/servicemanager
     onrestart restart surfaceflinger
     onrestart restart drm
     onrestart restart aal
-
-service surfaceflinger /system/bin/surfaceflinger
-    class main
-#    user system
-    group graphics
-    onrestart restart zygote
 
 service ipod /system/bin/logwrapper /system/bin/ipod
     user root

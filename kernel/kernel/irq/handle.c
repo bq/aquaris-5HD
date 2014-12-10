@@ -25,6 +25,12 @@
 #ifdef CONFIG_MTPROF_CPUTIME
 /*  cputime monitor en/disable value */
 extern int mtsched_enabled;
+#ifdef CONFIG_MT_ENG_BUILD
+#define MAX_THREAD_COUNT 6000	// max debug thread count, if reach the level, stop store new thread informaiton.
+#else
+#define MAX_THREAD_COUNT 3000
+#endif
+extern int proc_count;
 #endif
 
 /**
@@ -140,7 +146,7 @@ irqreturn_t
 handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
 {
 	irqreturn_t retval = IRQ_NONE;
-	unsigned int random = 0, irq = desc->irq_data.irq;
+	unsigned int flags = 0, irq = desc->irq_data.irq;
 
 #ifdef CONFIG_MTPROF_IRQ_DURATION
 	unsigned long long t1, t2, dur;
@@ -167,7 +173,7 @@ handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
 			char *isr_name = NULL;
 			
 			current->se.mtk_isr_time += dur;
-			while(mtk_isr_point != NULL)
+			while((current->se.mtk_isr!= NULL) && (mtk_isr_point != NULL))
 			{
 				if(mtk_isr_point->isr_num == irq)
 				{
@@ -180,7 +186,7 @@ handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
 				mtk_isr_point = mtk_isr_point -> next;
 			}
 
-			if(isr_find == 0)
+			if((isr_find == 0) && (proc_count < MAX_THREAD_COUNT))
 			{
 				mtk_isr_point =  kmalloc(sizeof(struct mtk_isr_info), GFP_ATOMIC);
 				if(mtk_isr_point == NULL)
@@ -241,7 +247,7 @@ handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
 
 			/* Fall through to add to randomness */
 		case IRQ_HANDLED:
-			random |= action->flags;
+			flags |= action->flags;
 			break;
 
 		default:
@@ -252,8 +258,7 @@ handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
 		action = action->next;
 	} while (action);
 
-	if (random & IRQF_SAMPLE_RANDOM)
-		add_interrupt_randomness(irq);
+	add_interrupt_randomness(irq, flags);
 
 	if (!noirqdebug)
 		note_interrupt(irq, desc, retval);

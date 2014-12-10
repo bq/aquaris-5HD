@@ -74,6 +74,11 @@ public:     ////            Interface.
                             //
     typedef SensorInfoBase::FeatureInfoProvider_T FeatureInfoProvider_T;
     virtual MBOOL           GetFeatureProvider(FeatureInfoProvider_T& rFInfoProvider) { return false; }
+
+    static  MUINT32			getNullFlickerPara(MINT32 sensorMode, MVOID*const pDataBuf)
+    						{
+    							return  -1;
+    						}
 protected:  ////            Implementation.
     virtual MUINT32         impGetDefaultData(CAMERA_DATA_TYPE_ENUM const CameraDataType, MVOID*const pDataBuf, MUINT32 const size) const { return  -1; }
     static  SensorInfoBase* GetInstance();
@@ -96,8 +101,14 @@ public:     ////            Interface.
                             {
                                 return  getInstance()->impGetDefaultData(CameraDataType, pDataBuf, size);
                             }
+
+	static  MUINT32         getFlickerPara(MINT32 sensorMode, MVOID*const pDataBuf)
+                            {
+                                return  getInstance()->impGetFlickerPara(sensorMode, pDataBuf);
+                            }
 protected:  ////            Implementation.
     virtual MUINT32         impGetDefaultData(CAMERA_DATA_TYPE_ENUM const CameraDataType, MVOID*const pDataBuf, MUINT32 const size) const;
+    virtual MUINT32         impGetFlickerPara(MINT32 sensorMode, MVOID*const pDataBuf) const;
 
 };
 
@@ -113,6 +124,7 @@ typedef struct
     NSFeature::SensorInfoBase* (*pfGetSensorInfoInstance)();
     MUINT32 (*getCameraDefault)(CAMERA_DATA_TYPE_ENUM CameraDataType, MVOID *pDataBuf, MUINT32 size);
     MUINT32 (*getCameraCalData)(MUINT32* pGetCalData);
+    MUINT32 (*getCameraFlickerPara)(MINT32 sensorMode, MVOID *pDataBuf);
 } MSDK_SENSOR_INIT_FUNCTION_STRUCT, *PMSDK_SENSOR_INIT_FUNCTION_STRUCT;
 
 MUINT32 GetSensorInitFuncList(MSDK_SENSOR_INIT_FUNCTION_STRUCT **ppSensorList);

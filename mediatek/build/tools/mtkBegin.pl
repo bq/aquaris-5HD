@@ -7,8 +7,12 @@
 $flag_subrel = "mediatek/build/android/full/config.mk";
 $flag_custrel = "mediatek/build/android/full/config.mk.custrel";
 $srcDir = "vendor/mediatek/$prj/artifacts/out/";
-$dstDir = "out/";
-$tmpDir = "vendor/mediatek/$prj/artifacts/kernel/out/";
+my $out_dir = "out";
+if (exists $ENV{"OUT_DIR"})
+{
+	$out_dir = $ENV{"OUT_DIR"};
+}
+$dstDir = "$out_dir/";
 
 exit 0, if (!-e $flag_subrel && !-e $flag_custrel);
 exit 0, if (-e $flag_subrel && -e $flag_custrel);
@@ -39,10 +43,6 @@ if (!-e $flag_custrel)
 	{
 	  system("rsync -av --exclude=.svn --exclude=.git --exclude=.cvs $srcDir $dstDir > auto_sync_android.log 2>&1");
 	} 
-	if (-d $tmpDir)
-	{
-	  system("rsync -av --exclude=.svn --exclude=.git --exclude=.cvs $tmpDir kernel/out/ > auto_sync_kernel.log 2>&1\n");
-	}
 }
 
 exit 0;

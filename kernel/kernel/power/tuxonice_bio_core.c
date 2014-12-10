@@ -1593,11 +1593,16 @@ static int try_to_open_resume_device(char *commandline, int quiet)
 	char *uuid = uuid_from_commandline(commandline);
 	int waited_for_device_probe = 0;
 
-    hib_log("try_to_open_resume_device: %s\n", commandline);
+    hib_log("commandline=\"%s\"\n", commandline);
 	resume_dev_t = MKDEV(0, 0);
 
-	if (!strlen(commandline))
+	if (!strlen(commandline)) {
+#ifdef CONFIG_MTK_HIBERNATION
+        hib_warn("skip scanning for image...\n");
+#else
 		retry_if_fails(toi_bio_scan_for_image(quiet));
+#endif
+    }
 
 	if (uuid) {
 		struct fs_info seek;

@@ -75,12 +75,15 @@ my $COLUMN_NAND_EMMC_ID	        = $COLUMN_BOARD_ID + 1 ;
 my $COLUMN_FW_ID	        = $COLUMN_NAND_EMMC_ID + 1 ;
 my $COLUMN_NAND_PAGE_SIZE       = $COLUMN_FW_ID + 1 ;
 my $COLUMN_PLATFORM             = $COLUMN_NAND_PAGE_SIZE + 1 ;
+# FIX-ME, please remove this MMD column in the next chip
+my $COLUMN_MMD             = $COLUMN_PLATFORM + 24 ;
 
 my $CUSTOM_MEMORY_DEVICE_HDR  = $ARGV[0]; # src\custom\<project>, need full path for now
 #my $MEMORY_DEVICE_LIST_XLS    = Win32::GetCwd()."\\memorydevicelist\\".$ARGV[1];
 my $MEMORY_DEVICE_LIST_XLS    = $ARGV[1];
 my $PLATFORM                  = $ARGV[2]; # MTxxxx
 my $PROJECT               = $ARGV[3];
+my $MTK_EMIGEN_OUT_DIR = "$ENV{MTK_ROOT_OUT}/EMIGEN";
 
 
 print "$CUSTOM_MEMORY_DEVICE_HDR\n$MEMORY_DEVICE_LIST_XLS\n$PLATFORM\n" if ($DebugPrint == 1);
@@ -107,17 +110,27 @@ my $CUSTOM_EMI_H = $CUSTOM_MEMORY_DEVICE_HDR;
 my $CUSTOM_EMI_C = $CUSTOM_MEMORY_DEVICE_HDR;
 my $INFO_TAG = $CUSTOM_MEMORY_DEVICE_HDR;
 
+	#shaohui add follows for eMMC devinfo
+my $DEVINFO_EMI_C = "mediatek/platform/mt6589/kernel/drivers/sltdevinfo/";
+my $DEVINFO_EMI_H =$DEVINFO_EMI_C;
+print "$DEVINFO_EMI_C\n$DEVINFO_EMI_H\n" if ($DebugPrint == 1);
+	#shaohui add end
 if ($os eq "windows")
 {
-    $CUSTOM_EMI_H =~ s/custom_MemoryDevice.h$/output\\custom_emi\.h/i;
-    $CUSTOM_EMI_C =~ s/custom_MemoryDevice.h$/output\\custom_emi\.c/i;
+    $CUSTOM_EMI_H = "$MTK_EMIGEN_OUT_DIR/inc/custom_emi.h";
+    $CUSTOM_EMI_C = "$ENV{MTK_ROOT_OUT}/PRELOADER_OBJ/custom_emi.c";
     `mkdir output` unless (-d "output");
 }
 elsif ($os eq "linux")
 {
-    $CUSTOM_EMI_H =~ s/custom_MemoryDevice.h$/custom_emi\.h/i;
-    $CUSTOM_EMI_C =~ s/inc\/custom_MemoryDevice.h$/custom_emi\.c/i;
-    $INFO_TAG     =~ s/inc\/custom_MemoryDevice.h$/MTK_Loader_Info\.tag/i;
+    $CUSTOM_EMI_H = "$MTK_EMIGEN_OUT_DIR/inc/custom_emi.h";
+    $CUSTOM_EMI_C = "$ENV{MTK_ROOT_OUT}/PRELOADER_OBJ/custom_emi.c";
+    $INFO_TAG     = "$MTK_EMIGEN_OUT_DIR/MTK_Loader_Info.tag";
+    	#shaohui add follows for eMMC devinfo
+    $DEVINFO_EMI_C = $DEVINFO_EMI_C."devinfo_emi\.c";
+    $DEVINFO_EMI_H = $DEVINFO_EMI_H."devinfo_emi\.h";
+    print "$DEVINFO_EMI_C\n$DEVINFO_EMI_H\n" if ($DebugPrint ==1);
+	#shaohui add end
 }
 
 print "$CUSTOM_EMI_H\n$CUSTOM_EMI_C\n$INFO_TAG\n" if ($DebugPrint ==1);
@@ -132,6 +145,10 @@ my $is_existed_c             = (-e $CUSTOM_EMI_C)?           1 : 0;
 #   exit;
 #}
 
+	#shaohui add follows for eMMC devinfo
+my $is_devinfo_existed_h             = (-e $DEVINFO_EMI_H)?           1 : 0;
+my $is_devinfo_existed_c             = (-e $DEVINFO_EMI_C)?           1 : 0;
+	#shaohui add end
 
 #****************************************************************************
 # parse custom_MemoryDevice.h to extract MEMORY_DEVICE_TYPE & PART_NUMBER
@@ -178,7 +195,8 @@ my $Sub_version;
 my $USE_EMMC_ID_LEN=9;
 my $MAX_NAND_EMMC_ID_LEN=16;
 my $MAX_FW_ID_LEN=8;
-#my $ORI_ID_Length;
+my $MMD;
+my $MMD_String;
 my $fw_id_len;
 my $NAND_PAGE_SIZE;
 my $EMI_CONA_VAL;           
@@ -200,6 +218,8 @@ my $DRAMC_ACTIM1_VAL;
 my $DRAMC_MISCTL0_VAL;   
 my $DRAM_RANK0_SIZE;   
 my $DRAM_RANK1_SIZE; 
+my $Discrete_DDR = 0;
+my $MCP_DDR2 = 0;
 
 my $DDR1_2_3 ;
 #union
@@ -209,6 +229,7 @@ my $DDR2_MODE_REG2;
 my $DDR2_MODE_REG3;
 my $DDR2_MODE_REG10;
 my $DDR2_MODE_REG63;
+my $DDR2_MODE_REG5;
 #2
 my $DDR1_MODE_REG;
 my $DDR1_EXT_MODE_REG;
@@ -271,9 +292,9 @@ close CUSTOM_MEMORY_DEVICE_HDR;
 #
 #   check if data validate.
 #
-if ($CustCS_CustemChips > 5)
+if ($CustCS_CustemChips > 10)
 {
-    die "\n[Error]CustCS_CustemChips($CustCS_CustemChips) > 5\n" ;
+    die "\n[Error]CustCS_CustemChips($CustCS_CustemChips) > 10\n" ;
 }
 if ($CustCS_CustemChips == 0)
 {
@@ -315,29 +336,90 @@ my $total_part_number_iter = 0;
     
     # if the value read from excel validate
     $iter = 0 ;
-    my $Discrete_DDR = 0 ;
     my $EMMC_NAND_MCP = "00" ;
     my $Page_size = "0" ;
     print "TotalCustemChips:$TotalCustemChips\n";
+    print "This image only support in $MMD[0]\n";
     while ($iter < $TotalCustemChips)
     {
+        # only one kind of MMD is allowed
+        my $iter_mmd = $iter + 1; 
+        while ($iter_mmd < $TotalCustemChips)
+	{
+             if (( $MMD[$iter] ne $MMD[$iter_mmd]))
+	     {
+        	   die "[Error]It's not allow to combine MMD1 and MMD2 in one load\n" ;
+	     }
+	     $iter_mmd ++;
+	}
+	
         # only one Discrete is allowed
         if ($DEV_TYPE1[$iter] eq "00")      
         {
-            if ($Discrete_DDR == 0)
+            # if all discrete dram are DDR2, it is allowed
+            if ($DEV_TYPE2[$iter] eq "02")
             {
-                $Discrete_DDR = $Discrete_DDR + 1 ;
-                if ($TotalCustemChips > 1) 
+                my $iter_dis_dram; 
+                $iter_dis_dram = 0;
+                while ($iter_dis_dram < $TotalCustemChips)
                 {
-                    die "[Error]At most one discrete DRAM is allowed in the Combo MCP list\n" ;
-                }
+		    if ($iter_dis_dram == $iter)
+		    {
+                    	$iter_dis_dram++;
+		    	next;
+		    }
+                    if (!($DEV_TYPE2[$iter_dis_dram] eq "02"))
+                    {
+		    	# for PCDDR3 limitation
+			# if we put DDR,DDR3 in the list, send the build error
+                        print "[Error]At most one discrete DRAM is allowed in the Combo MCP list\n" ;
+                        die "[Error]Combo discrete DRAM only support LPDDR2\n" ;
+                    }
+                    else
+                    {
+#comment to avoid build error for the same vendor ID		  
+#=head		   
+                       # check the MODE_REG5(DRAM vendor_ID) are unique
+		       # if have unique MODE5 in the list, send the build error
+                       if ( $DDR2_MODE_REG5[$iter] eq $DDR2_MODE_REG5[$iter_dis_dram])
+                       {
+                            
+                            die "[Error] MODE_REG5(DRAM vendor_ID) should not be the same in the Combo list, MODE_REG5($Total_PART_NUMBER[$iter])==MODE_REG5($Total_PART_NUMBER[$iter_dis_dram])\n" ;
+                       }
+
+#=cut
                     
+                    }
+
+                    $iter_dis_dram++;
+                }
+                $Discrete_DDR = $Discrete_DDR + 1 ;
             }
-            else
-            {
-                die "[Error]more than 1 Discrete DDR used!\n" ;
+            else{
+	    	# DDR1,DDR3 only support one discrete DRAM in the Combo List
+		# if more then one discrete DRAM in the list, send build error
+                if ($Discrete_DDR == 0)
+                {
+                    $Discrete_DDR = $Discrete_DDR + 1 ;
+                    if ($TotalCustemChips > 1) 
+                    {
+                        print "[Error]At most one discrete DRAM is allowed in the Combo MCP list\n" ;
+                        die "[Error]Combo discrete DRAM only support LPDDR2\n" ;
+                    }
+
+                }
+                else
+                {
+                    die "[Error]more than 1 Discrete DDR used!\n" ;
+                }
             }
         }
+	else{
+            if ($DEV_TYPE2[$iter] eq "02")
+	    {
+                $MCP_DDR2 = $MCP_DDR2 + 1 ;
+	    }
+	}
         
     unless($ENV{PROJECT} eq "mt6589_evb1"){
         # nand emmc can't used together.
@@ -422,6 +504,8 @@ if ($os eq "windows")
     {
 	unlink ($CUSTOM_EMI_C);
     }
+    my $temp_path = `dirname $CUSTOM_EMI_C`;
+    `mkdir -p $temp_path`;
     open (CUSTOM_EMI_C, ">$CUSTOM_EMI_C") or &error_handler("$CUSTOM_EMI_C: file error!", __FILE__, __LINE__);
 
     print CUSTOM_EMI_C &copyright_file_header();
@@ -434,11 +518,62 @@ if ($os eq "windows")
     print "\n$CUSTOM_EMI_C is generated\n";
 } # if ($is_existed_c == 0)
 
+#shaohui add for DEVINFO add
+#****************************************************************************
+# generate devinfo_EMI.c
+#****************************************************************************
+#if ($is_devinfo_existed_c == 0)
+{
+    if ($is_devinfo_existed_c == 1)
+    {
+	unlink ($DEVINFO_EMI_C);
+    }
+    open (DEVINFO_EMI_C, ">$DEVINFO_EMI_C") or &error_handler("$DEVINFO_EMI_C: file error!", __FILE__, __LINE__);
+
+    print DEVINFO_EMI_C &copyright_file_header();
+    print DEVINFO_EMI_C &description_file_header(                      "devinfo_emi.c",
+          "This Module defines the EMI (external memory interface) related setting.",
+                                                 "EMI auto generator". $EMIGEN_VERNO);
+    print DEVINFO_EMI_C &DEVINFO_EMI_c_file_body();
+    close DEVINFO_EMI_C or &error_handler("$DEVINFO_EMI_C: file error!", __FILE__, __LINE__);
+
+    print "\n$DEVINFO_EMI_C is generated(shaohui add print)\n";
+} # if ($is_devinfo_existed_c == 0)
+
+
+#****************************************************************************
+# generate devinfo_emi.h
+#****************************************************************************
+#if ($is_devinfo_existed_h == 0)
+{   
+   	if ($is_devinfo_existed_h == 1)
+    {
+	unlink ($DEVINFO_EMI_H);
+    }
+    open (DEVINFO_EMI_H, ">$DEVINFO_EMI_H") or &error_handler("DEVINFO_EMI_H: file error!", __FILE__, __LINE__);
+
+   print DEVINFO_EMI_H &copyright_file_header();
+    print DEVINFO_EMI_H &description_file_header(                      "devinfo_emi.h",
+          "This Module defines the EMI (external memory interface) related setting.",
+                                                 "EMI auto generator". $EMIGEN_VERNO);
+    print DEVINFO_EMI_H &DEVINFO_EMI_h_file_body();
+    close DEVINFO_EMI_H or &error_handler("$DEVINFO_EMI_H: file error!", __FILE__, __LINE__);
+
+    print "\n$DEVINFO_EMI_H is generated\n";
+} # if ($is_devinfo_existed_h == 0)
+
+#shaohui add end
 #****************************************************************************
 # generate custom_emi.h -> no build after MT6575
 #****************************************************************************
 #if ($is_existed_h == 0)
 #{
+#    if ($is_existed_h == 1)
+#    {
+#        unlink ($CUSTOM_EMI_H);
+#    }
+#    my $temp_path = `dirname $CUSTOM_EMI_H`;
+#    `mkdir -p $temp_path`;
 #    open (CUSTOM_EMI_H, ">$CUSTOM_EMI_H") or &error_handler("CUSTOM_EMI_H: file error!", __FILE__, __LINE__);
 #
 #    print CUSTOM_EMI_H &copyright_file_header();
@@ -595,7 +730,8 @@ typedef struct
     int   DRAMC_ACTIM1_VAL;    // for E1 DDR2 only
     int   DRAMC_MISCTL0_VAL;   // for E1 DDR2 only
     
-    int   reserved[10] ;          // reserved
+    int   MMD;
+    int   reserved[8] ;          // reserved
 
     union
     {
@@ -606,6 +742,7 @@ typedef struct
             int   DDR2_MODE_REG3;
             int   DDR2_MODE_REG10;
             int   DDR2_MODE_REG63;
+    	    int   DDR2_MODE_REG5;
         };
         struct
         {
@@ -645,12 +782,30 @@ sub custom_EMI_c_file_body
     my $ddr = -1 ;
 
     $iter = 0 ;
+
+    for $iter (0..$TotalCustemChips-1)
+    {
+        if ($DEV_TYPE1[$iter] != "00")
+	{
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$iter] ;
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . " ," ;
+	}
+    }
+    for $iter (0..$TotalCustemChips-1)
+    {
+        if ($DEV_TYPE1[$iter] == "00")
+	{
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$iter] ;
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . " ," ;
+	}
+    }
+=head
     while ($iter<$TotalCustemChips)
     {
         if ($DEV_TYPE1[$iter] == "00")
         {
             $ddr = $iter ;
-            print "ddr found $ddr \n" ;
+            print "Discrete ddr found $ddr \n" ;
             $iter = $iter + 1 ;
         }
         else
@@ -664,11 +819,12 @@ sub custom_EMI_c_file_body
             }
         }
     }
-	
+# if we have discrete dram, we put them in the end	
     if ($ddr != -1)
     {
         $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$ddr] ;
     }
+=cut
 	
 	
 	my $template = <<"__TEMPLATE";
@@ -686,6 +842,209 @@ __TEMPLATE
     return $template ;
 }
 
+#########shaohui add start for DEVINFO
+#****************************************************************************
+# subroutine:  DEVINFO_EMI_c_file_body
+# return:      
+#****************************************************************************
+sub DEVINFO_EMI_c_file_body
+{
+    ###
+    my $EMI_SETTINGS_string = "" ;
+    my $ddr = -1 ;
+
+    $iter = 0 ;
+
+    for $iter (0..$TotalCustemChips-1)
+    {
+        if ($DEV_TYPE1[$iter] != "00")
+	{
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$iter] ;
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . " ," ;
+	}
+    }
+    for $iter (0..$TotalCustemChips-1)
+    {
+        if ($DEV_TYPE1[$iter] == "00")
+	{
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$iter] ;
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . " ," ;
+	}
+    }
+=head
+previous version
+    while ($iter<$TotalCustemChips)
+    {
+        if ($DEV_TYPE1[$iter] == "00")
+        {
+            $ddr = $iter ;
+            print "Discrete ddr found $ddr \n" ;
+            $iter = $iter + 1 ;
+        }
+        else
+        {
+            $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$iter] ;
+
+            $iter = $iter + 1 ;
+            if ($iter < $TotalCustemChips || $ddr != -1)
+            {
+                $EMI_SETTINGS_string = $EMI_SETTINGS_string . " ," ;
+            }
+        }
+    }
+# if we have discrete dram, we put them in the end	
+    if ($ddr != -1)
+    {
+        $EMI_SETTINGS_string = $EMI_SETTINGS_string . $EMI_SETTINGS[$ddr] ;
+    }
+=cut
+	
+	
+	my $template = <<"__TEMPLATE";
+/********************************************************************************
+ *------------------------------------------------------------------------------
+ * WARNING!!!  WARNING!!!   WARNING!!!  WARNING!!!  WARNING!!!  WARNING!!! 
+ * This file is generated by EMI Auto-gen Tool.
+ * Please do not modify the content directly!  It could be overwritten!
+ * More information: 
+ * This file is auto generated by emigen.pl;
+ * Pls remake or new preloader to generate!
+ * By shaohui mods 20140306 @ longcheer.shanghai
+ *------------------------------------------------------------------------------
+*********************************************************************************/
+
+#include "devinfo_emi.h"
+
+#define NUM_EMI_RECORD ($TotalCustemChips)
+
+int num_of_emi_records = NUM_EMI_RECORD ;
+
+EMI_SETTINGS emi_settings[] =
+{
+     $EMI_SETTINGS_string
+};
+__TEMPLATE
+    return $template ;
+}
+
+#****************************************************************************
+# subroutine:  HeaderBody_for_lpsdram
+# return:      content for DEVINFO_EMI_c_file_body.h 
+#****************************************************************************
+sub DEVINFO_EMI_h_file_body
+{
+    ###
+    my $template = <<"__TEMPLATE";
+
+#ifndef DEVINFO_EMI_H
+#define DEVINFO_EMI_H
+
+/****************************************
+This file is auto generated by emigen.pl;
+Pls remake or new preloader to generate!
+By shaohui mods 20121217
+*****************************************/
+typedef struct
+{
+//shaohui add this section for eMCP info
+	char DEVINFO_MCP[30];	//30 charactors 
+//  //shaohui add end
+
+    int   sub_version;            // sub_version: 0x1 for new version
+    int  type;                /* 0x0000 : Invalid
+                                 0x0001 : Discrete DDR1
+                                 0x0002 : Discrete LPDDR2
+                                 0x0003 : Discrete LPDDR3
+                                 0x0004 : Discrete PCDDR3
+                                 0x0101 : MCP(NAND+DDR1)
+                                 0x0102 : MCP(NAND+LPDDR2)
+                                 0x0103 : MCP(NAND+LPDDR3)
+                                 0x0104 : MCP(NAND+PCDDR3)
+                                 0x0201 : MCP(eMMC+DDR1)
+                                 0x0202 : MCP(eMMC+LPDDR2)
+                                 0x0203 : MCP(eMMC+LPDDR3)
+                                 0x0204 : MCP(eMMC+PCDDR3)
+                              */
+    int   id_length;              // EMMC and NAND ID checking length
+    int   fw_id_length;              // FW ID checking length
+    char  ID[16];
+    char  fw_id[8];               // To save fw id
+    int   EMI_CONA_VAL;           //@0x3000
+    int   DRAMC_DRVCTL0_VAL;      //@0x40B8               -> customized TX I/O driving
+    int   DRAMC_DRVCTL1_VAL;      //@0x40BC               -> customized TX I/O driving
+    int   DRAMC_ACTIM_VAL;        //@0x4000
+    int   DRAMC_GDDR3CTL1_VAL;    //@0x40F4
+    int   DRAMC_CONF1_VAL;        //@0x4004
+    int   DRAMC_DDR2CTL_VAL;      //@0x407C 
+    int   DRAMC_TEST2_3_VAL;      //@0x4044
+    int   DRAMC_CONF2_VAL;        //@0x4008
+    int   DRAMC_PD_CTRL_VAL;      //@0x41DC
+    int   DRAMC_PADCTL3_VAL;      //@0x4014               -> customized TX DQS delay
+    int   DRAMC_DQODLY_VAL;       //@0x4200~0x420C        -> customized TX DQ delay
+    int   DRAMC_ADDR_OUTPUT_DLY;  // for E1 DDR2 only
+    int   DRAMC_CLK_OUTPUT_DLY;   // for E1 DDR2 only
+    int   DRAMC_ACTIM1_VAL;       //@0x41E8
+    int   DRAMC_MISCTL0_VAL;      //@0x40FC
+    int   DRAMC_ACTIM05T_VAL;     //@0x41F8
+    int   DRAM_RANK_SIZE[4];
+    int   reserved[10];
+
+    union
+    {
+        struct
+        {
+            int   LPDDR2_MODE_REG_1;
+            int   LPDDR2_MODE_REG_2;
+            int   LPDDR2_MODE_REG_3;
+            int   LPDDR2_MODE_REG_5;
+            int   LPDDR2_MODE_REG_10;
+            int   LPDDR2_MODE_REG_63;
+        };
+        struct
+        {
+            int   DDR1_MODE_REG;
+            int   DDR1_EXT_MODE_REG;
+        };
+        struct
+        {
+            int   PCDDR3_MODE_REG0;
+            int   PCDDR3_MODE_REG1;
+            int   PCDDR3_MODE_REG2;
+            int   PCDDR3_MODE_REG3;
+        };
+        struct
+        {
+            int   LPDDR3_MODE_REG_1;
+            int   LPDDR3_MODE_REG_2;
+            int   LPDDR3_MODE_REG_3;
+            int   LPDDR3_MODE_REG_5;
+            int   LPDDR3_MODE_REG_10;
+            int   LPDDR3_MODE_REG_63;
+        };
+    };
+} EMI_SETTINGS;
+
+
+
+extern int num_of_emi_records;
+extern EMI_SETTINGS emi_settings[];
+
+/* 0: invalid */
+/* 1: mDDR1 */
+/* 2: mDDR2 */
+/* 3: mDDR3 */
+#endif
+
+__TEMPLATE
+
+    return $template;
+}
+
+
+
+
+
+##########shaohui add end
 
 #****************************************************************************
 # subroutine:  DeviceListParser_LPSDRAM
@@ -802,6 +1161,8 @@ sub DeviceListParser_LPSDRAM
         $NAND_EMMC_ID[$id]                   = &xls_cell_value($Sheet, $_, $COLUMN_NAND_EMMC_ID) ;
         $FW_ID[$id]                          = &xls_cell_value($Sheet, $_, $COLUMN_FW_ID) ;
         $NAND_PAGE_SIZE[$id]                 = &xls_cell_value($Sheet, $_, $COLUMN_NAND_PAGE_SIZE) ;
+	#FIX-ME please remove the MMD info in the next chip
+        $MMD[$id]                 = &xls_cell_value($Sheet, $_, $COLUMN_MMD) ;
 
         $EMI_CONA_VAL[$id]                   = &xls_cell_value($Sheet, $_, $platform_scan_idx++) ;
         $DRAMC_DRVCTL0_VAL[$id]              = &xls_cell_value($Sheet, $_, $platform_scan_idx++) ;
@@ -839,6 +1200,22 @@ sub DeviceListParser_LPSDRAM
             $DDR1_2_3[$id] = 'DDR3';
         }
 
+
+
+        if ($MMD[$id] =~ /MMD1/)
+        {
+            $MMD_String[$id] = '0x1';
+        }
+	elsif ($MMD[$id] =~ /MMD2/)
+	{
+            $MMD_String[$id] = '0x2';
+        }
+	else
+	{
+           $MMD_String[$id] = '';
+           #die "[Error](".$id.")MDL error, no MMD information, please update the MDL\n".$MMD[$id] ;
+	}
+
 #union
 #1 DDR2
         if ($DDR1_2_3[$id] eq "DDR2")
@@ -848,6 +1225,7 @@ sub DeviceListParser_LPSDRAM
             $DDR2_MODE_REG3[$id]             = &xls_cell_value($Sheet, $_, $platform_scan_idx++) ;
             $DDR2_MODE_REG10[$id]            = &xls_cell_value($Sheet, $_, $platform_scan_idx++) ;
             $DDR2_MODE_REG63[$id]            = &xls_cell_value($Sheet, $_, $platform_scan_idx++) ;
+            $DDR2_MODE_REG5[$id]             = &xls_cell_value($Sheet, $_, $platform_scan_idx++) ;
         }
 #2 DDR1
         elsif ($DDR1_2_3[$id] eq "DDR1")
@@ -973,6 +1351,11 @@ sub DeviceListParser_LPSDRAM
             die "[Error]unknown mcp type $DEV_TYPE[$id] \n" ;
         }
 
+	if (($DEV_TYPE2[$id] eq "02") && ($DDR2_MODE_REG5[$id] eq ''))
+	{
+           die "[Error](".$id.")MDL error, LPDDR2 but no DDR2_MODE_REG5 information, please update the MDL\n";
+	}
+
 
         print "NAND_EMMC_ID:$NAND_EMMC_ID[$id]\n";
         # To parse NAND_EMMC_ID, we only support 12 bytes ID
@@ -982,61 +1365,11 @@ sub DeviceListParser_LPSDRAM
         }
         $ID_String[$id] = "{0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0}" ;
         $FW_ID_String[$id] = "{0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0}" ;
-        $Sub_version[$id] = "0x0";
+        $Sub_version[$id] = "0x1";
         $ID_Length[$id] = (length($NAND_EMMC_ID[$id])-2)/2; 
         $FW_ID_Length[$id] = (length($FW_ID[$id])-2)/2; 
+	$nand_emmc_id_len = $ID_Length[$id];
         print $ID_Length[$id].$FW_ID_Length[$id];
-=begin
-        $_ = $NAND_EMMC_ID[$id] ;
-        $ID_Length[$id] = (length($NAND_EMMC_ID[$id])-2)/2; 
-        my @FW_ID_VECTOR;
-        my $fw_id_len=0;
-        my $nand_emmc_id_len=0;
-	my $i;
-
-
-        print "To parse EMMC ID & FW ID:$DEV_TYPE1[$id],$ID_Length[$id]\n";
-        if ($DEV_TYPE1[$id] == "00" || $DEV_TYPE1[$id] == "01") 
-        {
-            # Do nothing for NAND FW ID
-            $nand_emmc_id_len = $ID_Length[$id];
-            $fw_id_len = 0;
-            @FW_ID_VECTOR = "";
-            # The sub_version will be 1 once we have id_length
-            if($ID_Length[$id] == 9)
-            {
-                $Sub_version[$id] = "0x0";
-            }
-            else
-            {
-                $Sub_version[$id] = "0x1";
-            }
-        }
-        elsif ($DEV_TYPE1[$id] == "02" ) 
-        {
-            $nand_emmc_id_len = $USE_EMMC_ID_LEN;
-            $fw_id_len = $ID_Length[$id] - $nand_emmc_id_len;
-            @FW_ID_VECTOR = @NAND_VECTOR[$USE_EMMC_ID_LEN...($ID_Length[$id]-1)];
-            foreach(1...$fw_id_len)
-            {
-                pop(@NAND_VECTOR);
-            } 
-            print "EMMC_FW_ID:@FW_ID_VECTOR\n" ;
-            # for previous emmc version only check 9 bytes.
-            if($ID_Length[$id] == 9)
-            {
-                $Sub_version[$id] = "0x0";
-            }
-            else
-            {
-                $Sub_version[$id] = "0x1";
-            }
-        }
-        if ($fw_id_len > $MAX_FW_ID_LEN)
-        {
-            die("[ERROR] The FW ID number is larger then 8.");
-        }
-=cut
         if ($ID_Length[$id]> 0)
         {
             my @NAND_VECTOR = ($NAND_EMMC_ID[$id] =~ m/([\dA-Fa-f]{2})/gs);
@@ -1091,6 +1424,7 @@ sub DeviceListParser_LPSDRAM
         print "$FW_ID_String[$id]\n" ;
 
         $EMI_SETTINGS[$id] = "\n\t//$PartNum\n\t{\n\t\t" ;
+        $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] ."\"$PartNum\"" . ",/*shaohui add This Section for eMCP DEVinfo */ \n\t\t" ;
         $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $Sub_version[$id] . ",\t\t/* sub_version */\n\t\t" ;
         $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . "0x" . $DEV_TYPE1[$id] . $DEV_TYPE2[$id] . ",\t\t/* TYPE */\n\t\t" ;
         $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $ID_Length[$id] . ",\t\t/* EMMC ID/FW ID checking length */\n\t\t" ;
@@ -1116,7 +1450,9 @@ sub DeviceListParser_LPSDRAM
         $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DRAMC_ACTIM1_VAL[$id] . ",\t\t/* DRAMC_ACTIM1_VAL*/\n\t\t" ;
         $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DRAMC_MISCTL0_VAL[$id] . ",\t\t/* DRAMC_MISCTL0_VAL*/\n\t\t" ;
         $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . "{" . $DRAM_RANK0_SIZE[$id] . "," .  $DRAM_RANK1_SIZE[$id] . ",0,0},\t\t/* DRAM RANK SIZE */\n\t\t" ;
-        $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . "{0,0,0,0,0,0,0,0,0,0},\t\t/* reserved 10 */\n\t\t" ;
+        $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $MMD_String[$id] . ",\t\t/* MMD info */\n\t\t" ;
+        #    $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG5[$id] . ",\t\t/* DDR2_MODE_REG5 */\n\t\t" ;
+        $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . "{0,0,0,0,0,0,0,0},\t\t/* reserved 8 */\n\t\t" ;
 
 #union
 #1 DDR2
@@ -1126,7 +1462,8 @@ sub DeviceListParser_LPSDRAM
             $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG2[$id] . ",\t\t/* DDR2_MODE_REG2 */\n\t\t" ;
             $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG3[$id] . ",\t\t/* DDR2_MODE_REG3 */\n\t\t" ;
             $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG10[$id] . ",\t\t/* DDR2_MODE_REG10 */\n\t\t" ;
-            $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG63[$id] . "\t\t/* DDR2_MODE_REG63 */\n\t}" ;
+            $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG63[$id] . ",\t\t/* DDR2_MODE_REG63 */\n\t\t" ;
+            $EMI_SETTINGS[$id] = $EMI_SETTINGS[$id] . $DDR2_MODE_REG5[$id] . ",\t\t/* DDR2_MODE_REG5 */\n\t}" ;
         }
 #2 DDR1
         elsif ($DDR1_2_3[$id] eq "DDR1")
@@ -1254,7 +1591,10 @@ sub write_tag()
     {
         unlink ($INFO_TAG);
     }
-    
+
+    my $temp_path = `dirname $INFO_TAG`;
+    `mkdir -p $temp_path`;
+
     open FILE,">$INFO_TAG";
     print FILE pack("a24", "MTK_BLOADER_INFO_v10");
     $filesize = $filesize + 24 ;
@@ -1277,27 +1617,39 @@ sub write_tag()
     
  
     seek(FILE,0x6c, 0);
-    
-    print FILE pack("L", hex($TotalCustemChips));     # number of emi settings.
+    # 1.LPDDR2 discrete dram number > 2
+    # 2.LPDDR2 discrete dram > 0, DDR2 > 0
+    if (($Discrete_DDR > 2) || (($Discrete_DDR > 0) && ($MCP_DDR2 > 0)))
+    {
+    	    print "Have multiple discrete dram\n";
+	    print FILE pack("L", hex($TotalCustemChips+1));   # number of emi settings + 1 default value emi_settings.
+    }else
+    {
+	    print FILE pack("L", hex($TotalCustemChips));     # number of emi settings.
+    }
     $filesize = $filesize + 4 ;
     
     my $iter = 0 ;
-    while ($iter < $TotalCustemChips)
+
+    # 1.LPDDR2 discrete dram number > 2
+    # 2.LPDDR2 discrete dram > 0, DDR2 > 0
+    if (($Discrete_DDR > 2) || (($Discrete_DDR > 0) && ($MCP_DDR2 > 0)))
+    { 
+        $filesize = $filesize + &write_tag_one_element_default_DDR2 () ;
+    }
+    for $iter (0..$TotalCustemChips-1)
     {
         if ($DEV_TYPE1[$iter] != "00")
         {
             $filesize = $filesize + &write_tag_one_element ($iter) ;
         }
-        else
-        {
-            $ddr = $iter ;
-        }
-            
-        $iter = $iter + 1 ;
     }
-    if ($ddr != -1)
+    for $iter (0..$TotalCustemChips-1)
     {
-        $filesize = $filesize + &write_tag_one_element ($ddr) ;
+        if ($DEV_TYPE1[$iter] == "00")
+        {
+            $filesize = $filesize + &write_tag_one_element ($iter) ;
+        }
     }
 #    $filesize = $filesize + 4 ;
     
@@ -1310,12 +1662,161 @@ sub write_tag()
     return ;
 }
 
-sub write_tag_one_element()
+sub write_tag_one_element_default_DDR2()
 {
     my $id = $_[0];
     my $type = "0x$DEV_TYPE1[$id]$DEV_TYPE2[$id]" ;
     my $fs = 0 ;
 
+    print FILE pack ("L", hex (lc("0x1"))) ;        # Sub_version checking for flash tool
+    $fs = $fs + 4 ;
+
+    print FILE pack("L", hex("0x0002"));                           #type
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", scalar("0")) ;        # EMMC ID checking length
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", scalar("0")) ;        # FW ID checking length
+    $fs = $fs + 4 ;
+    
+    $_ = "{0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0}" ;
+    if (/(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)/)
+    {
+        print FILE pack ("C", hex ($1)) ;            #id
+        print FILE pack ("C", hex ($2)) ;
+        print FILE pack ("C", hex ($3)) ;
+        print FILE pack ("C", hex ($4)) ;
+        print FILE pack ("C", hex ($5)) ;
+        print FILE pack ("C", hex ($6)) ;
+        print FILE pack ("C", hex ($7)) ;
+        print FILE pack ("C", hex ($8)) ;
+        print FILE pack ("C", hex ($9)) ;
+        print FILE pack ("C", hex ($10)) ;
+        print FILE pack ("C", hex ($11)) ;
+        print FILE pack ("C", hex ($12)) ;
+        print FILE pack ("C", hex ($13)) ;
+        print FILE pack ("C", hex ($14)) ;
+        print FILE pack ("C", hex ($15)) ;
+        print FILE pack ("C", hex ($16)) ;
+        $fs = $fs + 16 ;
+    }
+    $_= "{0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0}";
+    if (/(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)/)
+    {
+        print FILE pack ("C", hex ($1)) ;            #fw id
+        print FILE pack ("C", hex ($2)) ;
+        print FILE pack ("C", hex ($3)) ;
+        print FILE pack ("C", hex ($4)) ;
+        print FILE pack ("C", hex ($5)) ;
+        print FILE pack ("C", hex ($6)) ;
+        print FILE pack ("C", hex ($7)) ;
+        print FILE pack ("C", hex ($8)) ;
+        $fs = $fs + 8 ;
+    }
+
+    
+    print FILE pack ("L", hex (lc("0x0000212E"))) ;         # EMI_CONA_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0xCC00CC00"))) ;    # DRAMC_DRVCTL0_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0xCC00CC00"))) ;    # DRAMC_DRVCTL1_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x00000008"))) ;        # DRAMC_DLE_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x666844B4"))) ;      # DRAMC_ACTIM_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x11000000"))) ;  # DRAMC_GDDR3CTL1_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0xF07486E1"))) ;      # DRAMC_CONF1_VAL
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex (lc("0xC0063201"))) ;    # DRAMC_DDR2CTL_VAL
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex (lc("0x9F098CA0"))) ;    # DRAMC_TEST2_3_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x03406341"))) ;      # DRAMC_CONF2_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x11662342"))) ;    # DRAMC_PD_CTRL_VAL
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x00008888"))) ;    # DRAMC_PADCTL3_VAL
+    
+    $fs = $fs + 4 ;
+    print FILE pack ("L", hex (lc("0xEEEEEEEE"))) ;     # DRAMC_DQODLY_VAL
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex (lc("0x00000000"))) ;        # DRAMC_ADDR_OUTPUT_DLY
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex (lc("0x00000000"))) ;        # DRAMC_CLK_OUTPUT_DLY
+    $fs = $fs + 4 ;
+    
+    print FILE pack ("L", hex (lc("0x01000e10"))) ;           # $DRAMC_ACTIM1_VAL
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex (lc("0x07000000"))) ;        # DRAMC_MISCTL0_VAL
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex ("0")) ;                                  #  DRAM_RANK_SIZE[4]
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    $fs = $fs + 16 ;
+
+
+    print FILE pack ("L", hex (lc($MMD_String[0]))) ;         # MMD
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex ("0")) ;                                  #reserved[8]
+    print FILE pack ("L", hex ("0")) ;  
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    print FILE pack ("L", hex ("0")) ;
+    $fs = $fs + 32 ;
+        
+    if (1)
+    {
+        #ddr2
+        print FILE pack ("L", hex (lc("0x00C30001"))) ;        # DDR2_MODE_REG1
+        $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex (lc("0x00060002"))) ;        # DDR2_MODE_REG2
+        $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex (lc("0x00020003"))) ;        # DDR2_MODE_REG3
+        $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex (lc("0x00FF000A"))) ;        # DDR2_MODE_REG10
+        $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex (lc("0x0000003F"))) ;        # DDR2_MODE_REG63
+        $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex (lc("0x6"))) ;        # DDR2_MODE_REG5
+        $fs = $fs + 4 ;
+    }
+#       print "1.file size is $fs \n";
+    return $fs;
+
+}
+sub write_tag_one_element()
+{
+    my $id = $_[0];
+    my $type = "0x$DEV_TYPE1[$id]$DEV_TYPE2[$id]" ;
+    my $fs = 0 ;
     print FILE pack ("L", hex (lc($Sub_version[$id]))) ;        # Sub_version checking for flash tool
     $fs = $fs + 4 ;
 
@@ -1327,7 +1828,7 @@ sub write_tag_one_element()
 
     print FILE pack ("L", scalar($FW_ID_Length[$id])) ;        # FW ID checking length
     $fs = $fs + 4 ;
-    
+
     $_ = $ID_String[$id] ;
     if (/(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)/)
     {
@@ -1362,25 +1863,26 @@ sub write_tag_one_element()
         print FILE pack ("C", hex ($8)) ;
         $fs = $fs + 8 ;
     }
-    
+
+
     print FILE pack ("L", hex (lc($EMI_CONA_VAL[$id]))) ;         # EMI_CONA_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_DRVCTL0_VAL[$id]))) ;    # DRAMC_DRVCTL0_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_DRVCTL1_VAL[$id]))) ;    # DRAMC_DRVCTL1_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_DLE_VAL[$id]))) ;        # DRAMC_DLE_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_ACTIM_VAL[$id]))) ;      # DRAMC_ACTIM_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_GDDR3CTL1_VAL[$id]))) ;  # DRAMC_GDDR3CTL1_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_CONF1_VAL[$id]))) ;      # DRAMC_CONF1_VAL
     $fs = $fs + 4 ;
 
@@ -1389,15 +1891,15 @@ sub write_tag_one_element()
 
     print FILE pack ("L", hex (lc($DRAMC_TEST2_3_VAL[$id]))) ;    # DRAMC_TEST2_3_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_CONF2_VAL[$id]))) ;      # DRAMC_CONF2_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_PD_CTRL_VAL[$id]))) ;    # DRAMC_PD_CTRL_VAL
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_PADCTL3_VAL[$id]))) ;    # DRAMC_PADCTL3_VAL
-    
+
     $fs = $fs + 4 ;
     print FILE pack ("L", hex (lc($DRAMC_DQODLY_VAL[$id]))) ;     # DRAMC_DQODLY_VAL
     $fs = $fs + 4 ;
@@ -1407,7 +1909,7 @@ sub write_tag_one_element()
 
     print FILE pack ("L", hex (lc($DRAMC_CLK_OUTPUT_DLY[$id]))) ;        # DRAMC_CLK_OUTPUT_DLY
     $fs = $fs + 4 ;
-    
+
     print FILE pack ("L", hex (lc($DRAMC_ACTIM1_VAL[$id]))) ;           # $DRAMC_ACTIM1_VAL
     $fs = $fs + 4 ;
 
@@ -1418,9 +1920,13 @@ sub write_tag_one_element()
     print FILE pack ("L", hex ("0")) ;
     print FILE pack ("L", hex ("0")) ;
     print FILE pack ("L", hex ("0")) ;
+    $fs = $fs + 16 ;
 
-    print FILE pack ("L", hex ("0")) ;                                  #reserved[10]
-    print FILE pack ("L", hex ("0")) ;  
+
+    print FILE pack ("L", hex (lc($MMD_String[$id]))) ;         # MMD
+    $fs = $fs + 4 ;
+
+    print FILE pack ("L", hex ("0")) ;                                  #reserved[8]
     print FILE pack ("L", hex ("0")) ;
     print FILE pack ("L", hex ("0")) ;
     print FILE pack ("L", hex ("0")) ;
@@ -1428,11 +1934,9 @@ sub write_tag_one_element()
     print FILE pack ("L", hex ("0")) ;
     print FILE pack ("L", hex ("0")) ;
     print FILE pack ("L", hex ("0")) ;
-    print FILE pack ("L", hex ("0")) ;
-    $fs = $fs + 56 ;
-    $_ = $FW_ID_String[$id] ;
-        
-    if ($DEV_TYPE2[$id] == "02")
+    $fs = $fs + 32 ;
+
+if ($DEV_TYPE2[$id] == "02")
     {
         #ddr2
         print FILE pack ("L", hex (lc($DDR2_MODE_REG1[$id]))) ;        # DDR2_MODE_REG1
@@ -1449,6 +1953,9 @@ sub write_tag_one_element()
 
         print FILE pack ("L", hex (lc($DDR2_MODE_REG63[$id]))) ;        # DDR2_MODE_REG63
         $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex (lc($DDR2_MODE_REG5[$id]))) ;        # DDR2_MODE_REG5
+        $fs = $fs + 4 ;
     }
     elsif ($DEV_TYPE2[$id] == "01")
     {   # ddr1
@@ -1458,13 +1965,16 @@ sub write_tag_one_element()
         print FILE pack ("L", hex (lc($DDR1_EXT_MODE_REG[$id]))) ;        # DDR1_EXT_MODE_REG
         $fs = $fs + 4 ;
 
-        print FILE pack ("L", hex ("0")) ;        
+        print FILE pack ("L", hex ("0")) ;
         $fs = $fs + 4 ;
 
-        print FILE pack ("L", hex ("0")) ;        
+        print FILE pack ("L", hex ("0")) ;
         $fs = $fs + 4 ;
 
-        print FILE pack ("L", hex ("0")) ;        
+        print FILE pack ("L", hex ("0")) ;
+        $fs = $fs + 4 ;
+
+      	print FILE pack ("L", hex ("0")) ;
         $fs = $fs + 4 ;
     }
     elsif ($DEV_TYPE2[$id] == "03")
@@ -1475,16 +1985,20 @@ sub write_tag_one_element()
         print FILE pack ("L", hex (lc($DDR3_MODE_REG1[$id]))) ;        # DDR3_MODE_REG1
         $fs = $fs + 4 ;
 
-        print FILE pack ("L", hex (lc($DDR3_MODE_REG2[$id]))) ;        # DDR3_MODE_REG2       
+        print FILE pack ("L", hex (lc($DDR3_MODE_REG2[$id]))) ;        # DDR3_MODE_REG2
         $fs = $fs + 4 ;
 
-        print FILE pack ("L", hex (lc($DDR3_MODE_REG3[$id]))) ;        # DDR3_MODE_REG3     
+        print FILE pack ("L", hex (lc($DDR3_MODE_REG3[$id]))) ;        # DDR3_MODE_REG3
         $fs = $fs + 4 ;
 
-        print FILE pack ("L", hex ("0")) ;        
+        print FILE pack ("L", hex ("0")) ;
+        $fs = $fs + 4 ;
+
+        print FILE pack ("L", hex ("0")) ;
         $fs = $fs + 4 ;
     }
 #       print "1.file size is $fs \n";
     return $fs;
 
 }
+

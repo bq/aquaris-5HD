@@ -19,9 +19,7 @@
 ###############################################################
 
 my %ime_dependency = (
-	'MTK_IME_ENGLISH_SUPPORT' => 'en',
 	'MTK_IME_PINYIN_SUPPORT'  => 'zh',
-	'MTK_IME_ZHUYIN_SUPPORT'  => 'zh',
 	'MTK_IME_STROKE_SUPPORT'  => 'zh',
 	'MTK_IME_HANDWRITING_SUPPORT'=>'zh',);
 
@@ -55,11 +53,13 @@ my @Android_support_locales = (
 
 my @locales_original;
 my @locales_filtered;
+my @locales_original_aapt;
 my @latin_ime;
 
 
 ## Reading locale setting directly from MTK_PRODUCT_LOCALES
 @locales_original = split(/ /, $ENV{MTK_PRODUCT_LOCALES});
+@locales_original_aapt =split(/ /, $ENV{MTK_PRODUCT_AAPT_CONFIG});
 ## Reading default latin ime setting directly from DEFAULT_LATIN_IME_LANGUAGES
 @latin_ime = split(/ /, $ENV{DEFAULT_LATIN_IME_LANGUAGES});
 
@@ -71,8 +71,14 @@ foreach (@locales_original) {
 		}
 	} 
 }
-
-my $filedir = "mediatek/frameworks/common/src/com/mediatek/common/featureoption";
+foreach (@locales_original_aapt) {
+        if (! m/\s*\wdpi\s*/){
+                if (m/\s*(\w+)\s*/) {
+                        push @locales_filtered, $1;
+                }
+        }
+}
+my $filedir = $ARGV[1];
 my $write_filename = "$filedir/IMEFeatureOption.java";
 system("chmod u+w $write_filename") if (-e $write_filename);
 system("mkdir -p $filedir") if ( ! -d "$filedir");
@@ -169,22 +175,6 @@ if ($ENV{MTK_IME_RUSSIAN_SUPPORT} eq "no")
 {
        push @ime_opt_arr, "MTK_IME_RUSSIAN_SUPPORT = false";
 }
-if ($ENV{MTK_IME_SUPPORT} eq "yes")
-{
-	push @ime_opt_arr, "MTK_IME_SUPPORT = true";
-}
-if ($ENV{MTK_IME_SUPPORT} eq "no")
-{
-	push @ime_opt_arr, "MTK_IME_SUPPORT = false";
-}
-if ($ENV{MTK_IME_ENGLISH_SUPPORT} eq "yes")
-{
-	push @ime_opt_arr, "MTK_IME_ENGLISH_SUPPORT = true";
-}
-if ($ENV{MTK_IME_ENGLISH_SUPPORT} eq "no")
-{
-	push @ime_opt_arr, "MTK_IME_ENGLISH_SUPPORT = false";
-}
 if ($ENV{MTK_IME_PINYIN_SUPPORT} eq "yes")
 {
 	push @ime_opt_arr, "MTK_IME_PINYIN_SUPPORT = true";
@@ -208,24 +198,6 @@ if ($ENV{MTK_IME_HANDWRITING_SUPPORT} eq "yes")
 if ($ENV{MTK_IME_HANDWRITING_SUPPORT} eq "no")
 { 
 	push @ime_opt_arr, "MTK_IME_HANDWRITING_SUPPORT = false";
-}
- 
-if ($ENV{MTK_IME_ZHUYIN_SUPPORT} eq "yes")
-{ 
-	push @ime_opt_arr, "MTK_IME_ZHUYIN_SUPPORT = true";
-}
-if ($ENV{MTK_IME_ZHUYIN_SUPPORT} eq "no")
-{ 
-	push @ime_opt_arr, "MTK_IME_ZHUYIN_SUPPORT = false";
-}
-
-if ($ENV{MTK_IME_FRENCH_SUPPORT} eq "yes")
-{
-        push @ime_opt_arr, "MTK_IME_FRENCH_SUPPORT = true";
-}
-if ($ENV{MTK_IME_FRENCH_SUPPORT} eq "no")
-{
-        push @ime_opt_arr, "MTK_IME_FRENCH_SUPPORT = false";
 }
 if ($ENV{MTK_IME_GERMAN_SUPPORT} eq "yes")
 {
@@ -258,14 +230,6 @@ if ($ENV{MTK_IME_PORTUGUESE_SUPPORT} eq "yes")
 if ($ENV{MTK_IME_PORTUGUESE_SUPPORT} eq "no")
 {
 	push @ime_opt_arr, "MTK_IME_PORTUGUESE_SUPPORT = false";
-}
-if ($ENV{MTK_IME_TURKISH_SUPPORT} eq "yes")
-{
-	push @ime_opt_arr, "MTK_IME_TURKISH_SUPPORT = true";
-}
-if ($ENV{MTK_IME_TURKISH_SUPPORT} eq "no")
-{
-	push @ime_opt_arr, "MTK_IME_TURKISH_SUPPORT = false";
 }
 if ($ENV{MTK_IME_INDONESIAN_SUPPORT} eq "yes")
 {
@@ -306,14 +270,6 @@ if ($ENV{MTK_IME_THAI_SUPPORT} eq "yes")
 if ($ENV{MTK_IME_THAI_SUPPORT} eq "no")
 {
 	push @ime_opt_arr, "MTK_IME_THAI_SUPPORT = false";
-}
-if ($ENV{MTK_IME_VIETNAM_SUPPORT} eq "yes")
-{
-	push @ime_opt_arr, "MTK_IME_VIETNAM_SUPPORT = true";
-}
-if ($ENV{MTK_IME_VIETNAM_SUPPORT} eq "no")
-{
-	push @ime_opt_arr, "MTK_IME_VIETNAM_SUPPORT = false";
 }
 
 #my $MTK_IME_SUPPORT = $ime_opt_arr[1];

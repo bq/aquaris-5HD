@@ -30,9 +30,19 @@ MODULE_NAME := wlan_mt6620
 
 ccflags-y += -D_HIF_SDIO=1
 
+ccflags-y += -DMTK_WLAN_ARP_OFFLOAD
+ccflags-y += -DMTK_PACKET_FILTERING_SUPPORT
+
 ccflags-y += -DDBG=0
 ccflags-y += -I$(src)/os -I$(src)/os/linux/include -I$(src)/os/linux/hif/sdio/include
 ccflags-y += -I$(src)/include -I$(src)/include/nic -I$(src)/include/mgmt
+
+ifeq ($(MTK_TC1_FEATURE), y)
+#ccflags-y += -I$(srctree)/mediatek/external/tc1_interface
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/tc1_interface
+endif
+
+
 
 obj-$(CONFIG_MTK_COMBO_WIFI) += $(MODULE_NAME).o
 #obj-m += $(MODULE_NAME).o

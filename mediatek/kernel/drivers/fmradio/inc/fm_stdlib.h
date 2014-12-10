@@ -3,6 +3,7 @@
 
 #include "fm_typedef.h"
 #include <linux/string.h>
+#include <linux/slab.h>
 
 #if 1
 #define fm_memset(buf, a, len)  \

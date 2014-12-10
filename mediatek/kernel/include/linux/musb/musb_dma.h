@@ -62,6 +62,12 @@ struct musb_hw_ep;
 
 #define	DMA_ADDR_INVALID	(~(dma_addr_t)0)
 
+#ifndef CONFIG_MUSB_PIO_ONLY
+#define	is_dma_capable()	(1)
+#else
+#define	is_dma_capable()	(0)
+#endif
+
 /* Anomaly 05000456 - USB Receive Interrupt Is Not Generated in DMA Mode 1
  *	Only allow DMA mode 1 to be used when the USB will actually generate the
  *	interrupts we expect.
@@ -91,6 +97,7 @@ struct dma_controller;
  * @max_len: the maximum number of bytes the channel can move in one
  *	transaction (typically representing many USB maximum-sized packets)
  * @actual_len: how many bytes have been transferred
+ * @prog_len: how many bytes have been programmed for transfer
  * @status: current channel status (updated e.g. on interrupt)
  * @desired_mode: true if mode 1 is desired; false if mode 0 is desired
  *
@@ -102,6 +109,7 @@ struct dma_channel {
 	/* FIXME not void* private_data, but a dma_controller * */
 	size_t			max_len;
 	size_t			actual_len;
+	size_t			prog_len;
 	enum dma_channel_status	status;
 	bool			desired_mode;
 };
@@ -117,7 +125,7 @@ struct dma_channel {
 static inline enum dma_channel_status
 dma_channel_status(struct dma_channel *c)
 {
-	return (c) ? c->status : MUSB_DMA_STATUS_UNKNOWN;
+	return (is_dma_capable() && c) ? c->status : MUSB_DMA_STATUS_UNKNOWN;
 }
 
 /**
@@ -130,7 +138,11 @@ dma_channel_status(struct dma_channel *c)
  * @channel_release: call this to release a DMA channel
  * @channel_abort: call this to abort a pending DMA transaction,
  *	returning it to FREE (but allocated) state
- *
+ * @channel_pause: This function pauses the ongoing DMA transfer
+ * @channel_resume: This function resumes the ongoing DMA transfer
+ * @tx_status: Gets the residue of an ongoing DMA transfer
+ * @check_resiudue: checks if the residue of an ongoing DMA
+ *	transfer is valid
  * Controllers manage dma channels.
  */
 struct dma_controller {
@@ -144,6 +156,11 @@ struct dma_controller {
 							dma_addr_t dma_addr,
 							u32 length);
 	int			(*channel_abort)(struct dma_channel *);
+	int			(*channel_pause)(struct dma_channel *);
+	int			(*channel_resume)(struct dma_channel *);
+	int			(*tx_status)(struct dma_channel *);
+	int			(*check_residue)(struct dma_channel *,
+							u32 residue);
 	int			(*is_compatible)(struct dma_channel *channel,
 							u16 maxpacket,
 							void *buf, u32 length);
@@ -153,8 +170,7 @@ struct dma_controller {
 extern void musb_dma_completion(struct musb *musb, u8 epnum, u8 transmit);
 
 
-extern struct dma_controller *__init
-dma_controller_create(struct musb *, void __iomem *);
+extern struct dma_controller *dma_controller_create(struct musb *, void __iomem *);
 
 extern void dma_controller_destroy(struct dma_controller *);
 

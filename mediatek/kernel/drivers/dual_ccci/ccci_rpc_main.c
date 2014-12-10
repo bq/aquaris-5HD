@@ -33,7 +33,6 @@
 #include <linux/semaphore.h>
 #include <linux/version.h>
 #include <ccci.h>
-#include <ccci_common.h>
 
 typedef struct test
 {
@@ -143,7 +142,7 @@ static int rpc_write(int md_id, int buf_idx, RPC_PKT* pkt_src, unsigned int pkt_
 	}
 
 	//msg.data0  = ctl_b->rpc_buf_phy + (sizeof(RPC_BUF) * buf_idx);
-	msg.data0 = (unsigned int)(ctl_b->rpc_buf_phy) + ctl_b->rpc_smem_instance_size*buf_idx;
+	msg.data0 = (unsigned int)(ctl_b->rpc_buf_phy)-get_md2_ap_phy_addr_fixed() + ctl_b->rpc_smem_instance_size*buf_idx;
 	msg.data1  = data_len + 4;
 	msg.reserved = buf_idx;
 	msg.channel = CCCI_RPC_TX;

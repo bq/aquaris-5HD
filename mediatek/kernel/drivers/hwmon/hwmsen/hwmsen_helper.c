@@ -23,7 +23,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/platform_device.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/types.h>
@@ -37,15 +37,7 @@
 #include <linux/hwmsensor.h>
 #include <linux/hwmsen_helper.h>
 
-#ifdef MT6516
-#include <mach/mt6516_reg_base.h>
-#include <mach/mt6516_gpio.h>
-#endif
 
-#ifdef MT6573
-#include <mach/mt6573_reg_base.h>
-#include <mach/mt6573_gpio.h>
-#endif
 /*----------------------------------------------------------------------------*/
 #define hex2int(c) ( (c >= '0') && (c <= '9') ? (c - '0') : ((c & 0xf) + 9) )
 /*----------------------------------------------------------------------------*/
@@ -103,26 +95,30 @@ EXPORT_SYMBOL_GPL(hwmsen_clr_bits);
 /*----------------------------------------------------------------------------*/
 int hwmsen_read_byte(struct i2c_client *client, u8 addr, u8 *data)
 {
-    u8 buf;
-    int ret = 0;
-    
-    buf = addr;
-    ret = i2c_master_send(client, (const char*)&buf, 1);
-    if (ret < 0) {
-        HWM_ERR("send command error!!\n");
-        return -EFAULT;
-    }
-    ret = i2c_master_recv(client, (char*)&buf, 1);
-    if (ret < 0) {
-        HWM_ERR("reads data error!!\n");
-        return -EFAULT;
-    } else {
-#if defined(HWMSEN_DEBUG)    
-        HWM_LOG("%s(0x%02X) = %02X\n", __func__, addr, buf);    
-#endif
-    }
-    *data = buf;
-    return 0;
+    	u8 beg = addr;
+	int err;
+	struct i2c_msg msgs[2] = {
+		{
+			.addr = client->addr,	.flags = 0,
+			.len = 1,	.buf = &beg
+		},
+		{
+			.addr = client->addr,	.flags = I2C_M_RD,
+			.len = 1,	.buf = data,
+		}
+	};
+
+	if (!client)
+	return -EINVAL;
+	err = i2c_transfer(client->adapter, msgs, sizeof(msgs)/sizeof(msgs[0]));
+	if (err != 2) {
+		HWM_ERR("i2c_transfer error: (%d %p) %d\n",
+			addr, data, err);
+		err = -EIO;
+	} else {
+		err = 0;
+	}
+    return err;
 }
 /*----------------------------------------------------------------------------*/
 EXPORT_SYMBOL_GPL(hwmsen_read_byte);

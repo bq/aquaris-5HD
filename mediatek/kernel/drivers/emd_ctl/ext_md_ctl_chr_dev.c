@@ -477,26 +477,34 @@ static int client_deinit(emd_dev_client_t *client)
 	return 0;
 }
 
+static unsigned int generate_eint_flag(int pol, int sen)
+{ 
+	unsigned int flag = 0;
+	if(pol==CUST_EINT_POLARITY_HIGH && sen==CUST_EINT_EDGE_SENSITIVE)
+		flag = EINTF_TRIGGER_RISING;
+	if(pol==CUST_EINT_POLARITY_LOW && sen==CUST_EINT_EDGE_SENSITIVE)
+		flag = EINTF_TRIGGER_FALLING;
+	if(pol==CUST_EINT_POLARITY_HIGH && sen==CUST_EINT_LEVEL_SENSITIVE)
+		flag = EINTF_TRIGGER_HIGH;
+	if(pol==CUST_EINT_POLARITY_LOW && sen==CUST_EINT_LEVEL_SENSITIVE)
+		flag = EINTF_TRIGGER_LOW;
+	return flag;
+}
+
 static void eint_setup(void)
 {
 	//--- Ext MD wdt irq -------
-	mt65xx_eint_mask(CUST_EINT_DT_EXT_MD_WDT_NUM);
-	mt65xx_eint_set_sens(CUST_EINT_DT_EXT_MD_WDT_NUM, CUST_EINT_DT_EXT_MD_WDT_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_DT_EXT_MD_WDT_NUM, CUST_EINT_DT_EXT_MD_WDT_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_DT_EXT_MD_WDT_NUM, CUST_EINT_DT_EXT_MD_WDT_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_DT_EXT_MD_WDT_NUM, 
-				 CUST_EINT_DT_EXT_MD_WDT_DEBOUNCE_EN, 
-				 CUST_EINT_DT_EXT_MD_WDT_POLARITY, 
+	mt_eint_mask(CUST_EINT_DT_EXT_MD_WDT_NUM);
+	mt_eint_set_hw_debounce(CUST_EINT_DT_EXT_MD_WDT_NUM, CUST_EINT_DT_EXT_MD_WDT_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_DT_EXT_MD_WDT_NUM, 
+				 generate_eint_flag(CUST_EINT_DT_EXT_MD_WDT_POLARITY, CUST_EINT_DT_EXT_MD_WDT_SENSITIVE), 
 				 ext_md_wdt_irq_cb, 
 				 0);
 
 	//--- Ext MD wake up irq ------------
-	mt65xx_eint_set_sens(CUST_EINT_DT_EXT_MD_WK_UP_NUM, CUST_EINT_DT_EXT_MD_WK_UP_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_DT_EXT_MD_WK_UP_NUM, CUST_EINT_DT_EXT_MD_WK_UP_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_DT_EXT_MD_WK_UP_NUM, CUST_EINT_DT_EXT_MD_WK_UP_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_DT_EXT_MD_WK_UP_NUM, 
-				 CUST_EINT_DT_EXT_MD_WK_UP_DEBOUNCE_EN, 
-				 CUST_EINT_DT_EXT_MD_WK_UP_POLARITY, 
+	mt_eint_set_hw_debounce(CUST_EINT_DT_EXT_MD_WK_UP_NUM, CUST_EINT_DT_EXT_MD_WK_UP_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_DT_EXT_MD_WK_UP_NUM, 
+				 generate_eint_flag(CUST_EINT_DT_EXT_MD_WK_UP_POLARITY, CUST_EINT_DT_EXT_MD_WK_UP_SENSITIVE), 
 				 ext_md_wakeup_irq_cb, 
 				 0);
 }

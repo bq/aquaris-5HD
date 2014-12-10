@@ -514,11 +514,21 @@ extern int ccci_start_modem(void);
 
 static long ccci_dev_ioctl( struct file *file, unsigned int cmd, unsigned long arg)
 {
-	int addr, len, ret = 0;
+	int addr, len, state, ret = 0;
 	CCCI_BUFF_T buff;
 	struct ccci_dev_client *client=(struct ccci_dev_client *)file->private_data;
 
 	switch (cmd) {
+	case CCCI_IOC_GET_MD_STATE:
+			state = get_curr_md_state();
+			if(state >= 0) { 
+				state+='0'; // Make number to charactor
+				ret = put_user((unsigned int)state, (unsigned int __user *)arg);
+			} else {
+				CCCI_MSG_INF("chr", "Get MD state fail: %d\n",state);
+				ret = state;
+			}
+			break;
 	case CCCI_IOC_MD_RESET:
 		CCCI_MSG_INF("chr", "MD reset ioctl called by %s\n", current->comm);
 		ret=reset_md();

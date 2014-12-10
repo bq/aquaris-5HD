@@ -147,6 +147,13 @@ typedef struct
 	int maxCapExpTimeUs; //us
 	int pfExpFollowPline; //0: increase frame rate during pf
 	int maxPfAfe; //max afe gain during pf
+	int maxAfeGain;
+
+	//92 new
+    int yTargetWeight;
+    int lowReflectanceThreshold;
+    int lowReflectanceTuningEnable;
+	int flashReflectanceWeight;
 
 
 } FLASH_PROJECT_PARA;

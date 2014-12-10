@@ -104,8 +104,7 @@ static void __init __free_pages_memory(unsigned long start, unsigned long end)
 	for (i = end_aligned; i < end; i++)
 		__free_pages_bootmem(pfn_to_page(i), 0);
 }
-//Update Patch from Google
-//https://android.googlesource.com/kernel/common/+/7ad71f960f0f6e06cbded278809674afc515036a
+
 static unsigned long __init __free_memory_core(phys_addr_t start,
 				 phys_addr_t end)
 {
@@ -121,37 +120,20 @@ static unsigned long __init __free_memory_core(phys_addr_t start,
 	return end_pfn - start_pfn;
 }
 
-
-
 unsigned long __init free_low_memory_core_early(int nodeid)
 {
 	unsigned long count = 0;
-	//phys_addr_t start, end;
 	phys_addr_t start, end, size;
 	u64 i;
 
-	///* free reserved array temporarily so that it's treated as free area */
-	//memblock_free_reserved_regions();
 	for_each_free_mem_range(i, MAX_NUMNODES, &start, &end, NULL)
 		count += __free_memory_core(start, end);
 
-	//for_each_free_mem_range(i, MAX_NUMNODES, &start, &end, NULL) {
-	//	unsigned long start_pfn = PFN_UP(start);
-	//	unsigned long end_pfn = min_t(unsigned long,
-	//				      PFN_DOWN(end), max_low_pfn);
-	//	if (start_pfn < end_pfn) {
-	//		__free_pages_memory(start_pfn, end_pfn);
-	//		count += end_pfn - start_pfn;
-	//	}
-	//}
 	/* free range that is used for reserved array if we allocate it */
 	size = get_allocated_memblock_reserved_regions_info(&start);
 	if (size)
 		count += __free_memory_core(start, start + size);
 
-
-	///* put region array back? */
-	//memblock_reserve_reserved_regions();
 	return count;
 }
 

@@ -1,6 +1,7 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>
+#include <mach/sync_write.h>
 #ifdef CONFIG_SMP
 #include <mach/hotplug.h>
 #include <linux/cpu.h>
@@ -25,42 +26,58 @@ extern void restore_dbg_regs(unsigned int data[]);
 
 void save_dbg_regs(unsigned int data[])
 {
-    register unsigned int cpu_id;
+    //register unsigned int cpu_id;
     int i;
-    __asm__ __volatile__ ("MRC   p15, 0, %0, c0, c0, 5" :"=r"(cpu_id) );
-    cpu_id &= 0xf;
+    //__asm__ __volatile__ ("MRC   p15, 0, %0, c0, c0, 5" :"=r"(cpu_id) );
+    //cpu_id &= 0xf;
 
-    data[0] = *(volatile unsigned int *)(DBGDSCR + cpu_id * 0x2000);
+    // actually only cpu0 will execute this function
+
+    //data[0] = *(volatile unsigned int *)DBGDSCR;
+    data[0] = readl(DBGDSCR);
     for(i = 0; i < MAX_NR_WATCH_POINT; i++) {
-        data[i*2+1] = *(((volatile unsigned int *)(DBGWVR_BASE + cpu_id * 0x2000)) + i);
-        data[i*2+2] = *(((volatile unsigned int *)(DBGWCR_BASE + cpu_id * 0x2000)) + i);
+        //data[i*2+1] = *(((volatile unsigned int *)(DBGWVR_BASE + cpu_id * 0x2000)) + i);
+        data[i*2+1] = readl(DBGWVR_BASE + i * sizeof(unsigned int *));
+        //data[i*2+2] = *(((volatile unsigned int *)(DBGWCR_BASE + cpu_id * 0x2000)) + i);
+        data[i*2+2] = readl(DBGWCR_BASE + i * sizeof(unsigned int *));
     }
 
     for(i = 0; i < MAX_NR_BREAK_POINT; i++) {
-        data[i*2+9] = *(((volatile unsigned int *)(DBGBVR_BASE + cpu_id * 0x2000)) + i);
-        data[i*2+10] = *(((volatile unsigned int *)(DBGBCR_BASE+ cpu_id * 0x2000)) + i);
+        //data[i*2+9] = *(((volatile unsigned int *)(DBGBVR_BASE + cpu_id * 0x2000)) + i);
+        data[i*2+9] = readl(DBGBVR_BASE + i * sizeof(unsigned int *));
+        //data[i*2+10] = *(((volatile unsigned int *)(DBGBCR_BASE+ cpu_id * 0x2000)) + i);
+        data[i*2+10] = readl(DBGBCR_BASE + i * sizeof(unsigned int *));
     }
 }
 
 void restore_dbg_regs(unsigned int data[])
 {
-    register unsigned int cpu_id;
+    //register unsigned int cpu_id;
     int i;
-    __asm__ __volatile__ ("MRC   p15, 0, %0, c0, c0, 5" :"=r"(cpu_id) );
-    cpu_id &= 0xf;
+    //__asm__ __volatile__ ("MRC   p15, 0, %0, c0, c0, 5" :"=r"(cpu_id) );
+    //cpu_id &= 0xf;
+
+    // actually only cpu0 will execute this function
     
-    *(volatile unsigned int *)(DBGLAR   + cpu_id * 0x2000) = UNLOCK_KEY;
-    *(volatile unsigned int *)(DBGOSLAR + cpu_id * 0x2000) = ~UNLOCK_KEY;
-    *(volatile unsigned int *)(DBGDSCR  + cpu_id * 0x2000) = data[0];
+    //*(volatile unsigned int *)(DBGLAR   + cpu_id * 0x2000) = UNLOCK_KEY;
+    mt_reg_sync_writel(UNLOCK_KEY, DBGLAR);
+    //*(volatile unsigned int *)(DBGOSLAR + cpu_id * 0x2000) = ~UNLOCK_KEY;
+    mt_reg_sync_writel(~UNLOCK_KEY, DBGOSLAR);
+    //*(volatile unsigned int *)(DBGDSCR  + cpu_id * 0x2000) = data[0];
+    mt_reg_sync_writel(data[0], DBGDSCR);
 
     for(i = 0; i < MAX_NR_WATCH_POINT; i++) {
-        *(((volatile unsigned int *)(DBGWVR_BASE + cpu_id * 0x2000)) + i) = data[i*2+1];
-        *(((volatile unsigned int *)(DBGWCR_BASE + cpu_id * 0x2000)) + i) = data[i*2+2];
+        //*(((volatile unsigned int *)(DBGWVR_BASE + cpu_id * 0x2000)) + i) = data[i*2+1];
+        mt_reg_sync_writel(data[i*2+1], DBGWVR_BASE + i * sizeof(unsigned int *));
+        //*(((volatile unsigned int *)(DBGWCR_BASE + cpu_id * 0x2000)) + i) = data[i*2+2];
+        mt_reg_sync_writel(data[i*2+2], DBGWCR_BASE + i * sizeof(unsigned int *));
     } 
         
     for(i = 0; i < MAX_NR_BREAK_POINT; i++) {
-        *(((volatile unsigned int *)(DBGBVR_BASE + cpu_id * 0x2000)) + i) = data[i*2+9];
-        *(((volatile unsigned int *)(DBGBCR_BASE + cpu_id * 0x2000)) + i) = data[i*2+10];
+        //*(((volatile unsigned int *)(DBGBVR_BASE + cpu_id * 0x2000)) + i) = data[i*2+9];
+        mt_reg_sync_writel(data[i*2+9], DBGBVR_BASE + i * sizeof(unsigned int *));
+        //*(((volatile unsigned int *)(DBGBCR_BASE + cpu_id * 0x2000)) + i) = data[i*2+10];
+        mt_reg_sync_writel(data[i*2+10], DBGBCR_BASE + i * sizeof(unsigned int *));
     }
 }
 
@@ -71,24 +88,35 @@ regs_hotplug_callback(struct notifier_block *nfb, unsigned long action, void *hc
 //        printk(KERN_ALERT "In hotplug callback\n");
 	int i;
         unsigned int cpu = (unsigned int) hcpu;
-        printk("regs_hotplug_callback cpu = %d\n", cpu);
+        //printk("regs_hotplug_callback cpu = %d\n", cpu);
         switch (action) {
         case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
-
-	    *(volatile unsigned int *)(DBGLAR + cpu *0x2000) = UNLOCK_KEY;
-            *(volatile unsigned int *)(DBGOSLAR + cpu * 0x2000) = ~UNLOCK_KEY;
-	    *(volatile unsigned int *)(DBGDSCR + cpu * 0x2000) |= *(volatile unsigned int *)(DBGDSCR);
+            printk("regs_hotplug_callback cpu = %d\n", cpu);
+	    //*(volatile unsigned int *)(DBGLAR + cpu *0x2000) = UNLOCK_KEY;
+            mt_reg_sync_writel(UNLOCK_KEY, DBGLAR + cpu *0x2000);
+            printk("after write UNLOCK to DBGLAR\n");
+            //*(volatile unsigned int *)(DBGOSLAR + cpu * 0x2000) = ~UNLOCK_KEY;
+            mt_reg_sync_writel(~UNLOCK_KEY, DBGOSLAR + cpu *0x2000);
+            printk("after write ~UNLOCK to DBGOSLAR\n");
+            //*(volatile unsigned int *)(DBGDSCR + cpu * 0x2000) |= *(volatile unsigned int *)(DBGDSCR);
+            mt_reg_sync_writel(readl(DBGDSCR + cpu *0x2000) | readl(DBGDSCR), DBGDSCR + cpu *0x2000);
+            printk("after write to DBGDSCR: 0x%x\n", readl(DBGDSCR + cpu *0x2000));
 			
             for(i = 0; i < MAX_NR_WATCH_POINT; i++) {
-                *(((volatile unsigned int *)(DBGWVR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGWVR_BASE) + i);
-                *(((volatile unsigned int *)(DBGWCR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGWCR_BASE) + i);
+                //*(((volatile unsigned int *)(DBGWVR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGWVR_BASE) + i);
+                mt_reg_sync_writel(readl(DBGWVR_BASE + i * sizeof(unsigned int*)), DBGWVR_BASE + cpu * 0x2000 + i * sizeof(unsigned int *));
+                //*(((volatile unsigned int *)(DBGWCR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGWCR_BASE) + i);
+                mt_reg_sync_writel(readl(DBGWCR_BASE + i * sizeof(unsigned int*)), DBGWCR_BASE + cpu * 0x2000 + i * sizeof(unsigned int *));
             }
 		
             for(i = 0; i < MAX_NR_BREAK_POINT; i++) {
-                *(((volatile unsigned int *)(DBGBVR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGBVR_BASE) + i);
-                *(((volatile unsigned int *)(DBGBCR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGBCR_BASE) + i);
+                //*(((volatile unsigned int *)(DBGBVR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGBVR_BASE) + i);
+                mt_reg_sync_writel(readl(DBGBVR_BASE + i * sizeof(unsigned int*)), DBGBVR_BASE + cpu * 0x2000 + i * sizeof(unsigned int *));
+                //*(((volatile unsigned int *)(DBGBCR_BASE + cpu * 0x2000)) + i) = *(((volatile unsigned int *)DBGBCR_BASE) + i);
+                mt_reg_sync_writel(readl(DBGBCR_BASE + i * sizeof(unsigned int*)), DBGBCR_BASE + cpu * 0x2000 + i * sizeof(unsigned int *));
             }
+            printk("after write to cpu%d's debug regs\n", cpu);
 		
 	break;
 
@@ -113,6 +141,3 @@ static int __init regs_backup(void)
 
 module_init(regs_backup);
 #endif
-
-
-

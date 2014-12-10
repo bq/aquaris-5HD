@@ -31,6 +31,9 @@ static int madvise_need_mmap_write(int behavior)
 	case MADV_REMOVE:
 	case MADV_WILLNEED:
 	case MADV_DONTNEED:
+#ifdef CONFIG_ZEROPAGE
+	case MADV_ZEROPAGE:
+#endif
 		return 0;
 	default:
 		/* be safe, default to 1. list exceptions explicitly */
@@ -98,7 +101,8 @@ static long madvise_behavior(struct vm_area_struct * vma,
 
 	pgoff = vma->vm_pgoff + ((start - vma->vm_start) >> PAGE_SHIFT);
 	*prev = vma_merge(mm, *prev, start, end, new_flags, vma->anon_vma,
-				vma->vm_file, pgoff, vma_policy(vma));
+				vma->vm_file, pgoff, vma_policy(vma),
+				vma_get_anon_name(vma));
 	if (*prev) {
 		vma = *prev;
 		goto success;
@@ -194,6 +198,26 @@ static long madvise_dontneed(struct vm_area_struct * vma,
 		zap_page_range(vma, start, end - start, NULL);
 	return 0;
 }
+
+#ifdef CONFIG_ZEROPAGE
+/*
+ * Application wants to zero these ANONYMOUS pages.  This is effectively
+ * to throw them away and fault them for read at the same time.
+ */
+static long madvise_zeropage(struct vm_area_struct * vma,
+			     struct vm_area_struct ** prev,
+			     unsigned long start, unsigned long end)
+{
+	*prev = vma;
+	if (vma->vm_flags & (VM_LOCKED|VM_HUGETLB|VM_PFNMAP))
+		return -EPERM;
+
+	if (vma->vm_ops)
+		return -EPERM;
+
+	return zero_page_range(vma, start, end - start);
+}
+#endif
 
 /*
  * Application wants to free up the pages and associated backing store.
@@ -306,6 +330,10 @@ madvise_vma(struct vm_area_struct *vma, struct vm_area_struct **prev,
 		return madvise_willneed(vma, prev, start, end);
 	case MADV_DONTNEED:
 		return madvise_dontneed(vma, prev, start, end);
+#ifdef CONFIG_ZEROPAGE
+	case MADV_ZEROPAGE:
+		return madvise_zeropage(vma, prev, start, end);
+#endif
 	default:
 		return madvise_behavior(vma, prev, start, end, behavior);
 	}
@@ -333,6 +361,9 @@ madvise_behavior_valid(int behavior)
 #endif
 	case MADV_DONTDUMP:
 	case MADV_DODUMP:
+#ifdef CONFIG_ZEROPAGE
+	case MADV_ZEROPAGE:
+#endif
 		return 1;
 
 	default:

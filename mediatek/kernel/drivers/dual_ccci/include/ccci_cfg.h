@@ -37,7 +37,7 @@
 #define VIR_CHR_DEV_NUM		(10)
 #define TTY_DEV_NUM			(10)
 
-#define CCCI_MAX_VCHR_NUM	(5)
+#define CCCI_MAX_VCHR_NUM	(10)
 #define CCCI_VIR_CHR_KFIFO_SIZE		(16)
 
 

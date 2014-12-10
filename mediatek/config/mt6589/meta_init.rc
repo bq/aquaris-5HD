@@ -60,6 +60,9 @@ loglevel 5
     mkdir /cache 0770 system cache
     mkdir /config 0500 root root
 
+     #Create CIP mount point
+	mkdir /custom
+
     # Directory for putting things only root should see.
     mkdir /mnt/secure 0700 root root
 
@@ -112,6 +115,9 @@ on fs_property:ro.mount.fs=EXT4
     exec /system/bin/ext4_resize
     mount ext4 /emmc@usrdata /data noatime nosuid nodev wait commit=1,nodelalloc,noauto_da_alloc	
     mount ext4 /emmc@sec_ro /system/secro ro wait
+    # mount cip partitions
+    exec /sbin/e2fsck -p /emmc@custom
+	mount ext4 /emmc@custom /custom
     write /proc/bootprof "INIT:eMMC:Mount_END"
 
 on fs_property:ro.mount.fs=UBIFS
@@ -193,11 +199,6 @@ on post-fs
 	# OpenCORE player config
 	chmod 0666 /etc/player.cfg
 
-    # load driver base driver
-    insmod /system/lib/modules/mtk_drvb_73.ko
-    mknod /dev/drvb c 176 0
-    chmod 0666 /dev/drvb
-
     # WiFi
     mkdir /data/misc/wifi 0770 system wifi
     mkdir /data/misc/wifi/sockets 0770 system wifi
@@ -240,20 +241,15 @@ on post-fs
     # Sensor
     chmod 0666 /dev/sensor
 
-    # GPIO
-    chmod 0666 /dev/mtgpio
-
     # Android SEC related device nodes
-    insmod /system/lib/modules/sec.ko
     mknod /dev/sec c 182 0
     chmod 0660 /dev/sec
     chown root system /dev/sec
     
     # device info interface
-    insmod /system/lib/modules/devinfo.ko
     mknod /dev/devmap c 196 0;
-    chmod 0444 /dev/devmap
-    chown root media /dev/devmap
+    chmod 0440 /dev/devmap
+    chown root system /dev/devmap
 
 on post-fs-data
 
@@ -287,6 +283,8 @@ on boot
    chmod 700 /remount.sh
    exec /remount.sh
 
+   start drvbd
+
 # basic network init
     ifup lo
     hostname localhost
@@ -314,6 +312,11 @@ service nvram_daemon /system/bin/nvram_daemon
     user nvram
     group nvram system
     oneshot
+
+service drvbd /system/bin/drvbd
+    class main
+    user system
+    group system
 
 service mobile_log_d /system/bin/mobile_log_d
 

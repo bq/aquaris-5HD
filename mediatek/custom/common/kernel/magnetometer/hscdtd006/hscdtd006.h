@@ -65,7 +65,7 @@
 #define HSCDTD006_IRQ				IRQ_EINT9
 
 // conversion of magnetic data to nT units
-#define CONVERT_M                       25
+#define CONVERT_M                       1//25
 #define ORIENTATION_ACCURACY_RATE                   1
 
 

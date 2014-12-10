@@ -9,14 +9,20 @@
 #include "ddp_reg.h"
 #include "ddp_debug.h"
 
+#include <cust_leds.h>
+#include <cust_leds_def.h>
+
 #define POLLING_TIME_OUT 1000
 
 #define PWM_LOW_LIMIT 1  //PWM output lower bound = 8
+
+#define PWM_DEFAULT_DIV_VALUE 0x24
 
 #if !defined(MTK_AAL_SUPPORT)
 static int gBLSMutexID = 3;
 static int gBLSPowerOn = 0;
 #endif
+static int gPWMDiv = PWM_DEFAULT_DIV_VALUE;
 static int gMaxLevel = 255;
 
 static DEFINE_MUTEX(backlight_mutex);
@@ -35,58 +41,43 @@ static DISPLAY_GAMMA_T g_gamma_index =
 entry:
 {
     {
-      0,  16,  32,  48,  64,  80,  96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 
-	  1,  17,  33,  49,  65,  81,  97, 113, 129, 145, 161, 177, 193, 209, 225, 241, 
-	  2,  18,  34,  50,  66,  82,  98, 114, 130, 146, 162, 178, 194, 210, 226, 242, 
-	  3,  19,  35,  51,  67,  83,  99, 115, 131, 147, 163, 179, 195, 211, 227, 243, 
-	  4,  20,  36,  52,  68,  84, 100, 116, 132, 148, 164, 180, 196, 212, 228, 244, 
-	  5,  21,  37,  53,  69,  85, 101, 117, 133, 149, 165, 181, 197, 213, 229, 245, 
-	  6,  22,  38,  54,  70,  86, 102, 118, 134, 150, 166, 182, 198, 214, 230, 246, 
-	  7,  23,  39,  55,  71,  87, 103, 119, 135, 151, 167, 183, 199, 215, 231, 247, 
-	  8,  24,  40,  56,  72,  88, 104, 120, 136, 152, 168, 184, 200, 216, 232, 248, 
-	  9,  25,  41,  57,  73,  89, 105, 121, 137, 153, 169, 185, 201, 217, 233, 249, 
-	 10,  26,  42,  58,  74,  90, 106, 122, 138, 154, 170, 186, 202, 218, 234, 250, 
-	 11,  27,  43,  59,  75,  91, 107, 123, 139, 155, 171, 187, 203, 219, 235, 251, 
-	 12,  28,  44,  60,  76,  92, 108, 124, 140, 156, 172, 188, 204, 220, 236, 252, 
-	 13,  29,  45,  61,  77,  93, 109, 125, 141, 157, 173, 189, 205, 221, 237, 253, 
-	 14,  30,  46,  62,  78,  94, 110, 126, 142, 158, 174, 190, 206, 222, 238, 254, 
-	 15,  31,  47,  63,  79,  95, 111, 127, 143, 159, 175, 191, 207, 223, 239, 255
+            0,   4,   8,  12,  16,  20,  24,  28,  32,  36,  40,  44,  48,  52,  56,  60,  64,  68,  72,  76,  80,  84,  88,  92,  96,
+        100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196,
+        200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296,
+        300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 388, 392, 396,
+        400, 404, 408, 412, 416, 420, 424, 428, 432, 436, 440, 444, 448, 452, 456, 460, 464, 468, 472, 476, 480, 484, 488, 492, 496,
+        500, 504, 508, 512, 516, 520, 524, 528, 532, 536, 540, 544, 548, 552, 556, 560, 564, 568, 572, 576, 580, 584, 588, 592, 596,
+        600, 604, 608, 612, 616, 620, 624, 628, 632, 636, 640, 644, 648, 652, 656, 660, 664, 668, 672, 676, 680, 684, 688, 692, 696,
+        700, 704, 708, 712, 716, 720, 724, 728, 732, 736, 740, 744, 748, 752, 756, 760, 764, 768, 772, 776, 780, 784, 788, 792, 796,
+        800, 804, 808, 812, 816, 820, 824, 828, 832, 836, 840, 844, 848, 852, 856, 860, 864, 868, 872, 876, 880, 884, 888, 892, 896,
+        900, 904, 908, 912, 916, 920, 924, 928, 932, 936, 940, 944, 948, 952, 956, 960, 964, 968, 972, 976, 980, 984, 988, 992, 996,
+        1000, 1004, 1008, 1012, 1016, 1020, 1023
     },
     {
-	  0,  16,  32,  48,  64,  80,  96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 
-	  1,  17,  33,  49,  65,  81,  97, 113, 129, 145, 161, 177, 193, 209, 225, 241, 
-	  2,  18,  34,  50,  66,  82,  98, 114, 130, 146, 162, 178, 194, 210, 226, 242, 
-	  3,  19,  35,  51,  67,  83,  99, 115, 131, 147, 163, 179, 195, 211, 227, 243, 
-	  4,  20,  36,  52,  68,  84, 100, 116, 132, 148, 164, 180, 196, 212, 228, 244, 
-	  5,  21,  37,  53,  69,  85, 101, 117, 133, 149, 165, 181, 197, 213, 229, 245, 
-	  6,  22,  38,  54,  70,  86, 102, 118, 134, 150, 166, 182, 198, 214, 230, 246, 
-	  7,  23,  39,  55,  71,  87, 103, 119, 135, 151, 167, 183, 199, 215, 231, 247, 
-	  8,  24,  40,  56,  72,  88, 104, 120, 136, 152, 168, 184, 200, 216, 232, 248, 
-	  9,  25,  41,  57,  73,  89, 105, 121, 137, 153, 169, 185, 201, 217, 233, 249, 
-	 10,  26,  42,  58,  74,  90, 106, 122, 138, 154, 170, 186, 202, 218, 234, 250, 
-	 11,  27,  43,  59,  75,  91, 107, 123, 139, 155, 171, 187, 203, 219, 235, 251, 
-	 12,  28,  44,  60,  76,  92, 108, 124, 140, 156, 172, 188, 204, 220, 236, 252, 
-	 13,  29,  45,  61,  77,  93, 109, 125, 141, 157, 173, 189, 205, 221, 237, 253, 
-	 14,  30,  46,  62,  78,  94, 110, 126, 142, 158, 174, 190, 206, 222, 238, 254, 
-	 15,  31,  47,  63,  79,  95, 111, 127, 143, 159, 175, 191, 207, 223, 239, 255
+            0,   4,   8,  12,  16,  20,  24,  28,  32,  36,  40,  44,  48,  52,  56,  60,  64,  68,  72,  76,  80,  84,  88,  92,  96,
+        100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196,
+        200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296,
+        300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 388, 392, 396,
+        400, 404, 408, 412, 416, 420, 424, 428, 432, 436, 440, 444, 448, 452, 456, 460, 464, 468, 472, 476, 480, 484, 488, 492, 496,
+        500, 504, 508, 512, 516, 520, 524, 528, 532, 536, 540, 544, 548, 552, 556, 560, 564, 568, 572, 576, 580, 584, 588, 592, 596,
+        600, 604, 608, 612, 616, 620, 624, 628, 632, 636, 640, 644, 648, 652, 656, 660, 664, 668, 672, 676, 680, 684, 688, 692, 696,
+        700, 704, 708, 712, 716, 720, 724, 728, 732, 736, 740, 744, 748, 752, 756, 760, 764, 768, 772, 776, 780, 784, 788, 792, 796,
+        800, 804, 808, 812, 816, 820, 824, 828, 832, 836, 840, 844, 848, 852, 856, 860, 864, 868, 872, 876, 880, 884, 888, 892, 896,
+        900, 904, 908, 912, 916, 920, 924, 928, 932, 936, 940, 944, 948, 952, 956, 960, 964, 968, 972, 976, 980, 984, 988, 992, 996,
+        1000, 1004, 1008, 1012, 1016, 1020, 1023
     },
     {
-	  0,  16,  32,  48,  64,  80,  96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 
-	  1,  17,  33,  49,  65,  81,  97, 113, 129, 145, 161, 177, 193, 209, 225, 241, 
-	  2,  18,  34,  50,  66,  82,  98, 114, 130, 146, 162, 178, 194, 210, 226, 242, 
-	  3,  19,  35,  51,  67,  83,  99, 115, 131, 147, 163, 179, 195, 211, 227, 243, 
-	  4,  20,  36,  52,  68,  84, 100, 116, 132, 148, 164, 180, 196, 212, 228, 244, 
-	  5,  21,  37,  53,  69,  85, 101, 117, 133, 149, 165, 181, 197, 213, 229, 245, 
-	  6,  22,  38,  54,  70,  86, 102, 118, 134, 150, 166, 182, 198, 214, 230, 246, 
-	  7,  23,  39,  55,  71,  87, 103, 119, 135, 151, 167, 183, 199, 215, 231, 247, 
-	  8,  24,  40,  56,  72,  88, 104, 120, 136, 152, 168, 184, 200, 216, 232, 248, 
-	  9,  25,  41,  57,  73,  89, 105, 121, 137, 153, 169, 185, 201, 217, 233, 249, 
-	 10,  26,  42,  58,  74,  90, 106, 122, 138, 154, 170, 186, 202, 218, 234, 250, 
-	 11,  27,  43,  59,  75,  91, 107, 123, 139, 155, 171, 187, 203, 219, 235, 251, 
-	 12,  28,  44,  60,  76,  92, 108, 124, 140, 156, 172, 188, 204, 220, 236, 252, 
-	 13,  29,  45,  61,  77,  93, 109, 125, 141, 157, 173, 189, 205, 221, 237, 253, 
-	 14,  30,  46,  62,  78,  94, 110, 126, 142, 158, 174, 190, 206, 222, 238, 254, 
-	 15,  31,  47,  63,  79,  95, 111, 127, 143, 159, 175, 191, 207, 223, 239, 255
+            0,   4,   8,  12,  16,  20,  24,  28,  32,  36,  40,  44,  48,  52,  56,  60,  64,  68,  72,  76,  80,  84,  88,  92,  96,
+        100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 148, 152, 156, 160, 164, 168, 172, 176, 180, 184, 188, 192, 196,
+        200, 204, 208, 212, 216, 220, 224, 228, 232, 236, 240, 244, 248, 252, 256, 260, 264, 268, 272, 276, 280, 284, 288, 292, 296,
+        300, 304, 308, 312, 316, 320, 324, 328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376, 380, 384, 388, 392, 396,
+        400, 404, 408, 412, 416, 420, 424, 428, 432, 436, 440, 444, 448, 452, 456, 460, 464, 468, 472, 476, 480, 484, 488, 492, 496,
+        500, 504, 508, 512, 516, 520, 524, 528, 532, 536, 540, 544, 548, 552, 556, 560, 564, 568, 572, 576, 580, 584, 588, 592, 596,
+        600, 604, 608, 612, 616, 620, 624, 628, 632, 636, 640, 644, 648, 652, 656, 660, 664, 668, 672, 676, 680, 684, 688, 692, 696,
+        700, 704, 708, 712, 716, 720, 724, 728, 732, 736, 740, 744, 748, 752, 756, 760, 764, 768, 772, 776, 780, 784, 788, 792, 796,
+        800, 804, 808, 812, 816, 820, 824, 828, 832, 836, 840, 844, 848, 852, 856, 860, 864, 868, 872, 876, 880, 884, 888, 892, 896,
+        900, 904, 908, 912, 916, 920, 924, 928, 932, 936, 940, 944, 948, 952, 956, 960, 964, 968, 972, 976, 980, 984, 988, 992, 996,
+        1000, 1004, 1008, 1012, 1016, 1020, 1023
     }
 }
 };
@@ -257,26 +248,20 @@ void disp_bls_update_gamma_lut(void)
 {
     int index, i;
     unsigned long regValue;
-    unsigned long LastVal, MSB, CurVal, Count;
+    unsigned long CurVal, Count;
 
+#ifndef NEW_GAMMA_ARRAY_ARRANGEMENT
+    // make it build fail for EPC rule after MP
+    DISP_MSG("disp_bls_update_gamma_lut!\n")
+#endif
     DISP_MSG("disp_bls_update_gamma_lut!\n");
     
     // init gamma table
-    // convert from NCStool output format to BLS GAMMA 10 bits lut
     for(index = 0; index < 3; index++)
     {    
-        LastVal = MSB = CurVal = Count = 0;
-    
-        for(Count = 0; Count < 256 ; Count++)
+        for(Count = 0; Count < 257 ; Count++)
         {  
-            CurVal = g_gamma_index.entry[index][Count];
-            if(LastVal > CurVal)
-            {
-                MSB++;
-            }
-            //get GammaTable Value
-            g_gamma_lut.entry[index][Count] = (MSB << 8) | CurVal;
-            LastVal = CurVal;
+            g_gamma_lut.entry[index][Count] = g_gamma_index.entry[index][Count];
         }
     }
     
@@ -291,7 +276,7 @@ void disp_bls_update_gamma_lut(void)
         
     for (i = 0; i < 256 ; i++)
     {
-        CurVal = (((g_gamma_lut.entry[0][i]>>2)<<20) | ((g_gamma_lut.entry[1][i]>>2)<<10) | (g_gamma_lut.entry[2][i]>>2));
+        CurVal = (((g_gamma_lut.entry[0][i]&0x3FF)<<20) | ((g_gamma_lut.entry[1][i]&0x3FF)<<10) | (g_gamma_lut.entry[2][i]&0x3FF));
         DISP_REG_SET(DISP_REG_BLS_GAMMA_LUT(i), CurVal);
         DISP_DBG("[%d] GAMMA LUT = 0x%x, (%lu, %lu, %lu)\n", i, DISP_REG_GET(DISP_REG_BLS_GAMMA_LUT(i)), 
             g_gamma_lut.entry[0][i], g_gamma_lut.entry[1][i], g_gamma_lut.entry[2][i]);
@@ -299,10 +284,10 @@ void disp_bls_update_gamma_lut(void)
     
     /* Set Gamma Last point*/    
     DISP_REG_SET(DISP_REG_BLS_GAMMA_SETTING, 0x00000001);
-    
-    //FIXME! use 256th as 257th 
-    LastVal = (((g_gamma_lut.entry[0][255]>>2)<<20) | ((g_gamma_lut.entry[1][255]>>2)<<10) | (g_gamma_lut.entry[2][255]>>2));
-    DISP_REG_SET(DISP_REG_BLS_GAMMA_BOUNDARY, LastVal);
+
+    // set gamma last index
+    CurVal = (((g_gamma_lut.entry[0][256]&0x3FF)<<20) | ((g_gamma_lut.entry[1][256]&0x3FF)<<10) | (g_gamma_lut.entry[2][256]&0x3FF));
+    DISP_REG_SET(DISP_REG_BLS_GAMMA_BOUNDARY, CurVal);
         
     DISP_REG_SET(DISP_REG_BLS_LUT_UPDATE, 0);
     //DISP_REG_SET(DISP_REG_BLS_EN, regValue);
@@ -341,11 +326,26 @@ void disp_bls_update_pwm_lut(void)
 
 void disp_bls_init(unsigned int srcWidth, unsigned int srcHeight)
 {       
+    struct cust_mt65xx_led *cust_led_list = get_cust_led_list();
+    struct cust_mt65xx_led *cust = NULL;
+    struct PWM_config *config_data = NULL;
+
+    if(cust_led_list)
+    {
+        cust = &cust_led_list[MT65XX_LED_TYPE_LCD];
+        if((strcmp(cust->name,"lcd-backlight") == 0) && (cust->mode == MT65XX_LED_MODE_CUST_BLS_PWM))
+        {
+            config_data = &cust->config_data;
+            gPWMDiv = (config_data->div == 0)?PWM_DEFAULT_DIV_VALUE:config_data->div;
+            DISP_MSG("disp_bls_init : PWM config data (%d,%d)\n", config_data->clock_source, config_data->div);
+        }
+    }
+    
     DISP_MSG("disp_bls_init : srcWidth = %d, srcHeight = %d\n", srcWidth, srcHeight);
     
     DISP_REG_SET(DISP_REG_BLS_SRC_SIZE, (srcHeight << 16) | srcWidth);
     DISP_REG_SET(DISP_REG_BLS_PWM_DUTY, DISP_REG_GET(DISP_REG_BLS_PWM_DUTY));
-    DISP_REG_SET(DISP_REG_BLS_PWM_CON, 0x00050024);
+    DISP_REG_SET(DISP_REG_BLS_PWM_CON, 0x00050000 | gPWMDiv);
     DISP_REG_SET(DISP_REG_BLS_PWM_DUTY_GAIN, 0x00000100);
     DISP_REG_SET(DISP_REG_BLS_BLS_SETTING, 0x0);
     DISP_REG_SET(DISP_REG_BLS_INTEN, 0xF);
@@ -371,6 +371,21 @@ void disp_bls_init(unsigned int srcWidth, unsigned int srcHeight)
 int disp_bls_config(void)
 {
 #if !defined(MTK_AAL_SUPPORT)
+    struct cust_mt65xx_led *cust_led_list = get_cust_led_list();
+    struct cust_mt65xx_led *cust = NULL;
+    struct PWM_config *config_data = NULL;
+
+    if(cust_led_list)
+    {
+        cust = &cust_led_list[MT65XX_LED_TYPE_LCD];
+        if((strcmp(cust->name,"lcd-backlight") == 0) && (cust->mode == MT65XX_LED_MODE_CUST_BLS_PWM))
+        {
+            config_data = &cust->config_data;
+            gPWMDiv = (config_data->div == 0)?PWM_DEFAULT_DIV_VALUE:config_data->div;
+            DISP_MSG("disp_bls_config : PWM config data (%d,%d)\n", config_data->clock_source, config_data->div);
+        }
+    }
+
     if (!clock_is_on(MT_CG_DISP0_BLS) || !gBLSPowerOn)
     {
         DISP_MSG("disp_bls_config: enable clock\n");
@@ -391,11 +406,11 @@ int disp_bls_config(void)
         g_previous_level = (DISP_REG_GET(DISP_REG_BLS_PWM_CON) & 0x80 > 7) * 0xFF;
         g_previous_wavenum = 0;
         DISP_REG_SET(DISP_REG_BLS_PWM_DUTY, 0x00000080);
-        DISP_REG_SET(DISP_REG_BLS_PWM_CON, 0x00050024 | (DISP_REG_GET(DISP_REG_BLS_PWM_CON) & 0x80));    
+        DISP_REG_SET(DISP_REG_BLS_PWM_CON, (0x00050000 | gPWMDiv) | (DISP_REG_GET(DISP_REG_BLS_PWM_CON) & 0x80));    
         DISP_REG_SET(DISP_REG_BLS_EN, 0x00000000);
 #else
         DISP_REG_SET(DISP_REG_BLS_PWM_DUTY, DISP_REG_GET(DISP_REG_BLS_PWM_DUTY));
-        DISP_REG_SET(DISP_REG_BLS_PWM_CON, 0x00050024);
+        DISP_REG_SET(DISP_REG_BLS_PWM_CON, 0x00050000 | gPWMDiv);
         DISP_REG_SET(DISP_REG_BLS_EN, 0x80000000);
 #endif
         DISP_REG_SET(DISP_REG_BLS_PWM_DUTY_GAIN, 0x00000100);
@@ -435,8 +450,8 @@ int disp_bls_set_backlight(unsigned int level)
     if (level > 0)
         wavenum = MAX_PWM_WAVENUM - brightness_mapping(level);
 
-    DISP_MSG("disp_bls_set_backlight: level = %d (%d), previous level = %d (%d)\n",
-        level, wavenum, g_previous_level, g_previous_wavenum);
+    DISP_MSG("disp_bls_set_backlight: level = %d (%d), previous level = %d (%d), PWM div %d\n",
+        level, wavenum, g_previous_level, g_previous_wavenum, gPWMDiv);
 
 
     if (level && (!clock_is_on(MT_CG_DISP0_BLS) || !gBLSPowerOn)) 
@@ -522,7 +537,7 @@ Exit:
 #else
 int disp_bls_set_backlight(unsigned int level)
 {
-    DISP_MSG("disp_bls_set_backlight: %d, gBLSPowerOn = %d\n", level, gBLSPowerOn);
+    DISP_MSG("disp_bls_set_backlight: %d, gBLSPowerOn = %d, PWM div %d\n", level, gBLSPowerOn, gPWMDiv);
 
     if (!level && !clock_is_on(MT_CG_DISP0_BLS))
         return 0;
@@ -554,7 +569,7 @@ int disp_bls_set_backlight(unsigned int level)
 int disp_bls_set_backlight(unsigned int level)
 {
     DISP_AAL_PARAM *param;
-    DISP_MSG("disp_bls_set_backlight: %d\n", level);
+    DISP_MSG("disp_bls_set_backlight: %d, PWM div %d\n", level, gPWMDiv);
 
     mutex_lock(&backlight_mutex);
     disp_aal_lock();

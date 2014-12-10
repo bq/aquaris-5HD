@@ -9,7 +9,13 @@
 extern	uint8_t	I2C_ReadByte(uint8_t deviceID, uint8_t offset);
 extern	void	I2C_WriteByte(uint8_t deviceID, uint8_t offset, uint8_t value);
 #endif
+
+#if SII_I2C_ADDR==(0x76)
+static prefuint_t   l_pageInstance[SII_CRA_DEVICE_PAGE_COUNT] = {1};
+#else
 static prefuint_t   l_pageInstance[SII_CRA_DEVICE_PAGE_COUNT] = {0};
+
+#endif
 extern pageConfig_t g_addrDescriptor[SII_CRA_MAX_DEVICE_INSTANCES][SII_CRA_DEVICE_PAGE_COUNT];
 extern SiiReg_t     g_siiRegPageBaseReassign [];
 extern SiiReg_t     g_siiRegPageBaseRegs[SII_CRA_DEVICE_PAGE_COUNT];
@@ -60,7 +66,11 @@ bool_t SiiCraInitialize ( void )
     craInstance.lastResultCode = RESULT_CRA_SUCCESS;
     for (i = 0; i < SII_CRA_DEVICE_PAGE_COUNT; i++)
     {
+#if SII_I2C_ADDR==(0x76)
+        l_pageInstance[i] = 1;
+#else
         l_pageInstance[i] = 0;
+#endif
     }
     i = 0;
     while ( g_siiRegPageBaseReassign[ i] != 0xFFFF )
@@ -118,12 +128,13 @@ void SiiRegReadBlock ( SiiReg_t virtualAddr, uint8_t *pBuffer, uint16_t count )
     }
 #else
 	{
-		int	i;
+		/*int	i;
 		for (i=0; i<count; i++)
 		{
 			*pBuffer = I2C_ReadByte((uint8_t)pPage->address, (regOffset + i));
 			++pBuffer;
-		}
+		}*/
+		I2C_ReadBlock((uint8_t)pPage->address, regOffset, pBuffer, count);
 	}
 #endif	
 }

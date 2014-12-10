@@ -5,6 +5,8 @@
 #include "lcm_drv.h"
 
 #ifdef BUILD_LK
+	#include <stdlib.h>
+	#include <string.h>
 	#include <platform/mt_gpio.h>
 #elif defined(BUILD_UBOOT)
 	#include <asm/arch/mt_gpio.h>
@@ -805,10 +807,10 @@ static void lcm_update(unsigned int x, unsigned int y,
 	data_array[1]= (y1_MSB<<24)|(y0_LSB<<16)|(y0_MSB<<8)|0x2b;
 	data_array[2]= (y1_LSB);
 	dsi_set_cmdq(data_array, 3, 1);
-
+/*	when resume,the engine is in LP mode,so DSI will timeout.
 	data_array[0]= 0x00290508;//HW bug, so need send one HS packet
 	dsi_set_cmdq(data_array, 1, 1);
-	
+*/	
 	data_array[0]= 0x002c3909;
 	dsi_set_cmdq(data_array, 1, 0);
 
@@ -818,12 +820,12 @@ static void lcm_update(unsigned int x, unsigned int y,
 static unsigned int lcm_compare_id(void)
 {
 
-		int   array[4];
-		char  buffer[3];
-		char  id0=0;
+		UINT32   array[4];
+		UINT8  buffer[3];
+/*		char  id0=0;
 		char  id1=0;
 		char  id2=0;
-
+*/
 
 		SET_RESET_PIN(0);
 		MDELAY(200);
@@ -835,10 +837,10 @@ static unsigned int lcm_compare_id(void)
 
 	read_reg_v2(0x04,buffer, 3);
 	
-	id0 = buffer[0]; //should be 0x00
+/*	id0 = buffer[0]; //should be 0x00
 	id1 = buffer[1];//should be 0x80
 	id2 = buffer[2];//should be 0x00
-	
+*/	
 	return 0;
 
 

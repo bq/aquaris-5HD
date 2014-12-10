@@ -1041,14 +1041,20 @@ kalP2PIndicateChannelReady (
         prIEEE80211ChnlStruct = kalP2pFuncGetChannelEntry(prGlueInfo->prP2PInfo, &rChannelInfo);
 
         kalP2pFuncGetChannelType(eSco, &eChnlType);
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)    
+        cfg80211_ready_on_channel(&prGlueInfo->prP2PInfo->wdev, //struct wireless_dev,
+                        u8SeqNum, //u64 cookie,
+                        prIEEE80211ChnlStruct, //struct ieee80211_channel * chan,
+                        u4Duration, //unsigned int duration,
+                        GFP_KERNEL); //gfp_t gfp    /* allocation flags */
+#else
         cfg80211_ready_on_channel(prGlueInfo->prP2PInfo->prDevHandler, //struct net_device * dev,
                         u8SeqNum, //u64 cookie,
                         prIEEE80211ChnlStruct, //struct ieee80211_channel * chan,
                         eChnlType, //enum nl80211_channel_type channel_type,
                         u4Duration, //unsigned int duration,
                         GFP_KERNEL); //gfp_t gfp    /* allocation flags */
-
+#endif
     } while (FALSE);
 
 } /* kalP2PIndicateChannelReady */
@@ -1064,6 +1070,7 @@ kalP2PIndicateChannelExpired (
     struct ieee80211_channel *prIEEE80211ChnlStruct = (struct ieee80211_channel *)NULL;
     enum nl80211_channel_type eChnlType = NL80211_CHAN_NO_HT;
     RF_CHANNEL_INFO_T rRfChannelInfo;
+
 
     do {
         if ((prGlueInfo == NULL) || (prChnlReqInfo == NULL)) {
@@ -1091,13 +1098,18 @@ kalP2PIndicateChannelExpired (
         kalP2pFuncGetChannelType(prChnlReqInfo->eChnlSco,
                                     &eChnlType);
 
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)  
+        cfg80211_remain_on_channel_expired(&prGlueP2pInfo->wdev, //struct wireless_dev,
+                        prChnlReqInfo->u8Cookie,
+                        prIEEE80211ChnlStruct,
+                        GFP_KERNEL);  
+#else
         cfg80211_remain_on_channel_expired(prGlueP2pInfo->prDevHandler, //struct net_device * dev,
                         prChnlReqInfo->u8Cookie,
                         prIEEE80211ChnlStruct,
                         eChnlType,
                         GFP_KERNEL);
-
+#endif
     } while (FALSE);
 
 } /* kalP2PIndicateChannelExpired */
@@ -1184,7 +1196,11 @@ kalP2PIndicateBssInfo (
 
 
         /* Return this structure. */
-        cfg80211_put_bss(prCfg80211Bss);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
+            cfg80211_put_bss(prGlueP2pInfo->wdev.wiphy, prCfg80211Bss);
+#else
+			cfg80211_put_bss(prCfg80211Bss);
+#endif
 
     } while (FALSE);
 
@@ -1207,14 +1223,18 @@ kalP2PIndicateMgmtTxStatus (
         if ((prGlueInfo == NULL) ||
                 (pucFrameBuf == NULL) ||
                 (u4FrameLen == 0)) {
-            DBGLOG(P2P, TRACE, ("Unexpected pointer PARAM. 0x%lx, 0x%lx, %ld.", prGlueInfo, pucFrameBuf, u4FrameLen));
+            DBGLOG(P2P, TRACE, ("Unexpected pointer PARAM. 0x%p, 0x%p, %lu", prGlueInfo, pucFrameBuf, u4FrameLen));
             ASSERT(FALSE);
             break;
         }
 
         prGlueP2pInfo = prGlueInfo->prP2PInfo;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+        cfg80211_mgmt_tx_status(&prGlueP2pInfo->wdev, //struct net_device * dev,
+#else
         cfg80211_mgmt_tx_status(prGlueP2pInfo->prDevHandler, //struct net_device * dev,
+#endif /* LINUX_VERSION_CODE */
                         u8Cookie,
                         pucFrameBuf,
                         u4FrameLen,
@@ -1274,7 +1294,11 @@ kalP2PIndicateRxMgmtFrame (
         i4Freq = nicChannelNum2Freq(ucChnlNum) / 1000;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+        cfg80211_rx_mgmt(&prGlueP2pInfo->wdev, //struct net_device * dev,
+#else
         cfg80211_rx_mgmt(prGlueP2pInfo->prDevHandler, //struct net_device * dev,
+#endif /* LINUX_VERSION_CODE */
                             i4Freq,
                             RCPI_TO_dBm(prSwRfb->prHifRxHdr->ucRcpi),
                             prSwRfb->pvHeader,

@@ -7,6 +7,11 @@
 #include "si_cra_cfg.h"
 #include "si_8338_regs.h"
 #include "si_cra.h"
+#include "smartbook.h"
+#include <linux/hrtimer.h>
+#include <linux/ktime.h>
+#include "si_drv_mdt_tx.h"
+#include "hdmi_drv.h"
 
 #define NUM_CBUS_EVENT_QUEUE_EVENTS 5
 typedef struct _CBusQueue_t
@@ -25,6 +30,17 @@ typedef struct _CBusQueue_t
 CBusQueue_t CBusQueue;
 
 extern uint8_t VIDEO_CAPABILITY_D_BLOCK_found;
+extern bool_t mscAbortFlag;
+
+struct hrtimer hr_timer_AbortTimer_CHK;
+
+enum hrtimer_restart timer_AbortTimer_CHK_callback( struct hrtimer *timer )
+{
+  mscAbortFlag = false;
+  TX_DEBUG_PRINT(( "Drv: timer_AbortTimer_CHK_Expired now!!!!!!\n"));
+  return HRTIMER_NORESTART;
+}
+
 
 cbus_req_t *GetNextCBusTransactionImpl(void)
 {
@@ -133,6 +149,12 @@ static	bool_t		MhlTxSendMscMsg ( uint8_t command, uint8_t cmdData );
 static void SiiMhlTxRefreshPeerDevCapEntries(void);
 static void MhlTxDriveStates( void );
 extern PLACE_IN_CODE_SEG uint8_t rcpSupportTable [];
+extern HDMI_CABLE_TYPE MHL_Connect_type;
+extern  void hdmi_state_callback(HDMI_STATE state);
+#ifdef MTK_SMARTBOOK_SUPPORT		
+extern  void smartbook_state_callback();
+#endif                
+
 bool_t MhlTxCBusBusy(void)
 {
     return ((QUEUE_DEPTH(CBusQueue) > 0)||SiiMhlTxDrvCBusBusy() || mhlTxConfig.cbusReferenceCount)?true:false;
@@ -196,8 +218,11 @@ static bool_t SiiMhlTxSetInt( uint8_t regToWrite,uint8_t  mask, uint8_t priority
     }
     return retVal;
 }
+//Timon: phase out this function since pdatabytes is not used anymore
+//Why? cause pdatabytes is useless
 static bool_t SiiMhlTxDoWriteBurst( uint8_t startReg, uint8_t *pData,uint8_t length )
 {
+    int i;
     if (FLAGS_WRITE_BURST_PENDING & mhlTxConfig.miscFlags)
     {
         cbus_req_t	req;
@@ -207,7 +232,9 @@ static bool_t SiiMhlTxDoWriteBurst( uint8_t startReg, uint8_t *pData,uint8_t len
     	req.command     = MHL_WRITE_BURST;
         req.length      = length;
     	req.offsetData  = startReg;
-    	req.payload_u.pdatabytes  = pData;
+    	//req.payload_u.pdatabytes  = pData;
+        for(i = 0; i < length; i++)
+            req.payload_u.msgData[i] = pData[i];
         retVal = PutPriorityCBusTransaction(&req);
         ClrMiscFlag(SiiMhlTxDoWriteBurst, FLAGS_WRITE_BURST_PENDING)
         return retVal;
@@ -263,6 +290,9 @@ int SiiMhlTxInitialize(uint8_t pollIntervalMs )
             ,(mhlTxConfig.mhlHpdRSENflags & MHL_HPD)?1:0
             ,(mhlTxConfig.mhlHpdRSENflags & MHL_RSEN)?1:0
             ));
+	hrtimer_init( &hr_timer_AbortTimer_CHK, CLOCK_MONOTONIC, HRTIMER_MODE_REL );
+
+	hr_timer_AbortTimer_CHK.function = &timer_AbortTimer_CHK_callback;
 	ret = SiiMhlTxChipInitialize ();
     //SiiInitExtVideo();
     if (ret)
@@ -384,7 +414,7 @@ static void MhlTxDriveStates( void )
 #endif
     if (QUEUE_DEPTH(CBusQueue) > 0)
     {
-    	HalTimerWait(100);
+    	//HalTimerWait(100);
         if (!SiiMhlTxDrvCBusBusy())
         {
             int reQueueRequest = 0;
@@ -503,6 +533,23 @@ void	SiiMhlTxMscCommandDone( uint8_t data1 )
         	{
         		ExamineLocalAndPeerVidLinkMode();
         	}
+        	else if (DEVCAP_OFFSET_RESERVED == mhlTxConfig.mscLastOffset)
+        	{
+        	    MHL_Connect_type= MHL_CABLE;        	    
+                if(mhlTxConfig.aucDevCapCache[DEVCAP_OFFSET_RESERVED] == 0xB9)
+                {
+                    MHL_Connect_type= MHL_SMB_CABLE;
+                }
+                TX_DEBUG_PRINT(("MhlTx:SiiMhlTxMscCommandDone connect type %d %x\n", MHL_Connect_type, mhlTxConfig.aucDevCapCache[DEVCAP_OFFSET_RESERVED]));
+#ifdef MTK_SMARTBOOK_SUPPORT		
+                smartbook_state_callback();
+                if(MHL_Connect_type == MHL_SMB_CABLE){
+                    SiiHidSuspend(1); // call register input device when smartbook plug-in
+                }
+#endif		
+
+        	}
+        	
 			if ( ++mhlTxConfig.ucDevCapCacheIndex < sizeof(mhlTxConfig.aucDevCapCache) )
 			{
 				SiiMhlTxReadDevcap( mhlTxConfig.ucDevCapCacheIndex );
@@ -566,7 +613,7 @@ void	SiiMhlTxMscCommandDone( uint8_t data1 )
         mhlTxConfig.mscLastCommand = 0;
         mhlTxConfig.mscLastOffset  = 0;
         mhlTxConfig.mscLastData    = 0;
-        SiiMhlTxSetInt( MHL_RCHANGE_INT,MHL_INT_DSCR_CHG,0 );
+        //SiiMhlTxSetInt( MHL_RCHANGE_INT,MHL_INT_DSCR_CHG,0 );
     }
     else if (MHL_SET_INT == mhlTxConfig.mscLastCommand)
     {
@@ -624,8 +671,15 @@ void	SiiMhlTxMscCommandDone( uint8_t data1 )
 		}
 	}
 }
+#ifdef MTK_SMARTBOOK_SUPPORT
+int SiiHidWrite(int key);
+#endif
 void	SiiMhlTxMscWriteBurstDone( uint8_t data1 )
 {
+    TX_DEBUG_PRINT(("MhlTx:SiiMhlTxMscWriteBurstDone(%02X) \n",(int)data1 ));
+#ifdef MTK_SMARTBOOK_SUPPORT
+	SiiHidWrite(0);
+#else
 #define WRITE_BURST_TEST_SIZE 16
 uint8_t temp[WRITE_BURST_TEST_SIZE];
 uint8_t i;
@@ -644,6 +698,7 @@ uint8_t i;
         }
     }
     TX_DEBUG_PRINT(("\"\n"));
+#endif
 }
 void	SiiMhlTxGotMhlMscMsg( uint8_t subCommand, uint8_t cmdData )
 {
@@ -651,6 +706,16 @@ void	SiiMhlTxGotMhlMscMsg( uint8_t subCommand, uint8_t cmdData )
 	mhlTxConfig.mscMsgSubCommand	= subCommand;
 	mhlTxConfig.mscMsgData			= cmdData;
 }
+
+
+#ifdef MDT_SUPPORT
+extern enum mdt_state			g_state_for_mdt;
+extern struct msc_request 	g_prior_msc_request;
+#endif
+
+
+
+//extern enum mdt_state 	g_state_for_mdt;
 void	SiiMhlTxGotMhlIntr( uint8_t intr_0, uint8_t intr_1 )
 {
 	TX_DEBUG_PRINT(("MhlTx: INTERRUPT Arrived. %02X, %02X\n", (int) intr_0, (int) intr_1 ));
@@ -667,6 +732,13 @@ void	SiiMhlTxGotMhlIntr( uint8_t intr_0, uint8_t intr_1 )
         ClrMiscFlag(SiiMhlTxGotMhlIntr, FLAGS_SCRATCHPAD_BUSY)
         AppNotifyMhlEvent(MHL_TX_EVENT_DSCR_CHG,0);
     }
+
+#ifdef MDT_SUPPORT
+/////////////////////////
+	if((g_state_for_mdt!=WAIT_FOR_WRITE_BURST_COMPLETE)&&(g_state_for_mdt!=WAIT_FOR_REQ_WRT)&&(g_state_for_mdt!=WAIT_FOR_GRT_WRT_COMPLETE))
+#endif
+   {
+
 	if( MHL_INT_REQ_WRT  & intr_0)
     {
         if (FLAGS_SCRATCHPAD_BUSY & mhlTxConfig.miscFlags)
@@ -679,6 +751,7 @@ void	SiiMhlTxGotMhlIntr( uint8_t intr_0, uint8_t intr_1 )
             SiiMhlTxSetInt( MHL_RCHANGE_INT, MHL_INT_GRT_WRT,0);
         }
     }
+    }///////////////////////
 	if( MHL_INT_GRT_WRT  & intr_0)
     {
     	uint8_t length =sizeof(mhlTxConfig.localScratchPad);
@@ -833,13 +906,6 @@ static bool_t MhlTxSendMscMsg ( uint8_t command, uint8_t cmdData )
 	return( (bool_t) ccode );
 }
 
-
-typedef enum{
-	HDMI_STATE_NO_DEVICE,
-	HDMI_STATE_ACTIVE,
-	HDMI_STATE_DPI_ENABLE
-}HDMI_STATE;
-extern  void hdmi_state_callback(HDMI_STATE state);
 void SiiMhlTxNotifyConnection( bool_t mhlConnected )
 {
 	mhlTxConfig.mhlConnectionEvent = true;
@@ -872,6 +938,11 @@ extern uint8_t prefertiming;
 void	SiiMhlTxNotifyDsHpdChange( uint8_t dsHpdStatus )
 {
 	TX_DEBUG_PRINT(("MhlTx: SiiMhlTxNotifyDsHpdChange dsHpdStatus=%d\n", (int) dsHpdStatus ));
+	if (mscAbortFlag)
+	{
+		TX_DEBUG_PRINT(("Abort Timer is working in SiiMhlTxNotifyDsHpdChange!\n"));
+		return;
+	}
 
 	if( 0 == dsHpdStatus )
 	{
@@ -882,6 +953,10 @@ void	SiiMhlTxNotifyDsHpdChange( uint8_t dsHpdStatus )
 		SiiMhlTxDrvTmdsControl( false );
 		// xuecheng, notify for cable plug in
 		hdmi_state_callback(HDMI_STATE_NO_DEVICE);
+        #ifdef MTK_SMARTBOOK_SUPPORT
+        if(MHL_Connect_type == MHL_SMB_CABLE)
+            SiiHidSuspend(0); //kirby 20130529
+        #endif
 	}
 	else
 	{
@@ -894,17 +969,17 @@ void	SiiMhlTxNotifyDsHpdChange( uint8_t dsHpdStatus )
 		/*********************************for data range test*************************/
 		//SiiRegModify(REG_VID_ACEN, BIT1, CLEAR_BITS);
 		//SiiRegModify(REG_VID_MODE, BIT4, BIT4);
-		TX_EDID_PRINT(("SiiRegRead(REG_VID_ACEN)=0x%x@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n",SiiRegRead(REG_VID_ACEN)));
+		TX_EDID_PRINT(("SiiRegRead(TX_PAGE_L0 | 0x0049)=0x%x@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n",SiiRegRead(TX_PAGE_L0 | 0x0049)));
 
-		SiiRegWrite(REG_VID_ACEN, 0x00);
-		TX_EDID_PRINT(("SiiRegRead(REG_VID_ACEN)=0x%x################################\n",SiiRegRead(REG_VID_ACEN)));
+		SiiRegWrite(TX_PAGE_L0 | 0x0049, 0x00);
+		TX_EDID_PRINT(("SiiRegRead(TX_PAGE_L0 | 0x0049)=0x%x################################\n",SiiRegRead(TX_PAGE_L0 | 0x0049)));
 		/*********************************for data range test*************************/
 		SiiDrvMhlTxReadEdid();
 		if(VIDEO_CAPABILITY_D_BLOCK_found ==true){
 			//you should set the Quantization Ranges to limited range here(16-235).
-			SiiRegWrite(REG_VID_ACEN, RANGE_CLIP|PUF_RANGE_CLIP|PUF_DITHER);
-			TX_EDID_PRINT(("SiiRegRead(REG_VID_ACEN)=0x%x&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&\n",SiiRegRead(REG_VID_ACEN)));
-			}
+			SiiRegWrite(TX_PAGE_L0 | 0x0049, BIT3|BIT5|BIT7);
+			TX_EDID_PRINT(("SiiRegRead(TX_PAGE_L0 | 0x0049)=0x%x&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&\n",SiiRegRead(TX_PAGE_L0 | 0x0049)));
+		}
 
 		siHdmiTx_VideoSel(prefertiming);//setting the VIC and AVI info
 		//here you should set the prefer timing.

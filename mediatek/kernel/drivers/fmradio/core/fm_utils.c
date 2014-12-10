@@ -167,7 +167,7 @@ static fm_s32 fm_lock_try(struct fm_lock *thiz,fm_s32 retryCnt)
     }
 
     sem = (struct semaphore*)thiz->priv;
-    WCN_DBG(FM_NTC | MAIN, "%s --->trylock, cnt=%d, pid=%d\n", thiz->name, (int)sem->count, task->pid);
+    FM_LOG_DBG(MAIN, "%s --->trylock, cnt=%d, pid=%d\n", thiz->name, (int)sem->count, task->pid);
     return 0;
 }
 
@@ -185,7 +185,7 @@ static fm_s32 fm_lock_lock(struct fm_lock *thiz)
     }
 
     sem = (struct semaphore*)thiz->priv;
-    WCN_DBG(FM_NTC | MAIN, "%s --->lock, cnt=%d, pid=%d\n", thiz->name, (int)sem->count, task->pid);
+    FM_LOG_DBG(MAIN, "%s --->lock, cnt=%d, pid=%d\n", thiz->name, (int)sem->count, task->pid);
     return 0;
 }
 
@@ -196,7 +196,7 @@ static fm_s32 fm_lock_unlock(struct fm_lock *thiz)
     FMR_ASSERT(thiz);
     FMR_ASSERT(thiz->priv);
     sem = (struct semaphore*)thiz->priv;
-    WCN_DBG(FM_NTC | MAIN, "%s <---unlock, cnt=%d, pid=%d\n", thiz->name, (int)sem->count + 1, task->pid);
+    FM_LOG_DBG(MAIN, "%s <---unlock, cnt=%d, pid=%d\n", thiz->name, (int)sem->count + 1, task->pid);
     up((struct semaphore*)thiz->priv);
     return 0;
 }
@@ -261,7 +261,7 @@ static fm_s32 fm_spin_lock_lock(struct fm_lock *thiz)
 
 	spin_lock_bh((spinlock_t *)thiz->priv);
 
-    WCN_DBG(FM_NTC | MAIN, "%s --->lock pid=%d\n", thiz->name, task->pid);
+    FM_LOG_DBG(MAIN, "%s --->lock pid=%d\n", thiz->name, task->pid);
     return 0;
 }
 
@@ -271,7 +271,7 @@ static fm_s32 fm_spin_lock_unlock(struct fm_lock *thiz)
     FMR_ASSERT(thiz);
     FMR_ASSERT(thiz->priv);
 
-    WCN_DBG(FM_NTC | MAIN, "%s <---unlock, pid=%d\n", thiz->name, task->pid);
+    FM_LOG_DBG(MAIN, "%s <---unlock, pid=%d\n", thiz->name, task->pid);
     spin_unlock_bh((spinlock_t *)thiz->priv);
     return 0;
 }

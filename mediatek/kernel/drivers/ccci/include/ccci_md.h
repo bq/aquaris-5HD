@@ -69,8 +69,8 @@ enum {
 	MD_EX_REC_OK_CHK_ID = 0x45524543, 
 	MD_EX_RESUME_CHK_ID = 0x7, 
 	CCCI_DRV_VER_ERROR = 0x5,
-	MD_DORMANT_NOTIFY = 0x100,
-	MD_SLP_REQUEST = 0x101,
+	//MD_DORMANT_NOTIFY = 0x100,
+	//MD_SLP_REQUEST = 0x101,
 	MD_WDT_MONITOR = 0x1000
 };
 
@@ -355,7 +355,7 @@ extern void md_call_chain(MD_CALL_BACK_HEAD_T *head,unsigned long data);
 extern int md_register_call_chain(MD_CALL_BACK_HEAD_T *head,MD_CALL_BACK_QUEUE *queue);
 extern int md_unregister_call_chain(MD_CALL_BACK_HEAD_T *head,MD_CALL_BACK_QUEUE *queue);
 extern void check_data_connected(int channel);
-
+extern int get_curr_md_state(void);
 
 //extern int ccci_sys_smem_base_phy;
 extern int ccci_smem_size ;

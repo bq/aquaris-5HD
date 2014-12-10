@@ -151,7 +151,10 @@ static int ccci_sys_smem_base_virt;
  int ccci_sys_smem_base_phy;
 static int ccci_sys_smem_size;
 
-
+int get_curr_md_state(void)
+{
+	return md_boot_stage;
+}
 
 /** During modem booting, it would occupy much memory bandwidth with high
     priority which would interfere with DPI display. To prevent from this
@@ -1664,7 +1667,7 @@ void ccci_aed(unsigned int dump_flag, char *aed_str)
 }
 
 extern void ccci_aed_cb_register(ccci_aed_cb_t funcp);
-typedef size_t (*ccci_sys_cb_func_t)(char buf[], size_t len);
+typedef size_t (*ccci_filter_cb_func_t)(char buf[], size_t len);
 extern int register_filter_func(char cmd[], ccci_sys_cb_func_t store, ccci_sys_cb_func_t show);
 extern unsigned long long lg_ch_tx_debug_enable;
 extern unsigned long long lg_ch_rx_debug_enable;
@@ -1738,6 +1741,147 @@ size_t ccci_ch_filter_show(char buf[], size_t len)
 	return ret;
 }
 
+ssize_t show_attr_md1_postfix(char *buf)
+{
+	get_md_post_fix(0, buf, NULL);
+	
+	CCCI_MSG("md1: %s\n", buf);
+	
+	return strlen(buf);
+}
+
+
+/* ccci sysfs kobject */
+typedef struct ccci_info
+{
+	struct kobject kobj;
+	unsigned int ccci_attr_count;
+}ccci_info_t;
+
+typedef struct ccci_attribute
+{
+	struct attribute attr;
+	ssize_t (*show)(char *buf);
+	ssize_t (*store)(const char *buf, size_t count);
+}ccci_attribute_t;
+
+#define CCCI_ATTR(_name, _mode, _show, _store)				\
+	ccci_attribute_t ccci_attr_##_name = {					\
+	.attr = {.name = __stringify(_name), .mode = _mode },	\
+	.show = _show,											\
+	.store = _store,										\
+}
+
+/* common func declare */
+void	ccci_attr_release(struct kobject *kobj);
+ssize_t ccci_attr_show(struct kobject *kobj, struct attribute *attr, char *buf);
+ssize_t ccci_attr_store(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count);
+ssize_t show_attr_md1_postfix(char *buf);
+/* global vars */
+static ccci_info_t *ccci_sys_info = NULL;
+struct sysfs_ops ccci_sysfs_ops = {
+	.show  = ccci_attr_show,
+	.store = ccci_attr_store
+};
+
+CCCI_ATTR(boot, 0660,  boot_md_show, boot_md_store);
+CCCI_ATTR(modem_info, 0644, NULL, NULL);
+CCCI_ATTR(md1_postfix, 0644, show_attr_md1_postfix, NULL);
+
+struct attribute *ccci_default_attrs[] = {
+	&ccci_attr_boot.attr,
+	&ccci_attr_modem_info.attr,
+	&ccci_attr_md1_postfix.attr,
+	NULL
+};
+
+struct kobj_type ccci_ktype = {
+	.release		= ccci_attr_release,
+    .sysfs_ops 		= &ccci_sysfs_ops,
+    .default_attrs 	= ccci_default_attrs
+};
+/* common func implement */
+ssize_t ccci_attr_show(struct kobject *kobj, struct attribute *attr, char *buf)
+{
+	ssize_t len = 0;
+	ccci_attribute_t *a = container_of(attr, ccci_attribute_t, attr);
+
+	if (a->show)
+	{
+		len = a->show(buf);
+	}
+
+	return len;
+}
+
+ssize_t ccci_attr_store(struct kobject *kobj, struct attribute *attr, const char *buf, size_t count)
+{
+	ssize_t len = 0;
+	ccci_attribute_t *a = container_of(attr, ccci_attribute_t, attr);
+
+	if (a->store)
+	{
+		len = a->store(buf, count);
+	}
+
+	return len;
+}
+
+void ccci_attr_release(struct kobject *kobj)
+{
+	ccci_info_t *ccci_info_temp = container_of(kobj, ccci_info_t, kobj);
+	kfree(ccci_info_temp);
+	ccci_sys_info = NULL;
+}
+int register_ccci_attr_func(const char *buf, ssize_t (*show)(char*), ssize_t (*store)(const char*,size_t))
+{
+	int i = 0;
+	ccci_attribute_t *ccci_attr_temp = NULL;
+	
+	while(ccci_default_attrs[i])
+	{
+		if (!strncmp(ccci_default_attrs[i]->name, buf, strlen(ccci_default_attrs[i]->name))) {
+			ccci_attr_temp = container_of(ccci_default_attrs[i], ccci_attribute_t, attr);
+			break;
+		}
+		i++;
+	}
+	if (ccci_attr_temp) {
+		ccci_attr_temp->show  = show;
+		ccci_attr_temp->store = store;
+		return 0;
+	} else {
+		CCCI_MSG("fail to register ccci attibute!\n");
+		return -1;
+	}
+}
+
+#define CCCI_KOBJ_NAME		"ccci"
+extern struct kobject *kernel_kobj;
+int ccci_attr_install(void)
+{
+	int ret = 0;
+
+	ccci_sys_info = kmalloc(sizeof(ccci_info_t), GFP_KERNEL);
+	if (!ccci_sys_info)
+		return -ENOMEM;
+
+	memset(ccci_sys_info, 0, sizeof(ccci_info_t));
+
+	ret = kobject_init_and_add(&ccci_sys_info->kobj, &ccci_ktype, kernel_kobj, CCCI_KOBJ_NAME);
+	if (ret < 0) {
+		kobject_put(&ccci_sys_info->kobj);
+        CCCI_MSG("fail to add ccci kobject in kernel\n");
+        return ret;
+    }
+
+	ccci_sys_info->ccci_attr_count = sizeof(*ccci_default_attrs)/sizeof(struct attribute);
+
+	return ret;
+
+}
+
+
 /*
  * ccci_md_init_mod_init: module init function
  */
@@ -1795,7 +1939,8 @@ int __init ccci_md_init_mod_init(void)
     register_filter_func("-c", ccci_ch_filter_store, ccci_ch_filter_show);
     wake_lock_init(&trm_wake_lock, WAKE_LOCK_SUSPEND, "ccci_trm");
     spin_lock_init(&md_slp_lock);
-    
+    //3. Init ccci device table	
+    ret = ccci_attr_install();
     return 0;
 }
 

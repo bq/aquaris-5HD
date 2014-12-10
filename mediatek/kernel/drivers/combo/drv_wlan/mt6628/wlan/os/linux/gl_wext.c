@@ -3244,7 +3244,7 @@ wext_set_auth (
 */
 /*----------------------------------------------------------------------------*/
 #if CFG_SUPPORT_WAPI
-    UINT_8 keyStructBuf[320];   /* add/remove key shared buffer */
+    UINT_8 keyStructBuf[1024];   /* add/remove key shared buffer */
 #else
     UINT_8 keyStructBuf[100];   /* add/remove key shared buffer */
 #endif
@@ -3319,7 +3319,8 @@ wext_set_encode_ext (
         }
 
         /* PN */
-        memcpy(prWpiKey->aucPN, prIWEncExt->tx_seq, IW_ENCODE_SEQ_MAX_SIZE * 2);
+        memcpy(prWpiKey->aucPN, prIWEncExt->tx_seq, IW_ENCODE_SEQ_MAX_SIZE);
+		memcpy(prWpiKey->aucPN + IW_ENCODE_SEQ_MAX_SIZE, prIWEncExt->rx_seq, IW_ENCODE_SEQ_MAX_SIZE);
 
         /* BSSID */
         memcpy(prWpiKey->aucAddrIndex, prIWEncExt->addr.sa_data, 6);

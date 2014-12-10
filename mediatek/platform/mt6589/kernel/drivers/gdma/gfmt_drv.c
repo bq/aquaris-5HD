@@ -66,7 +66,9 @@
 #include <asm/system.h>
 //#include <linux/mm.h>
 #include <linux/pagemap.h>
-
+#ifndef GFMT_DEV
+#include <linux/proc_fs.h>
+#endif
 
 
 
@@ -110,10 +112,12 @@
 extern kal_uint32 _gfmt_only_int_status;
 
 
+#ifdef GFMT_DEV
 // device and driver
 static dev_t gfmt_devno;
 static struct cdev *gfmt_cdev;
 static struct class *gfmt_class = NULL;
+#endif
 
 // gfmt
 static wait_queue_head_t gfmt_wait_queue;
@@ -854,8 +858,7 @@ static struct file_operations gfmt_fops = {
 
 static int gfmt_probe(struct platform_device *pdev)
 {
-    struct class_device;
-    
+#ifdef GFMT_DEV
 	int ret;
     struct class_device *class_dev = NULL;
     
@@ -879,7 +882,11 @@ static int gfmt_probe(struct platform_device *pdev)
 
     gfmt_class = class_create(THIS_MODULE, GFMT_DEVNAME);
     class_dev = (struct class_device *)device_create(gfmt_class, NULL, gfmt_devno, NULL, GFMT_DEVNAME);
+#else
 
+    proc_create("mtk_gfmt", 0, NULL, &gfmt_fops);
+
+#endif
     spin_lock_init(&gdma_fmt_lock);
 
     // initial , register ISR
@@ -898,7 +905,9 @@ static int gfmt_probe(struct platform_device *pdev)
 #endif
 	GFMT_MSG("GFMT Probe Done\n");
 
+#ifdef GFMT_DEV
 	NOT_REFERENCED(class_dev);
+#endif
 	return 0;
 }
 
@@ -990,16 +999,20 @@ static int __init gfmt_init(void)
 
 static void __exit gfmt_exit(void)
 {
+#ifdef GFMT_DEV
     cdev_del(gfmt_cdev);
     unregister_chrdev_region(gfmt_devno, 1);
-	  //GFMT_MSG("Unregistering driver\n");
+
+    device_destroy(gfmt_class, gfmt_devno);
+    class_destroy(gfmt_class);
+#else
+    remove_proc_entry("mtk_gfmt", NULL);
+#endif
+    //GFMT_MSG("Unregistering driver\n");
     platform_driver_unregister(&gfmt_driver);
-	  platform_device_unregister(&gfmt_device);
-	
-	  device_destroy(gfmt_class, gfmt_devno);
-	  class_destroy(gfmt_class);
-	  
-	  GFMT_MSG("Done\n");
+    platform_device_unregister(&gfmt_device);
+  
+    GFMT_MSG("Done\n");
 }
 
 module_init(gfmt_init);

@@ -192,7 +192,7 @@ extern u32  msdc_get_tune(struct msdc_host *host);
 extern void msdc_set_tune(struct msdc_host *host,u32 value);
 #endif
 
-void msdc_dump_reg(unsigned int base)
+static void msdc_dump_reg(unsigned int base)
 {
 	u32 id = 0;
 	switch(base){
@@ -259,7 +259,7 @@ void msdc_dump_reg(unsigned int base)
     printk(KERN_ERR "[SD_Debug][Host%d]Rg[100] MAIN_VER       = 0x%.8x\n", id,sdr_read32(base + 0x100));     
     printk(KERN_ERR "[SD_Debug][Host%d]Rg[104] ECO_VER        = 0x%.8x\n", id,sdr_read32(base + 0x104));
 }
-void msdc_set_field(unsigned int address,unsigned int start_bit,unsigned int len,unsigned int value)
+static void msdc_set_field(unsigned int address,unsigned int start_bit,unsigned int len,unsigned int value)
 {
 	unsigned long field;
 	if(start_bit > 31 || start_bit < 0|| len > 32 || len <= 0)
@@ -272,7 +272,7 @@ void msdc_set_field(unsigned int address,unsigned int start_bit,unsigned int len
 		printk("[****SD_Debug****]Modified:0x%x (0x%x)\n",address,sdr_read32(address));
 	}
 }
-void msdc_get_field(unsigned int address,unsigned int start_bit,unsigned int len,unsigned int value)
+static void msdc_get_field(unsigned int address,unsigned int start_bit,unsigned int len,unsigned int value)
 {
 	unsigned long field;
 	if(start_bit > 31 || start_bit < 0|| len > 32 || len <= 0)
@@ -283,7 +283,7 @@ void msdc_get_field(unsigned int address,unsigned int start_bit,unsigned int len
 		printk("[****SD_Debug****]Reg:0x%x start_bit(%d)len(%d)(0x%x)\n",address,start_bit,len,value);
 		}
 }
-void msdc_init_gpt(void)
+static void msdc_init_gpt(void)
 {
 #if 0
     GPT_CONFIG config;	

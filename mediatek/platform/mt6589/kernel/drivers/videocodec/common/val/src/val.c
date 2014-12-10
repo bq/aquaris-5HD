@@ -20,8 +20,10 @@
 /*=============================================================================
  *                              Include Files
  *===========================================================================*/
-#include "val_types.h"
-#include "val_api.h"
+#include "val_types_public.h"
+#include "val_types_private.h"
+#include "val_api_public.h"
+#include "val_api_private.h"
 #include "val_log.h"
 //#include "mfv_reg.h"
 //#include "mfv_config.h"

@@ -21,9 +21,6 @@
 #ifndef __CCCI_RPC_H__
 #define __CCCI_RPC_H__
 
-#include <crypto_engine_export.h>
-//#include <sec_error.h>
-
 #define CCCI_SED_LEN_BYTES   16 
 typedef struct {unsigned char sed[CCCI_SED_LEN_BYTES]; }sed_t;
 #define SED_INITIALIZER { {[0 ... CCCI_SED_LEN_BYTES-1]=0}}
@@ -50,6 +47,8 @@ typedef enum
 	IPC_RPC_GET_TDD_ADC_NUM_OP  = 0x4003,
 	IPC_RPC_GET_EMI_CLK_TYPE_OP = 0x4004,
 	IPC_RPC_GET_EINT_ATTR_OP	= 0x4005,
+	IPC_RPC_GET_GPIO_VAL_OP	    = 0x4006,
+	IPC_RPC_GET_ADC_VAL_OP	    = 0x4007,
 }RPC_OP_ID;
 
 typedef struct
@@ -77,4 +76,4 @@ extern int ccci_rpc_init(int);
 extern void ccci_rpc_exit(int);
 
 
-#endif // 
+#endif // __CCCI_RPC_H__

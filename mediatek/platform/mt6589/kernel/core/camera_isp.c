@@ -33,6 +33,7 @@
 #include <mach/mt_clkmgr.h>     // For clock mgr APIS. enable_clock()/disable_clock().
 #include <mach/sync_write.h>    // For mt65xx_reg_sync_writel().
 #include <mach/mt_spm_idle.h>    // For spm_enable_sodi()/spm_disable_sodi().
+#include <linux/proc_fs.h>
 //
 #include "../smi/smi_common.h"
 
@@ -74,6 +75,9 @@ typedef bool                    MBOOL;
 /*******************************************************************************
 *
 ********************************************************************************/
+//security concern
+#define ISP_RANGE         (0x10000)
+///////////////////////////////////////////////////////////////////
 #define ISP_DEV_NAME                "camera-isp"
 #define ISP_IRQ_POLLING             (0)
 
@@ -95,6 +99,27 @@ typedef bool                    MBOOL;
 /*******************************************************************************
 *
 ********************************************************************************/
+///////////////////////////////////////////////////////////////////
+//for restricting range in mmap function
+//isp driver
+#define ISP_RTBUF_REG_RANGE  0x10000
+#define IMGSYS_BASE_ADDR     0x15000000
+#define ISP_REG_RANGE  	     (0x7000)   //0x6100,the same with the value in isp_reg.h and page-aligned
+//seninf driver
+#define SENINF_BASE_ADDR     0x15008000 //the same with the value in seninf_drv.cpp(chip-dependent)
+#define SENINF_REG_RANGE    (0x1000)   //0x800,the same with the value in seninf_reg.h and page-aligned
+//#define IMGSYS_CG_CLR0_ADDR  0x15000000 //the same with the value in seninf_drv.cpp(chip-dependent)
+//#define MMSYS_RANGE          (0x1000)   //0x100,the same with the value in seninf_drv.cpp and page-aligned
+#define PLL_BASE_ADDR        0x10000000 //the same with the value in seninf_drv.cpp(chip-dependent)
+#define PLL_RANGE            (0x1000)   //0x200,the same with the value in seninf_drv.cpp and page-aligned
+#define MIPIRX_CONFIG_ADDR   0x1500C000 //the same with the value in seninf_drv.cpp(chip-dependent)
+#define MIPIRX_CONFIG_RANGE (0x1000)//0x100,the same with the value in seninf_drv.cpp and page-aligned
+#define MIPIRX_ANALOG_ADDR   0x10012000 //the same with the value in seninf_drv.cpp(chip-dependent)
+#define MIPIRX_ANALOG_RANGE (0x1000)
+#define GPIO_BASE_ADDR       0x10005000 //the same with the value in seninf_drv.cpp(chip-dependent)
+#define GPIO_RANGE          (0x1000)
+
+///////////////////////////////////////////////////////////////////
 #define ISP_ADDR                        (CAMINF_BASE + 0x4000)
 #define ISP_ADDR_CAMINF                 CAMINF_BASE
 #define ISP_REG_ADDR_EN1                (ISP_ADDR + 0x4)
@@ -255,10 +280,11 @@ typedef bool                    MBOOL;
                                             ISP_IRQ_INTX_STATUS_LSC_ERR_ST |\
                                             ISP_IRQ_INTX_STATUS_LSC2_ERR_ST |\
                                             ISP_IRQ_INTX_STATUS_LCE_ERR_ST)
-//                                            ISP_IRQ_INTX_STATUS_IMGO_ERR_ST |\
-//                                            ISP_IRQ_INTX_STATUS_DMA_ERR_ST)      //DMA_ERR rootcause not clear. it caused resume problem with busy log print out.
-//                                            ISP_IRQ_INTX_STATUS_BPC_ERR_ST |\    //Vent@20121025: Remove ISP_IRQ_INTX_STATUS_BPC_ERR_ST. From TH Wu's explanation, this bit is not used as an error state anymore.
-
+/*
+                                            ISP_IRQ_INTX_STATUS_IMGO_ERR_ST |\
+                                            ISP_IRQ_INTX_STATUS_DMA_ERR_ST)      //DMA_ERR rootcause not clear. it caused resume problem with busy log print out.
+                                            ISP_IRQ_INTX_STATUS_BPC_ERR_ST |\    //Vent@20121025: Remove ISP_IRQ_INTX_STATUS_BPC_ERR_ST. From TH Wu's explanation, this bit is not used as an error state anymore.
+*/
 
 //CAM_CTL_DMA_INTX
 //IRQ  Mask
@@ -466,7 +492,7 @@ static __inline MUINT32 ISP_MsToJiffies(MUINT32 Ms)
 static __inline MUINT32 ISP_GetIRQState(MUINT32 type, MUINT32 stus)
 {
     MUINT32 ret;
-    MUINT32 flags;
+    unsigned long  flags;
     //
     spin_lock_irqsave(&(IspInfo.SpinLockIrq), flags);
     ret = (IspInfo.IrqInfo.Status[type] & stus);
@@ -602,6 +628,18 @@ static MINT32 ISP_DumpReg(void)
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x418, ISP_RD32(ISP_ADDR + 0x418));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x41C, ISP_RD32(ISP_ADDR + 0x41C));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x420, ISP_RD32(ISP_ADDR + 0x420));
+
+//AAO DMA register range
+//4388~43a0
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x388, ISP_RD32(ISP_ADDR + 0x388));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x38C, ISP_RD32(ISP_ADDR + 0x38C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x390, ISP_RD32(ISP_ADDR + 0x390));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x394, ISP_RD32(ISP_ADDR + 0x394));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x398, ISP_RD32(ISP_ADDR + 0x398));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x39C, ISP_RD32(ISP_ADDR + 0x39C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x3A0, ISP_RD32(ISP_ADDR + 0x3A0));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x3A4, ISP_RD32(ISP_ADDR + 0x3A4));
+
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x448, ISP_RD32(ISP_ADDR + 0x448));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x4B0, ISP_RD32(ISP_ADDR + 0x4B0));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x4B4, ISP_RD32(ISP_ADDR + 0x4B4));
@@ -611,6 +649,69 @@ static MINT32 ISP_DumpReg(void)
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x534, ISP_RD32(ISP_ADDR + 0x534));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x538, ISP_RD32(ISP_ADDR + 0x538));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x53C, ISP_RD32(ISP_ADDR + 0x53C));
+
+//AWB register range
+//45b0 ~463c
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5B0, ISP_RD32(ISP_ADDR + 0x5B0));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5B4, ISP_RD32(ISP_ADDR + 0x5B4));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5B8, ISP_RD32(ISP_ADDR + 0x5B8));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5BC, ISP_RD32(ISP_ADDR + 0x5BC));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5C0, ISP_RD32(ISP_ADDR + 0x5C0));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5C4, ISP_RD32(ISP_ADDR + 0x5C4));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5C8, ISP_RD32(ISP_ADDR + 0x5C8));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5CC, ISP_RD32(ISP_ADDR + 0x5CC));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5D0, ISP_RD32(ISP_ADDR + 0x5D0));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5D4, ISP_RD32(ISP_ADDR + 0x5D4));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5D8, ISP_RD32(ISP_ADDR + 0x5D8));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5DC, ISP_RD32(ISP_ADDR + 0x5DC));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5E0, ISP_RD32(ISP_ADDR + 0x5E0));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5E4, ISP_RD32(ISP_ADDR + 0x5E4));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5E8, ISP_RD32(ISP_ADDR + 0x5E8));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5EC, ISP_RD32(ISP_ADDR + 0x5EC));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5F0, ISP_RD32(ISP_ADDR + 0x5F0));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5F4, ISP_RD32(ISP_ADDR + 0x5F4));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5F8, ISP_RD32(ISP_ADDR + 0x5F8));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x5FC, ISP_RD32(ISP_ADDR + 0x5FC));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x600, ISP_RD32(ISP_ADDR + 0x600));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x604, ISP_RD32(ISP_ADDR + 0x604));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x608, ISP_RD32(ISP_ADDR + 0x608));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x60C, ISP_RD32(ISP_ADDR + 0x60C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x610, ISP_RD32(ISP_ADDR + 0x610));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x614, ISP_RD32(ISP_ADDR + 0x614));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x618, ISP_RD32(ISP_ADDR + 0x618));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x61C, ISP_RD32(ISP_ADDR + 0x61C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x620, ISP_RD32(ISP_ADDR + 0x620));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x624, ISP_RD32(ISP_ADDR + 0x624));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x628, ISP_RD32(ISP_ADDR + 0x628));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x62C, ISP_RD32(ISP_ADDR + 0x62C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x630, ISP_RD32(ISP_ADDR + 0x630));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x634, ISP_RD32(ISP_ADDR + 0x634));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x638, ISP_RD32(ISP_ADDR + 0x638));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x63C, ISP_RD32(ISP_ADDR + 0x63C));
+
+//AE
+//4650 ~ 4694
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x650, ISP_RD32(ISP_ADDR + 0x650));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x654, ISP_RD32(ISP_ADDR + 0x654));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x658, ISP_RD32(ISP_ADDR + 0x658));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x65C, ISP_RD32(ISP_ADDR + 0x65C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x660, ISP_RD32(ISP_ADDR + 0x660));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x664, ISP_RD32(ISP_ADDR + 0x664));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x668, ISP_RD32(ISP_ADDR + 0x668));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x66C, ISP_RD32(ISP_ADDR + 0x66C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x670, ISP_RD32(ISP_ADDR + 0x670));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x674, ISP_RD32(ISP_ADDR + 0x674));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x678, ISP_RD32(ISP_ADDR + 0x678));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x67C, ISP_RD32(ISP_ADDR + 0x67C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x680, ISP_RD32(ISP_ADDR + 0x680));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x684, ISP_RD32(ISP_ADDR + 0x684));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x688, ISP_RD32(ISP_ADDR + 0x688));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x68C, ISP_RD32(ISP_ADDR + 0x68C));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x690, ISP_RD32(ISP_ADDR + 0x690));
+    LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x694, ISP_RD32(ISP_ADDR + 0x694));
+
+
+
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x800, ISP_RD32(ISP_ADDR + 0x800));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x880, ISP_RD32(ISP_ADDR + 0x880));
     LOG_DBG("0x%08X %08X", ISP_TPIPE_ADDR + 0x884, ISP_RD32(ISP_ADDR + 0x884));
@@ -999,7 +1100,7 @@ static inline void ISP_Reset(void)
     // ensure the view finder is disabe. 0: take_picture
     //ISP_CLR_BIT(ISP_REG_ADDR_EN1, 0);
     MUINT32 i, Reg;
-    MUINT32 flags;
+    unsigned long flags;
     //
     LOG_DBG("- E.");
     //TODO: MUST remove later
@@ -1160,9 +1261,15 @@ static MINT32 ISP_ReadReg(ISP_REG_IO_STRUCT* pRegIo)
             goto EXIT;
         }
         pData++;
-        //
+        if((ISP_ADDR_CAMINF + reg.Addr >= ISP_ADDR) && (ISP_ADDR_CAMINF + reg.Addr < (ISP_ADDR_CAMINF+ISP_RANGE)))
+        {
         reg.Val = ISP_RD32(ISP_ADDR_CAMINF + reg.Addr);
-        //
+        }
+        else
+        {
+            LOG_ERR("Wrong address(0x%x)",(unsigned int)(ISP_ADDR_CAMINF + reg.Addr));
+            reg.Val = 0;
+        }
         if  ( 0 != put_user(reg.Val, pData) )
         {
             LOG_ERR("put_user failed");
@@ -1200,7 +1307,14 @@ static MINT32 ISP_WriteRegToHw(
         {
             LOG_DBG("Addr(0x%08X), Val(0x%08X)", (MUINT32)(ISP_ADDR_CAMINF + pReg[i].Addr), (MUINT32)(pReg[i].Val));
         }
+        if(((ISP_ADDR_CAMINF + pReg[i].Addr) >= ISP_ADDR) && ((ISP_ADDR_CAMINF + pReg[i].Addr) < (ISP_ADDR_CAMINF+ISP_RANGE)))
+        {
         ISP_WR32(ISP_ADDR_CAMINF + pReg[i].Addr, pReg[i].Val);
+        }
+        else
+        {
+            LOG_ERR("wrong address(0x%x)",(unsigned int)(ISP_ADDR_CAMINF + pReg[i].Addr));
+        }
     }
     spin_unlock(&(IspInfo.SpinLockIsp));
     //
@@ -2563,7 +2677,7 @@ static MINT32 ISP_SOF_Buf_Get(unsigned long long sec,unsigned long usec)
                 pstRTBuf->ring_buf[_imgo_].data[curr_imgo].timeStampUs, \
                 curr_imgo,
                 pstRTBuf->ring_buf[_imgo_].data[curr_imgo].base_pAddr,  \
-                pstRTBuf->ring_buf[_img2o_].data[curr_imgo].base_pAddr,  \                
+                pstRTBuf->ring_buf[_img2o_].data[curr_imgo].base_pAddr,  \
                 ISP_RD32(ISP_REG_ADDR_IMGO_BASE_ADDR), \
                 ISP_RD32(ISP_REG_ADDR_IMG2O_BASE_ADDR), \
                 imgo_fbc.Reg_val, \
@@ -2844,7 +2958,8 @@ static MINT32 ISP_WaitIrq(ISP_WAIT_IRQ_STRUCT WaitIrq)
 {
     MINT32 Ret = 0, Timeout = WaitIrq.Timeout;
     MUINT32 i;
-    MUINT32 flags;
+    int cnt=0;
+    unsigned long flags;
     //
     if(IspInfo.DebugMask & ISP_DBG_INT)
     {
@@ -2919,6 +3034,18 @@ static MINT32 ISP_WaitIrq(ISP_WAIT_IRQ_STRUCT WaitIrq)
                 ISP_GetIRQState(WaitIrq.Type, WaitIrq.Status),
                 ISP_MsToJiffies(WaitIrq.Timeout));
     #endif
+    //check if user is interrupted by system signal
+    while((Timeout !=0) && (!ISP_GetIRQState(WaitIrq.Type, WaitIrq.Status)) && (cnt<3))
+    {
+		//
+		LOG_ERR("[ERR] (cnt %d)interrupted by system signal,T(%d) st(0x%8x),go sleep again",cnt,Timeout,IspInfo.IrqInfo.Status[WaitIrq.Type]);
+		Timeout = wait_event_timeout(//wait_event_interruptible_timeout(
+                IspInfo.WaitQueueHead,
+                ISP_GetIRQState(WaitIrq.Type, WaitIrq.Status),
+                ISP_MsToJiffies(WaitIrq.Timeout));
+		LOG_ERR("[ERR] (cnt %d)leave second sleep stage",cnt);
+		cnt++;
+	}
     //
     if(Timeout == 0)
     {
@@ -3218,7 +3345,7 @@ static long ISP_ioctl(
     ISP_READ_IRQ_STRUCT     ReadIrq;
     ISP_CLEAR_IRQ_STRUCT    ClearIrq;
     ISP_USER_INFO_STRUCT*   pUserInfo;
-    MUINT32 flags;
+    unsigned long flags;
     //
     if(pFile->private_data == NULL)
     {
@@ -3302,6 +3429,13 @@ static long ISP_ioctl(
         {
             if(copy_from_user(&WaitIrq, (void*)Param, sizeof(ISP_WAIT_IRQ_STRUCT)) == 0)
             {
+                if((WaitIrq.Type >= ISP_IRQ_TYPE_AMOUNT) ||(WaitIrq.Type<0))
+                {
+                    Ret = -EFAULT;
+                    LOG_ERR("invalid type(%d)",WaitIrq.Type);
+                    goto EXIT;
+                }
+                //
                 Ret = ISP_WaitIrq(WaitIrq);
             }
             else
@@ -3315,6 +3449,13 @@ static long ISP_ioctl(
         {
             if(copy_from_user(&ReadIrq, (void*)Param, sizeof(ISP_READ_IRQ_STRUCT)) == 0)
             {
+                LOG_DBG("ISP_READ_IRQ Type(%d)",ReadIrq.Type);
+                if((ReadIrq.Type >= ISP_IRQ_TYPE_AMOUNT) ||(ReadIrq.Type<0))
+                {
+                    Ret = -EFAULT;
+                    LOG_ERR("invalid type(%d)",ReadIrq.Type);
+                    goto EXIT;
+                }
                 #if ISP_IRQ_POLLING
                 spin_lock_irqsave(&(IspInfo.SpinLockIrq), flags);
                 //
@@ -3356,6 +3497,14 @@ static long ISP_ioctl(
         {
             if(copy_from_user(&ClearIrq, (void*)Param, sizeof(ISP_CLEAR_IRQ_STRUCT)) == 0)
             {
+                 LOG_DBG("ISP_CLEAR_IRQ Type(%d)",ClearIrq.Type);
+                
+                if((ClearIrq.Type >= ISP_IRQ_TYPE_AMOUNT) ||(ClearIrq.Type<0))
+                {
+                    Ret = -EFAULT;
+                    LOG_ERR("invalid type(%d)",ClearIrq.Type);
+                    goto EXIT;
+                }
                 spin_lock_irqsave(&(IspInfo.SpinLockIrq), flags);
                 //
                 #if ISP_IRQ_POLLING
@@ -3444,6 +3593,7 @@ static long ISP_ioctl(
         }
     }
     //
+    EXIT:
     if(Ret != 0)
     {
         LOG_ERR("Fail, Cmd(%d), Pid(%d), (process, pid, tgid)=(%s, %d, %d)",Cmd, pUserInfo->Pid, current->comm , current->pid, current->tgid);
@@ -3620,14 +3770,21 @@ static MINT32 ISP_release(
 static MINT32 mmap_kmem(struct file *filp, struct vm_area_struct *vma)
 {
         int ret;
-        long length = vma->vm_end - vma->vm_start;
-
+        long length = 0;
+        length = (long)(vma->vm_end - vma->vm_start);
         /* check length - do not allow larger mappings than the number of
            pages allocated */
         if (length > RT_BUF_TBL_NPAGES * PAGE_SIZE)
                 return -EIO;
 
         /* map the whole physically contiguous area in one piece */
+		LOG_INF("Vma->vm_pgoff(0x%x),Vma->vm_start(0x%x),Vma->vm_end(0x%x),length(0x%x)",\
+			vma->vm_pgoff,vma->vm_start,vma->vm_end,length);
+		if(length>ISP_RTBUF_REG_RANGE)
+		{
+			LOG_ERR("mmap range error! : length(0x%x),ISP_RTBUF_REG_RANGE(0x%x)!",length,ISP_RTBUF_REG_RANGE);
+			return -EAGAIN;
+		}
         if ((ret = remap_pfn_range(vma,
                                    vma->vm_start,
                                    virt_to_phys((void *)pTbl_RTBuf) >> PAGE_SHIFT,
@@ -3645,15 +3802,70 @@ static MINT32 ISP_mmap(
     struct file*            pFile,
     struct vm_area_struct*  pVma)
 {
-    LOG_DBG("- E.");
-
+    //LOG_DBG("- E.");
+	long length = 0;
+	MUINT32 pfn=0x0;
+	length = (long)(pVma->vm_end - pVma->vm_start);
     /* at offset RT_BUF_TBL_NPAGES we map the kmalloc'd area */
     if (pVma->vm_pgoff == RT_BUF_TBL_NPAGES) {
             return mmap_kmem(pFile, pVma);
     }
-    else {
+    else 
+	{
     //
     pVma->vm_page_prot = pgprot_noncached(pVma->vm_page_prot);
+		LOG_INF("pVma->vm_pgoff(0x%x),phy(0x%x),pVmapVma->vm_start(0x%x),pVma->vm_end(0x%x),length(0x%x)",\
+			pVma->vm_pgoff,pVma->vm_pgoff<<PAGE_SHIFT,pVma->vm_start,pVma->vm_end,length);
+		pfn=pVma->vm_pgoff<<PAGE_SHIFT;//page from number, physical address of kernel memory
+		switch(pfn)
+		{
+			case IMGSYS_BASE_ADDR:	//imgsys
+				if(length>ISP_REG_RANGE)
+				{
+					LOG_ERR("mmap range error : length(0x%x),ISP_REG_RANGE(0x%x)!",length,ISP_REG_RANGE);
+					return -EAGAIN;
+				}
+				break;
+			case SENINF_BASE_ADDR:
+				if(length>SENINF_REG_RANGE)
+				{
+					LOG_ERR("mmap range error : length(0x%x),SENINF_REG_RANGE(0x%x)!",length,SENINF_REG_RANGE);
+					return -EAGAIN;
+				}
+				break;
+			case PLL_BASE_ADDR:
+				if(length>PLL_RANGE)
+				{
+					LOG_ERR("mmap range error : length(0x%x),PLL_RANGE(0x%x)!",length,PLL_RANGE);
+					return -EAGAIN;
+				}
+				break;
+			case MIPIRX_CONFIG_ADDR:
+				if(length>MIPIRX_CONFIG_RANGE)
+				{
+					LOG_ERR("mmap range error : length(0x%x),MIPIRX_CONFIG_RANGE(0x%x)!",length,MIPIRX_CONFIG_RANGE);
+					return -EAGAIN;
+				}
+				break;
+			case MIPIRX_ANALOG_ADDR:
+				if(length>MIPIRX_ANALOG_RANGE)
+				{
+					LOG_ERR("mmap range error : length(0x%x),MIPIRX_ANALOG_RANGE(0x%x)!",length,MIPIRX_ANALOG_RANGE);
+					return -EAGAIN;
+				}
+				break;
+			case GPIO_BASE_ADDR:
+				if(length>GPIO_RANGE)
+				{
+					LOG_ERR("mmap range error : length(0x%x),GPIO_RANGE(0x%x)!",length,GPIO_RANGE);
+					return -EAGAIN;
+				}
+				break;
+			default:
+				LOG_ERR("Illegal starting HW addr for mmap!");
+				return -EAGAIN;
+				break;
+		}
     if(remap_pfn_range(pVma, pVma->vm_start, pVma->vm_pgoff,pVma->vm_end - pVma->vm_start, pVma->vm_page_prot))
     {
         return -EAGAIN;
@@ -3668,7 +3880,9 @@ static MINT32 ISP_mmap(
 ********************************************************************************/
 static dev_t IspDevNo;
 static struct cdev *pIspCharDrv = NULL;
+#if 1
 static struct class *pIspClass = NULL;
+#endif
 
 static const struct file_operations IspFileOper =
 {
@@ -3752,6 +3966,7 @@ static MINT32 ISP_probe(struct platform_device* pDev)
     //
     LOG_DBG("- E.");
     // Check platform_device parameters
+#if 1
     if(pDev == NULL)
     {
         dev_err(&pDev->dev, "pDev is NULL");
@@ -3763,6 +3978,7 @@ static MINT32 ISP_probe(struct platform_device* pDev)
         dev_err(&pDev->dev, "register char failed");
         return Ret;
     }
+#endif
     // Mapping CAM_REGISTERS
     for(i = 0; i < 1; i++)  // NEED_TUNING_BY_CHIP. 1: Only one IORESOURCE_MEM type resource in kernel\mt_devs.c\mt_resource_isp[].
     {
@@ -3782,7 +3998,7 @@ static MINT32 ISP_probe(struct platform_device* pDev)
             goto EXIT;
         }
     }
-    // Create class register
+#if 1    // Create class register
     pIspClass = class_create(THIS_MODULE, "ispdrv");
     if(IS_ERR(pIspClass))
     {
@@ -3792,6 +4008,12 @@ static MINT32 ISP_probe(struct platform_device* pDev)
     }
     // FIXME: error handling
     device_create(pIspClass, NULL, IspDevNo, NULL, ISP_DEV_NAME);
+#else
+
+    proc_create(ISP_DEV_NAME, 0660, NULL, &IspFileOper);
+
+#endif
+
     //
     init_waitqueue_head(&IspInfo.WaitQueueHead);
     //
@@ -3858,8 +4080,10 @@ static MINT32 ISP_remove(struct platform_device *pDev)
     MINT32 IrqNum;
     //
     LOG_DBG("- E.");
+#if 1
     // unregister char driver.
     ISP_UnregCharDev();
+#endif
     // unmaping ISP CAM_REGISTER registers
     for(i = 0; i < 2; i++)
     {
@@ -3871,10 +4095,14 @@ static MINT32 ISP_remove(struct platform_device *pDev)
     IrqNum = platform_get_irq(pDev, 0);
     free_irq(IrqNum , NULL);
     //
+#if 1
     device_destroy(pIspClass, IspDevNo);
     //
     class_destroy(pIspClass);
-    pIspClass = NULL;
+    pIspClass = NULL;    
+#else
+    remove_proc_entry(ISP_DEV_NAME, NULL);
+#endif
     //
     return 0;
 }
@@ -4033,52 +4261,52 @@ static MINT32 ISP_DumpRegToProc(
     p += sprintf(p,"====== top ====\n");
     for(i = 0x0; i <= 0x1AC; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     p += sprintf(p,"====== dma ====\n");
     for(i = 0x200; i <= 0x3D8; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n\r", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n\r", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     p += sprintf(p,"====== tg ====\n");
     for(i = 0x400; i <= 0x4EC; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     p += sprintf(p,"====== cdp (including EIS) ====\n");
     for(i = 0xB00; i <= 0xDE0; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     p += sprintf(p,"====== seninf ====\n");
     for(i = 0x4000; i <= 0x40C0; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     for(i = 0x4100; i <= 0x41BC; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     for(i = 0x4300; i <= 0x4310; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     for(i = 0x43A0; i <= 0x43B0; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     for(i = 0x4400; i <= 0x4424; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     for(i = 0x4500; i <= 0x4520; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
      p += sprintf(p,"====== 3DNR ====\n");
     for(i = 0x4F00; i <= 0x4F38; i += 4)
     {
-        p += sprintf(p,"+0x%08x 0x%08x\n", ISP_ADDR + i, ISP_RD32(ISP_ADDR + i));
+        p += sprintf(p,"+0x%08x 0x%08x\n", (MUINT32)(ISP_ADDR + i), (MUINT32)(ISP_RD32(ISP_ADDR + i)));
     }
     //
     *ppStart = pPage + off;
@@ -4153,7 +4381,7 @@ static MINT32 CAMIO_DumpRegToProc(
     //
     LOG_DBG("- E. pPage: 0x%08x. off: %d. Count: %d.", (unsigned int)pPage, (int)off, Count);
     //
-    p += sprintf(p,"reg_0x%08X = 0x%X \n", ISP_ADDR_CAMINF+proc_regOfst , ioread32(ISP_ADDR_CAMINF + proc_regOfst));
+    p += sprintf(p,"reg_0x%08X = 0x%X \n", (MUINT32)(ISP_ADDR_CAMINF+proc_regOfst) , (MUINT32)(ioread32(ISP_ADDR_CAMINF + proc_regOfst)));
 
     *ppStart = pPage + off;
     //
@@ -4333,7 +4561,39 @@ MBOOL ISP_UnregCallback(ISP_CALLBACK_ENUM   Type)
     return MTRUE;
 }
 
+void ISP_MCLK1_EN(bool En)
+{
+    MUINT32 temp=0;
+    temp = ISP_RD32(ISP_ADDR + 0x4300);
+    if(En)
+    {
+        temp |= 0x20000000;
+        ISP_WR32(ISP_ADDR + 0x4300,temp);       
+    }
+    else
+    {
+        temp &= 0xDFFFFFFF;
+        ISP_WR32(ISP_ADDR + 0x4300,temp);
+    }    
 
+}
+
+void ISP_MCLK2_EN(bool En)
+{
+    MUINT32 temp=0;
+    temp = ISP_RD32(ISP_ADDR + 0x43A0);
+    if(En)
+    {
+        temp |= 0x20000000;
+        ISP_WR32(ISP_ADDR + 0x43A0,temp);       
+    }
+    else
+    {
+        temp &= 0xDFFFFFFF;
+        ISP_WR32(ISP_ADDR + 0x43A0,temp);
+    }    
+
+}
 /*******************************************************************************
 *
 ********************************************************************************/
@@ -4344,7 +4604,8 @@ MODULE_AUTHOR("ME3");
 MODULE_LICENSE("GPL");
 EXPORT_SYMBOL(ISP_RegCallback);
 EXPORT_SYMBOL(ISP_UnregCallback);
-
+EXPORT_SYMBOL(ISP_MCLK1_EN);
+EXPORT_SYMBOL(ISP_MCLK2_EN);
 
 
 

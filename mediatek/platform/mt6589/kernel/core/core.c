@@ -15,6 +15,7 @@ extern void arm_machine_restart(char mode, const char *cmd);
 extern struct sys_timer mt6589_timer;
 extern void mt_fixup(struct tag *tags, char **cmdline, struct meminfo *mi);
 extern void mt_power_off(void);
+extern void mt_reserve(void);
 
 
 void __init mt_init(void)
@@ -130,5 +131,6 @@ MACHINE_START(MT6589, "MT6589")
     .timer          = &mt6589_timer,
     .init_machine   = mt_init,
     .fixup          = mt_fixup,
-    .restart        = arm_machine_restart
+    .restart        = arm_machine_restart,
+    .reserve        = mt_reserve,
 MACHINE_END

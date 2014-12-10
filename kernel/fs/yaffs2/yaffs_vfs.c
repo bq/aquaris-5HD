@@ -526,8 +526,10 @@ static int yaffs_setattr(struct dentry *dentry, struct iattr *attr)
 		yaffs_inode_to_obj(inode)->obj_id);
 
 	/* Fail if a requested resize >= 2GB */
-	if (attr->ia_valid & ATTR_SIZE && (attr->ia_size >> 31))
+	if (attr->ia_valid & ATTR_SIZE && (attr->ia_size >> 32)){
+		printk("[yaffs_setattr] length %llx beyond 4GB\n",attr->ia_size);
 		error = -EINVAL;
+	}
 
 	if (error == 0)
 		error = inode_change_ok(inode, attr);
@@ -2068,7 +2070,9 @@ static struct super_block *yaffs_internal_read_super(int yaffs_version,
 
 	sb->s_blocksize = PAGE_CACHE_SIZE;
 	sb->s_blocksize_bits = PAGE_CACHE_SHIFT;
-
+	printk("[yaffs_read_super]sb maxbytes %llx",sb->s_maxbytes);
+	sb->s_maxbytes = 1LL<<32;
+	
 	yaffs_trace(YAFFS_TRACE_OS,
 		"yaffs_read_super: Using yaffs%d", yaffs_version);
 	yaffs_trace(YAFFS_TRACE_OS,

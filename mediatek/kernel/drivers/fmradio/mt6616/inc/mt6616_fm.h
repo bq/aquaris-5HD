@@ -20,8 +20,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#ifndef __MT6626_FM_H__
-#define __MT6626_FM_H__
+#ifndef __MT6616_FM_H__
+#define __MT6616_FM_H__
 
 #include "fm_typedef.h"
 
@@ -37,11 +37,11 @@
 #define MT6626_DEEMPHASIS_50us TRUE
 
 //customer need customize the I2C port
-#ifdef MT6516
+#if 0//def MT6516
 #define MT6626_I2C_PORT   2
 #else 
 #define MT6626_I2C_PORT   0
-#endif
+//#endif
 
 #define MT6626_SLAVE_ADDR    0xE0	//0x70 7-bit address
 #define MT6626_MAX_COUNT     100

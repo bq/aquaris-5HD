@@ -27,21 +27,33 @@
 #include <linux/platform_device.h>
 #include <asm/atomic.h>
 
-#include <linux/hwmsensor.h>
-#include <linux/hwmsen_dev.h>
-#include <linux/sensors_io.h>
-#include <linux/hwmsen_helper.h>
-#include <asm/io.h>
-#include <cust_eint.h>
-#include <cust_alsps.h>
-#include "stk31xx.h"
-
 #include <mach/mt_typedefs.h>
 #include <mach/mt_gpio.h>
 #include <mach/mt_pm_ldo.h>
+#include <linux/hwmsensor.h>
+#include <linux/hwmsen_dev.h>
+#include <linux/sensors_io.h>
+#include <asm/io.h>
+#include <cust_eint.h>
+#include <cust_alsps.h>
+#include <linux/hwmsen_helper.h>
+
+#include "stk31xx.h"
 
 
 
+
+/******************************************************************************
+ * extern functions  yifang.meng  add
+*******************************************************************************/
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
+/*
 
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
@@ -49,7 +61,7 @@ extern void mt65xx_eint_set_polarity(unsigned int eint_num, unsigned int pol);
 extern void mt65xx_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
 extern unsigned int mt65xx_eint_set_sens(unsigned int eint_num, unsigned int sens);
 extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_en, unsigned int pol, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
-
+*/
 /*-------------------------MT6516&MT6573 define-------------------------------*/
 
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
@@ -82,16 +94,6 @@ extern void mt65xx_eint_registration(unsigned int eint_num, unsigned int is_deb_
 /******************************************************************************
  * extern functions
 *******************************************************************************/
-#ifdef MT6516
-extern void MT6516_EINTIRQUnmask(unsigned int line);
-extern void MT6516_EINTIRQMask(unsigned int line);
-extern void MT6516_EINT_Set_Polarity(kal_uint8 eintno, kal_bool ACT_Polarity);
-extern void MT6516_EINT_Set_HW_Debounce(kal_uint8 eintno, kal_uint32 ms);
-extern kal_uint32 MT6516_EINT_Set_Sensitivity(kal_uint8 eintno, kal_bool sens);
-extern void MT6516_EINT_Registration(kal_uint8 eintno, kal_bool Dbounce_En,
-                                     kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
-                                     kal_bool auto_umask);
-#endif
 /*----------------------------------------------------------------------------*/
 #define mt6516_I2C_DATA_PORT        ((base) + 0x0000)
 #define mt6516_I2C_SLAVE_ADDR       ((base) + 0x0004)
@@ -251,13 +253,16 @@ return 200;
 /*----------------------------------------------------------------------------*/
 int stk3111_config_timing(int sample_div, int step_div)
 {
-	u32 base = I2C2_BASE; 
+
+	return 200;
+	/*u32 base = I2C2_BASE; 
 	unsigned long tmp;
 
 	tmp  = __raw_readw(mt6516_I2C_TIMING) & ~((0x7 << 8) | (0x1f << 0));
 	tmp  = (sample_div & 0x7) << 8 | (step_div & 0x1f) << 0 | tmp;
 
 	return (__raw_readw(mt6516_I2C_HS) << 16) | (tmp);
+	*/
 }
 /*----------------------------------------------------------------------------*/
 int stk3111_master_recv(struct i2c_client *client, u16 addr, u8 *buf ,int count)
@@ -672,18 +677,7 @@ static void stk3111_eint_work(struct work_struct *work)
 	  }
 	}
 	
-	#ifdef MT6516
-	MT6516_EINTIRQUnmask(CUST_EINT_ALS_NUM);      
-	#endif     
-	#ifdef MT6573
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
-	#endif
-	#ifdef MT6575
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
-	#endif
-	#ifdef MT6577
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);      
-	#endif
+	mt_eint_unmask(CUST_EINT_ALS_NUM);      
 }
 /*----------------------------------------------------------------------------*/
 int stk3111_setup_eint(struct i2c_client *client)
@@ -704,40 +698,17 @@ int stk3111_setup_eint(struct i2c_client *client)
 	//mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, GPIO_PULL_ENABLE);
 	//mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
-#ifdef MT6516
-
-	MT6516_EINT_Set_Sensitivity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	MT6516_EINT_Set_Polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	MT6516_EINT_Set_HW_Debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	MT6516_EINT_Registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, stk3111_eint_func, 0);
-	MT6516_EINTIRQUnmask(CUST_EINT_ALS_NUM);  
-#endif
-    //
-#ifdef MT6573
-	
-    mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, stk3111_eint_func, 0);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
-#endif  
-#ifdef MT6575
-	
-    mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, stk3111_eint_func, 0);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
-#endif 
-#ifdef MT6577
+    mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, stk3111_eint_func, 0);
 		
+	mt_eint_unmask(CUST_EINT_ALS_NUM);	
+/*		
 		mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
 		mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
 		mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
 		mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, stk3111_eint_func, 0);
-		mt65xx_eint_unmask(CUST_EINT_ALS_NUM);	
-#endif 
-
+		mt_eint_unmask(CUST_EINT_ALS_NUM);	
+*/
     return 0;
 	
 }
@@ -988,14 +959,6 @@ static ssize_t stk3111_show_status(struct device_driver *ddri, char *buf)
 	len += snprintf(buf+len, PAGE_SIZE-len, "REGS: %02X %02X %02X %02lX %02lX\n", 
 				atomic_read(&stk3111_obj->als_cmd_val), atomic_read(&stk3111_obj->ps_cmd_val), 
 				atomic_read(&stk3111_obj->ps_thd_val),stk3111_obj->enable, stk3111_obj->pending_intr);
-	#ifdef MT6516
-	len += snprintf(buf+len, PAGE_SIZE-len, "EINT: %d (%d %d %d %d)\n", mt_get_gpio_in(GPIO_ALS_EINT_PIN),
-				CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_DEBOUNCE_CN);
-
-	len += snprintf(buf+len, PAGE_SIZE-len, "GPIO: %d (%d %d %d %d)\n",	GPIO_ALS_EINT_PIN, 
-				mt_get_gpio_dir(GPIO_ALS_EINT_PIN), mt_get_gpio_mode(GPIO_ALS_EINT_PIN), 
-				mt_get_gpio_pull_enable(GPIO_ALS_EINT_PIN), mt_get_gpio_pull_select(GPIO_ALS_EINT_PIN));
-	#endif
 
 	len += snprintf(buf+len, PAGE_SIZE-len, "MISC: %d %d\n", atomic_read(&stk3111_obj->als_suspend), atomic_read(&stk3111_obj->ps_suspend));
 
@@ -1004,8 +967,9 @@ static ssize_t stk3111_show_status(struct device_driver *ddri, char *buf)
 /*----------------------------------------------------------------------------*/
 static ssize_t stk3111_show_i2c(struct device_driver *ddri, char *buf)
 {
+/*
 	ssize_t len = 0;
-	u32 base = I2C2_BASE;
+	//u32 base = I2C2_BASE;
 
 	if(!stk3111_obj)
 	{
@@ -1033,13 +997,17 @@ static ssize_t stk3111_show_i2c(struct device_driver *ddri, char *buf)
 	len += snprintf(buf+len, PAGE_SIZE-len, "DEBUGCTRL      = 0x%08X\n", __raw_readl(mt6516_I2C_DEBUGCTRL));    
 
 	return len;
+	*/
+	return 0;
 }
 /*----------------------------------------------------------------------------*/
 static ssize_t stk3111_store_i2c(struct device_driver *ddri, const char *buf, size_t count)
 {
+
+	/*
 	int sample_div, step_div;
 	unsigned long tmp;
-	u32 base = I2C2_BASE;    
+	//u32 base = I2C2_BASE;    
 
 	if(!stk3111_obj)
 	{
@@ -1056,6 +1024,9 @@ static ssize_t stk3111_store_i2c(struct device_driver *ddri, const char *buf, si
 	__raw_writew(tmp, mt6516_I2C_TIMING);        
 
 	return count;
+	*/
+	return 0;
+	
 }
 /*----------------------------------------------------------------------------*/
 #define IS_SPACE(CH) (((CH) == ' ') || ((CH) == '\n'))
@@ -1261,6 +1232,24 @@ static int stk3111_get_als_value(struct stk3111_priv *obj, u16 als)
 
 	if(!invalid)
 	{
+#if defined(MTK_AAL_SUPPORT)
+      	int level_high = obj->hw->als_level[idx];
+    		int level_low = (idx > 0) ? obj->hw->als_level[idx-1] : 0;
+        int level_diff = level_high - level_low;
+				int value_high = obj->hw->als_value[idx];
+        int value_low = (idx > 0) ? obj->hw->als_value[idx-1] : 0;
+        int value_diff = value_high - value_low;
+        int value = 0;
+        
+        if ((level_low >= level_high) || (value_low >= value_high))
+            value = value_low;
+        else
+            value = (level_diff * value_low + (als - level_low) * value_diff + ((level_diff + 1) >> 1)) / level_diff;
+
+		APS_DBG("ALS: %d [%d, %d] => %d [%d, %d] \n", als, level_low, level_high, value, value_low, value_high);
+		return value;
+#endif
+
 		if (atomic_read(&obj->trace) & STK_TRC_CVT_ALS)
 		{
 			APS_DBG("ALS: %05d => %05d\n", als, obj->hw->als_value[idx]);
@@ -1943,9 +1932,6 @@ static int stk3111_i2c_probe(struct i2c_client *client, const struct i2c_device_
 	kfree(obj);
 	exit:
 	stk3111_i2c_client = NULL;           
-	#ifdef MT6516        
-	MT6516_EINTIRQMask(CUST_EINT_ALS_NUM);  /*mask interrupt if fail*/
-	#endif
 	APS_ERR("%s: err = %d\n", __func__, err);
 	return err;
 }

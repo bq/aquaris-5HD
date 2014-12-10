@@ -1,50 +1,24 @@
-#ifndef __CCCI_PLATFORM_H
-#define __CCCI_PLATFORM_H
-
+#ifndef __CCCI_PLATFORM_H__
+#define __CCCI_PLATFORM_H__
+#include <linux/uaccess.h>
+#include <linux/sched.h>
+#include <linux/version.h>
+#include <linux/fs.h>
 #include <mach/irqs.h>
 #include <mach/mt_irq.h>
 #include <mach/mt_reg_base.h>
 #include <mach/mt_typedefs.h>
-//#include <mach/mt6577_pll.h>
 #include <mach/mt_boot.h>
 #include <mach/sync_write.h>
-//#include <mach/mt6577_sc.h>
-
-#include <linux/sched.h>
 #include <asm/memory.h>
-#include <ccci_rpc.h>
-#include <sec_ccci_export.h>
-#include <sec_boot_export.h>
-#include <sec_error_export.h>
-#include <linux/uaccess.h>
 #include <asm/string.h>
-#include <linux/version.h>
-#include <linux/fs.h>
-
-#include <mach/mtk_ccci_helper.h>
+#include <ccci_platform_cfg.h>
 
 
 
 //******************** macro definition**************************//
 #define CCCI_DEV_MAJOR 184
 
-//#define KERNEL_REGION_BASE (PHYS_OFFSET)
-#define MODEM_REGION_BASE  (UL(0))
-
-#if 0
-#define DSP_REGION_BASE_2G (UL(0x700000))
-#define DSP_REGION_BASE_3G (UL(0x1300000))
-#define DSP_REGION_LEN  (UL(0x00300000))
-
-#define MDIF_REGION_BASE (UL(0x60110000))
-#define MDIF_REGION_LEN  (UL(0x1d0))
-
-#define CCIF_REGION_BASE (UL(0x60130000))
-#define CCIF_REGION_LEN  (UL(0x200))
-
-#define MDCFG_REGION_BASE (UL(0x60140000))
-#define MDCFG_REGION_LEN  (UL(0x504))
-#endif
 
 #define MD_IMG_RESRVED_SIZE		(0x700000)	//7MB
 #define MD_RW_MEM_RESERVED_SIZE	(0xF00000)  //15MB
@@ -80,6 +54,8 @@
 #ifndef CONFIG_MODEM_FIRMWARE_PATH
 #define CONFIG_MODEM_FIRMWARE_PATH "/etc/firmware/"
 
+#define CONFIG_MODEM_FIRMWARE_CIP_PATH	"/custom/etc/firmware/"
+
 #define MOEDM_IMAGE_PATH "/etc/firmware/modem.img"
 #define DSP_IMAGE_PATH "/etc/firmware/DSP_ROM"
 
@@ -99,11 +75,14 @@
 
 #define VER_3G_STR  "3G"
 #define VER_2G_STR  "2G"
-#define VER_INVALID_STR  "VER_INVALID"
+#define VER_WG_STR   "WG"
+#define VER_TG_STR   "TG"
+#define VER_INVALID_STR  "INVALID"
+
 
 #define DEBUG_STR   "Debug"
 #define RELEASE_STR  "Release"
-#define INVALID_STR "VER_INVALID"
+#define INVALID_STR  "INVALID"
 
 #define DSP_ROM_TYPE 0x0104
 #define DSP_BL_TYPE  0x0003
@@ -112,18 +91,15 @@
 #define DSP_BL_STR   "DSP_BL"
 
 #define MD_HEADER_MAGIC_NO "CHECK_HEADER"
-#define MD_HEADER_VER_NO 0x1
+//#define MD_HEADER_VER_NO 0x2    //0x1
 
 #define GFH_HEADER_MAGIC_NO 0x4D4D4D
-#define GFH_HEADER_VER_NO 0x1
+//#define GFH_HEADER_VER_NO 0x1
 #define GFH_FILE_INFO_TYPE 0x0
 #define GFH_CHECK_HEADER_TYPE 0x104
 
 #define DSP_2G_BIT 16
 #define DSP_DEBUG_BIT 17
-
-
-//#define android_bring_up_prepare 1 //when porting ccci drver for android bring up, enable the macro
 
 
 
@@ -151,69 +127,6 @@
 #define WDT_MD_STA(base)		((base) + 0x0C)
 #define WDT_MD_SWRST(base)		((base) + 0x1C)
 
-
-/*******************AP CCIF register define**********************/
-#define CCIF_BASE				(AP_CCIF_BASE)
-#define CCIF_CON(addr)			((addr) + 0x0000)
-#define CCIF_BUSY(addr)			((addr) + 0x0004)
-#define CCIF_START(addr)		((addr) + 0x0008)
-#define CCIF_TCHNUM(addr)		((addr) + 0x000C)
-#define CCIF_RCHNUM(addr)		((addr) + 0x0010)
-#define CCIF_ACK(addr)			((addr) + 0x0014)
-
-/* for CHDATA, the first half space belongs to AP and the remaining space belongs to MD */
-#define CCIF_TXCHDATA(addr) 	((addr) + 0x0100)
-#define CCIF_RXCHDATA(addr) 	((addr) + 0x0100 + 128)
-
-/* Modem CCIF */
-#define MD_CCIF_ACK(base)		((base) + 0x14)
-
-/* define constant */
-#define CCIF_CON_SEQ 0x00 /* sequencial */
-#define CCIF_CON_ARB 0x01 /* arbitrate */
-#define CCIF_MAX_PHY 8
-#define CCIF_IRQ_CODE MT_AP_CCIF_IRQ_ID
-
-
-/************************* define funtion macro **************/
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36))
-#define CCIF_MASK(irq) \
-        do {    \
-            mt65xx_irq_mask(irq);  \
-        } while (0)
-#define CCIF_UNMASK(irq) \
-        do {    \
-            mt65xx_irq_unmask(irq);  \
-        } while (0)
-
-#else
-#define CCIF_MASK(irq) \
-        do {    \
-            disable_irq(irq); \
-        } while (0)
-#define CCIF_UNMASK(irq) \
-        do {    \
-            enable_irq(irq); \
-        } while (0)
-#endif
-
-#define CCIF_CLEAR_PHY(pc)   do {	\
-            *CCIF_ACK(pc) = 0xFFFFFFFF; \
-        } while (0)
-
-
-#define CCCI_WRITEL(addr,val) mt65xx_reg_sync_writel((val), (addr))
-#define CCCI_WRITEW(addr,val) mt65xx_reg_sync_writew((val), (addr))
-#define CCCI_WRITEB(addr,val) mt65xx_reg_sync_writeb((val), (addr))
-
-#define ccci_write32(a, v)			mt65xx_reg_sync_writel(v, a)
-#define ccci_write16(a, v)			mt65xx_reg_sync_writew(v, a)
-#define ccci_write8(a, v)			mt65xx_reg_sync_writeb(v, a)
-
-
-#define ccci_read32(a)				(*((volatile unsigned int*)a))
-#define ccci_read16(a)				(*((volatile unsigned short*)a))
-#define ccci_read8(a)				(*((volatile unsigned char*)a))
 
 #define MD_INFRA_BASE  			(0xD10D0000) // Modem side: 0x810D0000
 #define MD_RGU_BASE  			(0xD10C0000) // Modem side: 0x810C0000
@@ -296,8 +209,10 @@ typedef struct{
 	U8 build_time[64];	        /* build time string */
 	U8 build_ver[64];	        /* project version, ex:11A_MD.W11.28 */
 	U8 bind_sys_id;	            /* bind to md sys id, MD SYS1: 1, MD SYS2: 2 */
-	U8 reserved[3];             /* for reserved */
-	U32 reserved_info[3];       /* for reserved */
+	U8 ext_attr;                /* no shrink: 0, shrink: 1*/
+	U8 reserved[2];             /* for reserved */
+	U32 mem_size;       		/* md ROM/RAM image size requested by md */
+	U32 reserved_info[2];       /* for reserved */
 	U32 size;	                /* the size of this structure */
 }MD_CHECK_HEADER;
 
@@ -321,6 +236,7 @@ struct IMG_CHECK_INFO{
     char *platform;	    /* MT6573_S00(MT6573E1) or MT6573_S01(MT6573E2) */
 	char *build_time;	/* build time string */
 	char *build_ver;	/* project version, ex:11A_MD.W11.28 */
+	unsigned int mem_size; /*md rom+ram mem size*/
 };
 
 
@@ -351,28 +267,9 @@ typedef enum{
 
 
 //*******************external Function definition*****************//
-//extern void start_emi_mpu_protect(void);
-extern void enable_emi_mpu_protection(dma_addr_t, int);
-extern int  ccci_load_firmware(int md_id, unsigned int load_flag, char img_err_str[], int len);
 extern void dump_firmware_info(void);
-extern void ccci_md_wdt_notify_register(int, int (*funcp)(int));
 
 extern unsigned int get_max_DRAM_size (void);
 extern unsigned int get_phys_offset (void);
-
-static inline void ccci_before_modem_start_boot(void)
-{
-}
-
-static inline void ccci_after_modem_finish_boot(void)
-{
-}
-
-
-
-void ungate_md(void);
-void gate_md(void);
-
-
-#endif
+#endif //__CCCI_PLATFORM_H__
 

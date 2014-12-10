@@ -144,6 +144,14 @@ void toi_copy_pageset1(void)
 		int loop = (PAGE_SIZE / sizeof(unsigned long)) - 1,
 		    was_present1, was_present2;
 
+#ifdef CONFIG_MTK_HIBERNATION
+        if (!pfn_valid(source_index) || !pfn_valid(dest_index)) {
+            pr_emerg("[%s] (%d) dest_index:%lu, source_index:%lu\n", __func__, i, dest_index, source_index);
+            set_abort_result(TOI_ARCH_PREPARE_FAILED);
+            return;
+        }
+#endif
+
 		origpage = pfn_to_page(source_index);
 		copypage = pfn_to_page(dest_index);
 

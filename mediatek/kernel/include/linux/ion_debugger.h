@@ -16,7 +16,8 @@ typedef enum
    ION_FUNCTION_MMAP,
    ION_FUNCTION_MUNMAP,
    ION_FUNCTION_SHARE,
-   ION_FUNCTION_SHARE_CLOSE
+   ION_FUNCTION_SHARE_CLOSE,
+   ION_FUNCTION_CHECK_ENABLE
 }ION_FUNCTION_TYPE;
 
 typedef enum
@@ -54,6 +55,9 @@ typedef enum
    SEARCH_PID,
    SEARCH_PID_CLIENT,
    SEARCH_PROCESS_PID,
+   SEARCH_BUFFER,
+   SEARCH_FD_GPID,
+   SEARCH_FILE,
    SEARCH_MAX
 }ION_SEARCH_METHOD;
 typedef enum
@@ -106,6 +110,7 @@ typedef struct ion_sys_record_param
     struct ion_handle *handle;
     struct ion_client *client;
     struct ion_buffer *buffer;
+    struct file *file;
     int fd;
 }ion_sys_record_t;
 
@@ -137,6 +142,9 @@ typedef struct ion_buffer_usage_record
 	struct ion_buffer_usage_record *next;
         struct ion_record_basic_info tracking_info;
         struct ion_handle *handle;
+	int fd;
+	struct file *file;
+	unsigned int function_type;
 }ion_buffer_usage_record_t;
 typedef struct ion_address_usage_record
 {
@@ -146,12 +154,16 @@ typedef struct ion_address_usage_record
         unsigned int mapping_address;
         unsigned int size;
         int    fd;
+	struct ion_buffer *buffer;
 }ion_address_usage_record_t;
 typedef struct ion_fd_usage_record
 {
-	struct ion_fd_usage_reocrd *next;
+	struct ion_fd_usage_record *next;
         struct ion_record_basic_info tracking_info;
         int    fd;
+	struct ion_handle *handle;
+	struct ion_buffer *buffer;
+	struct file *file;
 }ion_fd_usage_record_t;
 
 typedef struct ion_client_usage_record

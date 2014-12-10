@@ -37,7 +37,7 @@
 #define MT6626_DEEMPHASIS_50us TRUE
 
 //customer need customize the I2C port
-#ifdef MT6516
+#if 0//def MT6516
 #define MT6626_I2C_PORT   2
 #else 
 #define MT6626_I2C_PORT   0

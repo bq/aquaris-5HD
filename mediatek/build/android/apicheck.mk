@@ -38,3 +38,27 @@ $(eval $(call check-mtk-api, \
 	cat $(BUILD_SYSTEM_MTK_EXTENSION)/apicheck_msg_last.txt \
 	))
 endif
+
+ifeq ($(strip $(BUILD_MTK_API_MONITOR)), yes)
+.PHONY: checkmtkinternalapi
+$(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/checkmtkapi-internal-timestamp: \
+	$(SRC_MTK_API_DIR)/internal/current.txt \
+	$(MTK_INTERNAL_MONITORING_API_FILE) $(APICHECK)
+	@echo "Checking MediaTek API: checkmtkapi-internal"
+	$(hide) ( \
+		$(APICHECK_COMMAND) \
+		-hide 2 -hide 3 -hide 4 -hide 5 -hide 6 -error 7 -error 8 -error 9 -error 10 \
+		-error 11 -error 12 -error 13 -error 14 -error 15 -error 16 -error 17 -error 18 \
+		-error 19 -error 20 -error 21 -error 23 -error 24 \
+		$(SRC_MTK_API_DIR)/internal/current.txt \
+		$(MTK_INTERNAL_MONITORING_API_FILE) \
+		|| ( cat $(BUILD_SYSTEM_MTK_EXTENSION)/apicheck_msg_internal.txt ; exit 38 ) )
+	$(hide) mkdir -p $(dir $@)
+	$(hide) touch $@
+checkmtkinternalapi: $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/checkmtkapi-internal-timestamp
+
+.PHONY: update-mtk-internal-api
+update-mtk-internal-api: $(MTK_INTERNAL_MONITORING_API_FILE) | $(ACP)
+	@echo "Copying MediaTek's current.txt"
+	$(hide) $(ACP) $(MTK_INTERNAL_MONITORING_API_FILE) $(SRC_MTK_API_DIR)/internal/current.txt
+endif

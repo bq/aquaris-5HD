@@ -1,4 +1,5 @@
 #!usr/bin/perl
+my $out_dir = $ENV{OUT_DIR};
 my $prj = $ARGV[0];
 my $cfg = "mediatek/custom/$prj/security/image_encrypt/IMG_ENCRYPT_CFG.ini";
 my $key = "mediatek/custom/$prj/security/image_encrypt/IMG_ENCRYPT_KEY.ini";
@@ -84,7 +85,7 @@ print " ENC_SUPPORT      : $ENC_SUPPORT\n";
 print "\n\n\n********************************************\n";
 print " SIGNED IMAGE\n";
 print "********************************************\n\n\n";
-my $dir = "out/target/product/$prj/signed_bin";
+my $dir = "$out_dir/target/product/$prj/signed_bin";
 
 `mkdir $dir/enc_bin` if ( ! -d "$dir/enc_bin" );
 print "Image Dir '$dir'\n";

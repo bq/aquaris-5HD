@@ -93,6 +93,7 @@ struct inet_connection_sock {
  	struct timer_list	  icsk_delack_timer;
 	__u32			  icsk_rto;
 	__u32			  icsk_MaxRto;
+	__u32			  icsk_MMSRB;	
 	__u32			  icsk_pmtu_cookie;
 	const struct tcp_congestion_ops *icsk_ca_ops;
 	const struct inet_connection_sock_af_ops *icsk_af_ops;
@@ -324,6 +325,7 @@ extern void inet_csk_reqsk_queue_prune(struct sock *parent,
 				       const unsigned long max_rto);
 
 extern void inet_csk_destroy_sock(struct sock *sk);
+extern void inet_csk_prepare_forced_close(struct sock *sk);
 
 /*
  * LISTEN is a special case for poll..

@@ -2,18 +2,18 @@
 
 /*--------------Feature option---------------*/
 #define __ENABLE_SSW_SYSFS 1
-/*-------------------------------------------*/
+
 
 /*--------------Global varible---------------*/
 void __iomem *reg_base;
-/*-------------------------------------------*/
+
 
 /*--------------Register address-------------*/
 #define GPIO_SIM1_MODE		(0x0980)
 #define GPIO_SIM1_PULL		(0x0990)
 #define GPIO_SIM2_MODE		(0x09A0)
 #define GPIO_SIM2_PULL		(0x09B0)
-/*-------------------------------------------*/
+
 
 /*----------------GPIO settings--------------*/
 #define SIM1_PULL_DEFAULT		(0x470)
@@ -30,26 +30,30 @@ void __iomem *reg_base;
 
 #define DUAL_SIM1_MODE_SWAP			(0x444)
 #define DUAL_SIM2_MODE_SWAP			(0x111)
-/*-------------------------------------------*/
+
 
 /*--------------SIM mode list----------------*/
 #define SINGLE_TALK_MDSYS				(0x1)
 #define SINGLE_TALK_MDSYS_LITE	(0x2)
 #define DUAL_TALK								(0x3)
 #define DUAL_TALK_SWAP					(0x4)	
-/*-------------------------------------------*/
-
-/*----------------Error Code-----------------*/
-#define SSW_SUCCESS 			(0)
-#define SSW_INVALID_PARA	(-1)
-/*-------------------------------------------*/
 
 
+/*----------------variable define-----------------*/
 unsigned int sim_mode_curr = SINGLE_TALK_MDSYS;
-
 struct mutex sim_switch_mutex;
 
+unsigned int get_sim_switch_type(void)
+{
+	printk("[ccci/ssw]SSW_GENERIC\n");
+	return SSW_INTERN;
+}
+EXPORT_SYMBOL(get_sim_switch_type);
 
+/*************************************************************************/
+/* create sys file for sim switch mode                                                                     */
+/*                                                                                                                      */
+/*************************************************************************/
 static inline void sim_switch_writel(void *addr, unsigned offset, u32 data)
 {
 	*((volatile unsigned int*)(addr + offset)) = data;
@@ -66,44 +70,44 @@ static inline u32 sim_switch_readl(const void *addr, unsigned offset)
 static int set_sim_gpio(unsigned int mode);
 static int get_current_ssw_mode(void);
 
-/*---------------------------------------------------------------------------*/
+
 /*define sysfs entry for configuring debug level and sysrq*/
 ssize_t ssw_attr_show(struct kobject *kobj, struct attribute *attr, char *buffer);
 ssize_t ssw_attr_store(struct kobject *kobj, struct attribute *attr, const char *buffer, size_t size);
 ssize_t ssw_mode_show(struct kobject *kobj, char *page);
 ssize_t ssw_mode_store(struct kobject *kobj, const char *page, size_t size);
-/*---------------------------------------------------------------------------*/
+
 struct sysfs_ops ssw_sysfs_ops = {
 	.show   = ssw_attr_show,
 	.store  = ssw_attr_store,
 };
-/*---------------------------------------------------------------------------*/
+
 struct ssw_sys_entry {
 	struct attribute attr;
 	ssize_t (*show)(struct kobject *kobj, char *page);
 	ssize_t (*store)(struct kobject *kobj, const char *page, size_t size);
 };
-/*---------------------------------------------------------------------------*/
+
 static struct ssw_sys_entry mode_entry = {
 	{ .name = "mode", .mode = S_IRUGO | S_IWUSR }, // remove  .owner = NULL,  
 	ssw_mode_show,
 	ssw_mode_store,
 };
-/*---------------------------------------------------------------------------*/
+
 struct attribute *ssw_attributes[] = {
 	&mode_entry.attr,
 	NULL,
 };
-/*---------------------------------------------------------------------------*/
+
 struct kobj_type ssw_ktype = {
 	.sysfs_ops = &ssw_sysfs_ops,
 	.default_attrs = ssw_attributes,
 };
-/*---------------------------------------------------------------------------*/
+
 static struct ssw_sysobj_t {
 	struct kobject kobj;
 } ssw_sysobj;
-/*---------------------------------------------------------------------------*/
+
 int ssw_sysfs_init(void) 
 {
 	struct ssw_sysobj_t *obj = &ssw_sysobj;
@@ -119,19 +123,19 @@ int ssw_sysfs_init(void)
 
 	return 0;
 }
-/*---------------------------------------------------------------------------*/
+
 ssize_t ssw_attr_show(struct kobject *kobj, struct attribute *attr, char *buffer) 
 {
 	struct ssw_sys_entry *entry = container_of(attr, struct ssw_sys_entry, attr);
 	return entry->show(kobj, buffer);
 }
-/*---------------------------------------------------------------------------*/
+
 ssize_t ssw_attr_store(struct kobject *kobj, struct attribute *attr, const char *buffer, size_t size) 
 {
 	struct ssw_sys_entry *entry = container_of(attr, struct ssw_sys_entry, attr);
 	return entry->store(kobj, buffer, size);
 }
-/*---------------------------------------------------------------------------*/
+
 ssize_t ssw_mode_show(struct kobject *kobj, char *buffer) 
 {
 	int remain = PAGE_SIZE;
@@ -145,7 +149,7 @@ ssize_t ssw_mode_show(struct kobject *kobj, char *buffer)
 
 	return (PAGE_SIZE-remain);
 }
-/*---------------------------------------------------------------------------*/
+
 ssize_t ssw_mode_store(struct kobject *kobj, const char *buffer, size_t size) 
 {
 	int mode;
@@ -153,7 +157,7 @@ ssize_t ssw_mode_store(struct kobject *kobj, const char *buffer, size_t size)
 
 	if (res != 1)
 	{
-		printk("%s: expect 1 numbers\n", __FUNCTION__);
+		SSW_DBG("%s: expect 1 numbers\n", __FUNCTION__);
 	}
 	else
 	{
@@ -166,10 +170,13 @@ ssize_t ssw_mode_store(struct kobject *kobj, const char *buffer, size_t size)
 	}
 	return size;
 }
-/*---------------------------------------------------------------------------*/
 
 
 
+/*************************************************************************/
+/* sim switch hardware operation                                                                           */
+/*                                                                                                                      */
+/*************************************************************************/
 int get_current_ssw_mode(void)
 {
 	return sim_mode_curr;
@@ -178,7 +185,7 @@ int get_current_ssw_mode(void)
 
 static int set_sim_gpio(unsigned int mode)
 {
-	SSW_DBG("set_sim_gpio %d\n", mode);
+	SSW_DBG("set_sim_gpio: %d\n", mode);
 	switch(mode)
 	{
 		case SINGLE_TALK_MDSYS:
@@ -218,7 +225,7 @@ static int set_sim_gpio(unsigned int mode)
 			mt_set_gpio_mode(GPIO49, 1);			
 			break;
 		default:
-			SSW_DBG("Mode(%d) not supported!!!", mode);
+			SSW_DBG("[Error] Invalid Mode(%d)", mode);
 			return SSW_INVALID_PARA;
 	}
 	
@@ -240,8 +247,14 @@ static int get_sim_mode(unsigned int mode)
 int switch_sim_mode(int id, char *buf, unsigned int len)
 {
 	unsigned int mode = *((unsigned int *)buf);
+	unsigned int type = (mode&0xFFFF0000)>>16;
 
-	SSW_DBG("sim switch: %d(%d)\n", mode, sim_mode_curr);
+	if (type != get_sim_switch_type()) {
+		SSW_DBG("[Error]sim switch type is mis-match: type(%d, %d)", type, get_sim_switch_type());
+		return SSW_INVALID_PARA;
+	}	
+
+	SSW_DBG("sim switch: %d-->%d\n", mode, sim_mode_curr);
 
 	mode = get_sim_mode(mode);
 
@@ -266,9 +279,6 @@ static int get_sim_mode_init(void)
 {
 	unsigned int sim_mode = 0;
 	
-	//ToDo: convert compile option to sim mode
-	//
-	//
 #ifdef MTK_ENABLE_MD1
 	sim_mode = SINGLE_TALK_MDSYS;
 #ifdef MTK_ENABLE_MD2
@@ -316,9 +326,13 @@ static int sim_switch_init(void)
 
 static int sim_switch_probe(struct platform_device *dev)
 {
-	SSW_DBG("Enter sim_switch_probe\n");
+	SSW_DBG("sim_switch_probe\n");
 		
-	//sim_switch_init();
+#if __ENABLE_SSW_SYSFS
+	ssw_sysfs_init();
+#endif
+		
+	sim_switch_init();
 	
 	mutex_init(&sim_switch_mutex);
 	
@@ -329,24 +343,24 @@ static int sim_switch_probe(struct platform_device *dev)
 
 static int sim_switch_remove(struct platform_device *dev)
 {
-	SSW_DBG("sim_switch_remove \n");
+	//SSW_DBG("sim_switch_remove \n");
 	return 0;
 }
 
 static void sim_switch_shutdown(struct platform_device *dev)
 {
-	SSW_DBG("sim_switch_shutdown \n");
+	//SSW_DBG("sim_switch_shutdown \n");
 }
 
 static int sim_switch_suspend(struct platform_device *dev, pm_message_t state)
 {
-	SSW_DBG("sim_switch_suspend \n");
+	//SSW_DBG("sim_switch_suspend \n");
 	return 0;
 }
 
 static int sim_switch_resume(struct platform_device *dev)
 {
-	SSW_DBG("sim_switch_resume \n");
+	//SSW_DBG("sim_switch_resume \n");
 	return 0;
 }
 
@@ -368,19 +382,14 @@ static int __init sim_switch_driver_init(void)
 {
 	int ret = 0;
 
-	SSW_DBG("Enter sim_switch_driver_init\n");
+	SSW_DBG("sim_switch_driver_init\n");
 	ret = platform_driver_register(&sim_switch_driver);
 	if (ret) {
 		SSW_DBG("ssw_driver register fail(%d)\n", ret);
 		return ret;
 	}
-#if __ENABLE_SSW_SYSFS
-	ssw_sysfs_init();
-#endif
 
-	sim_switch_init();
-
-	SSW_DBG("Exit sim_switch_driver_init\n");
+	//sim_switch_init();
 	 
 	return ret;
 }

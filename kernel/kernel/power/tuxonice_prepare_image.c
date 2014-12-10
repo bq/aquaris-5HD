@@ -25,6 +25,10 @@
 #include <linux/hardirq.h>
 #include <linux/mmzone.h>
 #include <linux/console.h>
+#ifdef CONFIG_MTK_HIBERNATION
+#include <linux/syscalls.h> // for sys_sync()
+#include <linux/oom.h>
+#endif
 
 #include "tuxonice_pageflags.h"
 #include "tuxonice_modules.h"
@@ -72,7 +76,9 @@ static int build_attention_list(void)
 	int i, task_count = 0;
 	struct task_struct *p;
 	struct attention_list *next;
-
+#ifdef CONFIG_MTK_HIBERNATION
+    int task_count2 = 0, task_count3 = 0;
+#endif
 	/*
 	 * Count all userspace process (with task->mm) marked PF_NOFREEZE.
 	 */
@@ -105,11 +111,30 @@ static int build_attention_list(void)
 	toi_read_lock_tasklist();
 	for_each_process(p)
 		if ((p->flags & PF_NOFREEZE) || p == current) {
+#ifdef CONFIG_MTK_HIBERNATION
+            task_count2++;
+            if (next == NULL)
+                goto ERR;
+#endif
 			next->task = p;
 			next = next->next;
 		}
 	toi_read_unlock_tasklist();
 	return 0;
+
+#ifdef CONFIG_MTK_HIBERNATION
+ERR:
+    hib_err("WARN (%d/%d) \n", task_count, task_count2);
+    hib_err("DUMP tasks......\n");
+    for_each_process(p)
+        if ((p->flags & PF_NOFREEZE) || p == current) {
+            task_count3++;
+            hib_err("%s(0x%08x)  ", p->comm, p->flags);
+        }
+    hib_err("DUMP tasks (#%d) done.\n", task_count3);
+    toi_read_unlock_tasklist();
+    return 1;
+#endif
 }
 
 static void pageset2_full(void)
@@ -120,6 +145,38 @@ static void pageset2_full(void)
 	int i;
 
 	for_each_populated_zone(zone) {
+#ifdef CONFIG_CGROUP_MEM_RES_CTLR
+		struct mem_cgroup *memcg;
+		struct lruvec *lruvec;
+		/* Root memcg */
+		memcg = mem_cgroup_iter(NULL, NULL, NULL);
+		do {
+			/* Find corresponding lruvec */
+			lruvec = mem_cgroup_zone_lruvec(zone, memcg);
+
+			/* Go through memcg lrus */
+			spin_lock_irqsave(&zone->lru_lock, flags);
+			for_each_lru(i) {
+				/* Is this memcg lru[i] empty? */
+				if (!mem_cgroup_zone_nr_lru_pages(memcg, zone_to_nid(zone), zone_idx(zone), BIT(i)))
+					continue;
+
+				/* Scan this lru */
+				list_for_each_entry(page, &lruvec->lists[i], lru) {
+					struct address_space *mapping;
+
+					mapping = page_mapping(page);
+					if (!mapping || !mapping->host ||
+					    !(mapping->host->i_flags & S_ATOMIC_COPY))
+						SetPagePageset2(page);
+				}
+			}
+			spin_unlock_irqrestore(&zone->lru_lock, flags);
+
+			/* Next memcg */
+			memcg = mem_cgroup_iter(NULL, memcg, NULL);
+		} while (memcg);
+#else
 		spin_lock_irqsave(&zone->lru_lock, flags);
 		for_each_lru(i) {
 			if (!zone_page_state(zone, NR_LRU_BASE + i))
@@ -135,6 +192,7 @@ static void pageset2_full(void)
 			}
 		}
 		spin_unlock_irqrestore(&zone->lru_lock, flags);
+#endif
 	}
 }
 
@@ -150,6 +208,12 @@ static void toi_mark_task_as_pageset(struct task_struct *t, int pageset2)
 	struct mm_struct *mm;
 
 	mm = t->active_mm;
+
+    if (mm == (void *)0x6b6b6b6b) {
+        pr_err("[%s] use after free: task %s rq(%d)\n", __func__, t->comm, t->on_rq);
+        WARN_ON(1);
+        return;
+    }
 
 	if (!mm || !mm->mmap)
 		return;
@@ -283,6 +347,29 @@ void toi_free_extra_pagedir_memory(void)
 	extra_pages_allocated = 0;
 }
 
+#ifdef CONFIG_MTK_HIBERNATION
+int is_memory_low(unsigned long delta)
+{
+    struct zone *zone;
+
+    for_each_populated_zone(zone) {
+        unsigned long free_pages, min_pages, high_pages;
+        if (!strcmp(zone->name, "Normal")) {
+            free_pages = zone_page_state(zone, NR_FREE_PAGES);
+            min_pages = min_wmark_pages(zone);
+            high_pages = high_wmark_pages(zone);
+            if (free_pages < (min_pages + high_pages + delta)) {
+                hib_warn("memory status: free(%lu) < min(%lu)+high(%lu)+delta(%lu)\n",
+                         free_pages, min_pages, high_pages, delta);
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+#endif
+
 /* toi_allocate_extra_pagedir_memory
  *
  * Description:	Allocate memory for making the atomic copy of pagedir1 in the
@@ -310,6 +397,12 @@ static int toi_allocate_extra_pagedir_memory(int extra_pages_needed)
 		while ((1 << order) > num_to_alloc)
 			order--;
 
+#ifdef CONFIG_MTK_HIBERNATION
+        if (is_memory_low(4)) {
+            return extra_pages_allocated;
+        }
+#endif
+
 		extras_entry = (struct extras *) toi_kzalloc(7,
 			sizeof(struct extras), TOI_ATOMIC_GFP);
 
@@ -321,6 +414,12 @@ static int toi_allocate_extra_pagedir_memory(int extra_pages_needed)
 			order--;
 			virt = toi_get_free_pages(9, flags, order);
 		}
+#ifdef CONFIG_MTK_HIBERNATION
+        if (virt && is_memory_low(0)) {
+            toi_free_pages(9, virt_to_page((void *)virt), order);
+            virt = 0;
+        }
+#endif
 
 		if (!virt) {
 			toi_kfree(7, extras_entry, sizeof(*extras_entry));
@@ -832,12 +931,27 @@ void toi_recalculate_image_contents(int atomic_copy)
 
 	if (!atomic_copy) {
 		storage_limit = toiActiveAllocator->storage_available();
+#ifdef CONFIG_MTK_HIBERNATION
+		display_stats(1, 0);
+#else
 		display_stats(0, 0);
+#endif
 	}
 }
 
 int try_allocate_extra_memory(void)
 {
+#ifdef CONFIG_MTK_HIBERNATION
+	int wanted = pagedir1.size +  extra_pd1_pages_allowance -
+		get_lowmem_size(pagedir2);
+	if (wanted > extra_pages_allocated) {
+		int got = toi_allocate_extra_pagedir_memory(wanted);
+        if (wanted > got) {
+            hib_warn("Want %d extra pages for pageset1, but only got %d\n", wanted, got);
+            return 1;
+        }
+	}
+#else // buggy codes, (1) why wanted < got and return 1 ? ; (2) wanted might be negative value.
 	unsigned long wanted = pagedir1.size +  extra_pd1_pages_allowance -
 		get_lowmem_size(pagedir2);
 	if (wanted > extra_pages_allocated) {
@@ -849,6 +963,7 @@ int try_allocate_extra_memory(void)
 			return 1;
 		}
 	}
+#endif
 	return 0;
 }
 
@@ -922,6 +1037,12 @@ static int attempt_to_freeze(void)
 	/* Stop processes before checking again */
 	toi_prepare_status(CLEAR_BAR, "Freezing processes & syncing "
 			"filesystems.");
+
+#ifdef CONFIG_MTK_HIBERNATION
+	hib_warn("Syncing filesystems ... ");
+	sys_sync();
+	hib_warn("done.\n");
+#endif
 
 	result = freeze_processes();
 
@@ -1052,6 +1173,10 @@ int toi_prepare_image(void)
 
 	main_storage_allocated = 0;
 	no_ps2_needed = 0;
+
+#ifdef CONFIG_MTK_HIBERNATION
+    shrink_all_memory(0); // purpose for early trigger PASR to release userspace memory pages.
+#endif
 
 	if (attempt_to_freeze())
 		return 1;

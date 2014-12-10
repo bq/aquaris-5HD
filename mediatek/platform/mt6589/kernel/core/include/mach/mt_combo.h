@@ -77,9 +77,10 @@ typedef enum {
 /* [GeorgeKuo] Stub functions for other kernel built-in modules to call.
  * Keep them unchanged temporarily. Move mt_combo functions to mtk_wcn_combo.
  */
-extern int mt_combo_audio_ctrl_ex(COMBO_AUDIO_STATE state, u32 clt_ctrl);
+//extern int mt_combo_audio_ctrl_ex(COMBO_AUDIO_STATE state, u32 clt_ctrl);
 static inline int mt_combo_audio_ctrl(COMBO_AUDIO_STATE state) {
-    return mt_combo_audio_ctrl_ex(state, 1);
+//    return mt_combo_audio_ctrl_ex(state, 1);
+return 0;
 }
 extern int mt_combo_plt_enter_deep_idle(COMBO_IF src);
 extern int mt_combo_plt_exit_deep_idle(COMBO_IF src);

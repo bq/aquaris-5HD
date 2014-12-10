@@ -63,6 +63,8 @@ struct nand_flash_dev nand_flash_ids[] = {
 	{"NAND 128MiB 1,8V 16-bit",	0x49, 512, 128, 0x4000, NAND_BUSWIDTH_16},
 	{"NAND 128MiB 3,3V 16-bit",	0x74, 512, 128, 0x4000, NAND_BUSWIDTH_16},
 	{"NAND 128MiB 3,3V 16-bit",	0x59, 512, 128, 0x4000, NAND_BUSWIDTH_16},
+	{"NAND 4096MB 3,3V 8-bit",	0x64, 0,   4096,0x200000, 0},
+	{"NAND 4096MB 3,3V 8-bit",	0x44, 0,   2048,0x200000, 0},
 
 	{"NAND 256MiB 3,3V 8-bit",	0x71, 512, 256, 0x4000, 0},
 

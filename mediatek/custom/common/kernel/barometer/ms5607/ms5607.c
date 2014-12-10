@@ -34,26 +34,13 @@
 #include <linux/sensors_io.h>
 #include "ms5607.h"
 #include <linux/hwmsen_helper.h>
-#ifdef MT6516
-#include <mach/mt6516_devs.h>
-#include <mach/mt6516_typedefs.h>
-#include <mach/mt6516_gpio.h>
-#include <mach/mt6516_pll.h>
-#endif
 
-#ifdef MT6573
-#include <mach/mt6573_devs.h>
-#include <mach/mt6573_typedefs.h>
-#include <mach/mt6573_gpio.h>
-#include <mach/mt6573_pll.h>
-#endif
-#ifdef MT6516
-#define POWER_NONE_MACRO MT6516_POWER_NONE
-#endif
+#include <mach/mt_typedefs.h>
+#include <mach/mt_gpio.h>
+#include <mach/mt_pm_ldo.h>
 
-#ifdef MT6573
 #define POWER_NONE_MACRO MT65XX_POWER_NONE
-#endif
+
 /*----------------------------------------------------------------------------*/
 #define I2C_DRIVERID_MS5607 345
 /*----------------------------------------------------------------------------*/
@@ -65,15 +52,16 @@
 #define MS5607_DEV_NAME        "MS5607"
 /*----------------------------------------------------------------------------*/
 static const struct i2c_device_id ms5607_i2c_id[] = {{MS5607_DEV_NAME,0},{}};
+static struct i2c_board_info __initdata i2c_ms5607 = {I2C_BOARD_INFO("MS5607", 0xee)};
 /*the adapter id will be available in customization*/
-static unsigned short ms5607_force[] = {0x00, MS5607_I2C_SLAVE_ADDR, I2C_CLIENT_END, I2C_CLIENT_END};
-static const unsigned short *const ms5607_forces[] = { ms5607_force, NULL };
-static struct i2c_client_address_data ms5607_addr_data = { .forces = ms5607_forces,};
+//static unsigned short ms5607_force[] = {0x00, MS5607_I2C_SLAVE_ADDR, I2C_CLIENT_END, I2C_CLIENT_END};
+//static const unsigned short *const ms5607_forces[] = { ms5607_force, NULL };
+//static struct i2c_client_address_data ms5607_addr_data = { .forces = ms5607_forces,};
 
 /*----------------------------------------------------------------------------*/
 static int ms5607_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id); 
 static int ms5607_i2c_remove(struct i2c_client *client);
-static int ms5607_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
+//static int ms5607_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
 
 /*----------------------------------------------------------------------------*/
 //static int MS5607_SetPowerMode(struct i2c_client *client, bool enable);
@@ -142,18 +130,18 @@ struct ms5607_i2c_data {
 /*----------------------------------------------------------------------------*/
 static struct i2c_driver ms5607_i2c_driver = {
     .driver = {
-        .owner          = THIS_MODULE,
+ //       .owner          = THIS_MODULE,
         .name           = MS5607_DEV_NAME,
     },
 	.probe      		= ms5607_i2c_probe,
 	.remove    			= ms5607_i2c_remove,
-	.detect				= ms5607_i2c_detect,
+//	.detect				= ms5607_i2c_detect,
 #if !defined(CONFIG_HAS_EARLYSUSPEND)    
     .suspend            = ms5607_suspend,
     .resume             = ms5607_resume,
 #endif
 	.id_table = ms5607_i2c_id,
-	.address_data = &ms5607_addr_data,
+//	.address_data = &ms5607_addr_data,
 };
 
 /*----------------------------------------------------------------------------*/
@@ -956,7 +944,7 @@ static int ms5607_release(struct inode *inode, struct file *file)
 	return 0;
 }
 /*----------------------------------------------------------------------------*/
-static int ms5607_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+static int ms5607_unlocked_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
        unsigned long arg)
 {
 	struct i2c_client *client = (struct i2c_client*)file->private_data;
@@ -965,7 +953,8 @@ static int ms5607_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	s32 dat=0;
 	void __user *data;
 	//SENSOR_DATA sensor_data;
-	int err = 0;
+	//int err = 0;
+	long err = 0;
 	//int cali[3];
 
 	//GSE_FUN(f);
@@ -1046,10 +1035,11 @@ static int ms5607_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 
 /*----------------------------------------------------------------------------*/
 static struct file_operations ms5607_fops = {
-	.owner = THIS_MODULE,
+	//.owner = THIS_MODULE,
 	.open = ms5607_open,
 	.release = ms5607_release,
-	.ioctl = ms5607_ioctl,
+	//.ioctl = ms5607_ioctl,
+	.unlocked_ioctl = ms5607_unlocked_ioctl,
 };
 /*----------------------------------------------------------------------------*/
 static struct miscdevice ms5607_device = {
@@ -1166,12 +1156,13 @@ static void ms5607_late_resume(struct early_suspend *h)
 /*----------------------------------------------------------------------------*/
 #endif /*CONFIG_HAS_EARLYSUSPEND*/
 /*----------------------------------------------------------------------------*/
+/*
 static int ms5607_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info) 
 {    
 	strcpy(info->type, MS5607_DEV_NAME);
 	return 0;
 }
-
+*/
 /*----------------------------------------------------------------------------*/
 static int ms5607_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -1266,7 +1257,8 @@ static int ms5607_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 	//}
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
-	obj->early_drv.level    = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1,
+	//obj->early_drv.level    = EARLY_SUSPEND_LEVEL_DISABLE_FB - 1,
+	obj->early_drv.level    = EARLY_SUSPEND_LEVEL_STOP_DRAWING - 2,
 	obj->early_drv.suspend  = ms5607_early_suspend,
 	obj->early_drv.resume   = ms5607_late_resume,    
 	register_early_suspend(&obj->early_drv);
@@ -1318,7 +1310,7 @@ static int ms5607_probe(struct platform_device *pdev)
 	BAR_FUN();
 
 	MS5607_power(hw, 1);
-	ms5607_force[0] = hw->i2c_num;
+	//ms5607_force[0] = hw->i2c_num;
 	if(i2c_add_driver(&ms5607_i2c_driver))
 	{
 		BAR_ERR("add driver error\n");
@@ -1342,7 +1334,7 @@ static struct platform_driver ms5607_barometer_driver = {
 	.remove     = ms5607_remove,    
 	.driver     = {
 		.name  = "barometer",
-		.owner = THIS_MODULE,
+		//.owner = THIS_MODULE,
 	}
 };
 
@@ -1350,6 +1342,9 @@ static struct platform_driver ms5607_barometer_driver = {
 static int __init ms5607_init(void)
 {
 	BAR_FUN();
+	struct baro_hw *hw = get_cust_baro_hw();
+	BAR_LOG("%s : i2c_num = %d\n", __func__, hw->i2c_num); 
+	i2c_register_board_info(hw->i2c_num, &i2c_ms5607, 1);
 	if(platform_driver_register(&ms5607_barometer_driver))
 	{
 		BAR_ERR("failed to register driver");

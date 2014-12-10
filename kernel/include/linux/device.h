@@ -937,10 +937,8 @@ int _dev_info(const struct device *dev, const char *fmt, ...)
  * Note that the definition of dev_info below is actually _dev_info
  * and a macro is used to avoid redefining dev_info
  */
-//ALPS00445134, add more debug message for CR debugging
-//#define dev_info(dev, fmt, arg...) _dev_info(dev, fmt, ##arg)
-#define dev_info(dev, fmt, arg...) dev_printk(KERN_DEBUG, dev, fmt, ##arg)
-//ALPS00445134, add more debug message for CR debugging
+
+#define dev_info(dev, fmt, arg...) _dev_info(dev, fmt, ##arg)
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
 #define dev_dbg(dev, format, ...)		     \
@@ -951,21 +949,13 @@ do {						     \
 #define dev_dbg(dev, format, arg...)		\
 	dev_printk(KERN_DEBUG, dev, format, ##arg)
 #else
-//ALPS00445134, add more debug message for CR debugging
 #define dev_dbg(dev, format, arg...)				\
-	dev_printk(KERN_DEBUG, dev, format, ##arg)
-#endif
-//dev_printk("<3>", dev, format, ##arg)
-//original definition begin
-/*#define dev_dbg(dev, format, arg...)				\
 ({								\
 	if (0)							\
 		dev_printk(KERN_DEBUG, dev, format, ##arg);	\
 	0;							\
-})*/
-//original definition end
-//ALPS00445134, add more debug message for CR debugging
-
+})
+#endif
 
 #ifdef VERBOSE_DEBUG
 #define dev_vdbg	dev_dbg

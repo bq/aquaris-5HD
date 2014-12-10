@@ -6,6 +6,12 @@
 
 #define MTKFB_VSYNC_IOCTL_MAGIC      'V'
 
-#define MTKFB_VSYNC_IOCTL     _IO(MTKFB_VSYNC_IOCTL_MAGIC, 1)
+typedef enum
+{
+    MTKFB_VSYNC_SOURCE_LCM = 0,
+    MTKFB_VSYNC_SOURCE_HDMI = 1,
+} vsync_src;
+
+#define MTKFB_VSYNC_IOCTL     _IOW(MTKFB_VSYNC_IOCTL_MAGIC, 1, vsync_src)
 
 #endif //MTKFB_VSYNC_H

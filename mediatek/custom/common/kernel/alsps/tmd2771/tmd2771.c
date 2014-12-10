@@ -41,6 +41,7 @@
 #include <cust_eint.h>
 #include <cust_alsps.h>
 #include "tmd2771.h"
+#include <linux/sched.h>
 /******************************************************************************
  * configuration
 *******************************************************************************/
@@ -61,15 +62,14 @@
 /******************************************************************************
  * extern functions
 *******************************************************************************/
-	extern void mt65xx_eint_unmask(unsigned int line);
-	extern void mt65xx_eint_mask(unsigned int line);
-	extern void mt65xx_eint_set_polarity(kal_uint8 eintno, kal_bool ACT_Polarity);
-	extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
-	extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
-	extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
-										 kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
-										 kal_bool auto_umask);
-	
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+extern void mt_eint_print_status(void);
+
 /*----------------------------------------------------------------------------*/
 static struct i2c_client *TMD2771_i2c_client = NULL;
 /*----------------------------------------------------------------------------*/
@@ -83,6 +83,7 @@ static int TMD2771_i2c_detect(struct i2c_client *client, struct i2c_board_info *
 static int TMD2771_i2c_suspend(struct i2c_client *client, pm_message_t msg);
 static int TMD2771_i2c_resume(struct i2c_client *client);
 
+static unsigned long long int_top_time = 0;
 static DEFINE_MUTEX(TMD2771_mutex);
 
 
@@ -138,11 +139,14 @@ struct TMD2771_priv {
     u16         als_value_num;
     u32         als_level[C_CUST_ALS_LEVEL-1];
     u32         als_value[C_CUST_ALS_LEVEL];
+	int			ps_cali;
 
     atomic_t    als_cmd_val;    /*the cmd value can't be read, stored in ram*/
     atomic_t    ps_cmd_val;     /*the cmd value can't be read, stored in ram*/
     atomic_t    ps_thd_val_high;     /*the cmd value can't be read, stored in ram*/
 	atomic_t    ps_thd_val_low;     /*the cmd value can't be read, stored in ram*/
+	atomic_t	als_thd_val_high;	 /*the cmd value can't be read, stored in ram*/
+	atomic_t	als_thd_val_low; 	/*the cmd value can't be read, stored in ram*/
     ulong       enable;         /*enable mask*/
     ulong       pending_intr;   /*pending interrupt*/
 
@@ -166,7 +170,7 @@ static struct i2c_driver TMD2771_i2c_driver = {
 
 static struct TMD2771_priv *TMD2771_obj = NULL;
 static struct platform_driver TMD2771_alsps_driver;
-/*------------------------i2c function for 89-------------------------------------*/
+/*------------------------i2c function for MTK-------------------------------------*/
 int TMD2771_i2c_master_operate(struct i2c_client *client, const char *buf, int count, int i2c_flag)
 {
 	int res = 0;
@@ -189,7 +193,7 @@ int TMD2771_i2c_master_operate(struct i2c_client *client, const char *buf, int c
 	APS_LOG("TMD2771_i2c_master_operate i2c_flag command not support!\n");
 	break;
 	}
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -250,7 +254,7 @@ static long TMD2771_enable_als(struct i2c_client *client, int enable)
 
 	databuf[0]= TMD2771_CMM_ENABLE;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x101, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -262,7 +266,7 @@ static long TMD2771_enable_als(struct i2c_client *client, int enable)
 			databuf[0] = TMD2771_CMM_ENABLE;
 			APS_LOG("TMD2771_CMM_ENABLE enable als value = %x\n",databuf[1]);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
@@ -278,7 +282,7 @@ static long TMD2771_enable_als(struct i2c_client *client, int enable)
 			databuf[0] = TMD2771_CMM_ENABLE;
 			APS_LOG("TMD2771_CMM_ENABLE disable als value = %x\n",databuf[1]);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
@@ -299,7 +303,7 @@ static long TMD2771_enable_ps(struct i2c_client *client, int enable)
 	
 	databuf[0]= TMD2771_CMM_ENABLE;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x101, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -312,7 +316,7 @@ static long TMD2771_enable_ps(struct i2c_client *client, int enable)
 			databuf[0] = TMD2771_CMM_ENABLE;
 			APS_LOG("TMD2771_CMM_ENABLE enable ps value = %x\n",databuf[1]);	
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
@@ -328,36 +332,36 @@ static long TMD2771_enable_ps(struct i2c_client *client, int enable)
 			databuf[0] = TMD2771_CMM_ENABLE;
 			APS_LOG("TMD2771_CMM_ENABLE disable ps value = %x\n",databuf[1]);	
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
 
 			databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;	
-			databuf[1] = (u8)(750 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low)) & 0x00FF);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_LOW_THD_HIGH;	
-			databuf[1] = (u8)((750 & 0xFF00) >> 8);
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_low)) & 0xFF00) >> 8);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;	
-			databuf[1] = (u8)(900 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high)) & 0x00FF);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_HIGH_THD_HIGH;	
-			databuf[1] = (u8)((900 & 0xFF00) >> 8);;
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_high)) & 0xFF00) >> 8);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
 				goto EXIT_ERR;
 			}
@@ -380,7 +384,7 @@ static int TMD2771_check_and_clear_intr(struct i2c_client *client)
 
 	buffer[0] = TMD2771_CMM_STATUS;
 	res = TMD2771_i2c_master_operate(client, buffer, 0x101, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -415,7 +419,7 @@ static int TMD2771_check_and_clear_intr(struct i2c_client *client)
 		}
 
 		res = TMD2771_i2c_master_operate(client, buffer, 0x1, I2C_FLAG_WRITE);
-		if(res <= 0)
+		if(res < 0)
 		{
 			goto EXIT_ERR;
 		}
@@ -444,7 +448,7 @@ static int TMD2771_check_intr(struct i2c_client *client)
 
 	buffer[0] = TMD2771_CMM_STATUS;
 	res = TMD2771_i2c_master_operate(client, buffer, 0x101, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -476,7 +480,7 @@ static int TMD2771_clear_intr(struct i2c_client *client)
 	
 	buffer[0] = (TAOS_TRITON_CMD_REG|TAOS_TRITON_CMD_SPL_FN|0x07);
 	res = TMD2771_i2c_master_operate(client, buffer, 0x1, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -500,7 +504,7 @@ void TMD2771_eint_func(void)
 	{
 		return;
 	}
-	//APS_LOG(" debug eint function performed!\n");
+	int_top_time = sched_clock();
 	schedule_work(&obj->eint_work);
 }
 
@@ -517,12 +521,10 @@ int TMD2771_setup_eint(struct i2c_client *client)
 	mt_set_gpio_pull_enable(GPIO_ALS_EINT_PIN, TRUE);
 	mt_set_gpio_pull_select(GPIO_ALS_EINT_PIN, GPIO_PULL_UP);
 
-	mt65xx_eint_set_sens(CUST_EINT_ALS_NUM, CUST_EINT_ALS_SENSITIVE);
-	mt65xx_eint_set_polarity(CUST_EINT_ALS_NUM, CUST_EINT_ALS_POLARITY);
-	mt65xx_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
-	mt65xx_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_EN, CUST_EINT_ALS_POLARITY, TMD2771_eint_func, 0);
+	mt_eint_set_hw_debounce(CUST_EINT_ALS_NUM, CUST_EINT_ALS_DEBOUNCE_CN);
+	mt_eint_registration(CUST_EINT_ALS_NUM, CUST_EINT_ALS_TYPE, TMD2771_eint_func, 0);
 
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM);  
+	mt_eint_unmask(CUST_EINT_ALS_NUM);  
     return 0;
 }
 
@@ -533,11 +535,12 @@ static int TMD2771_init_client(struct i2c_client *client)
 	struct TMD2771_priv *obj = i2c_get_clientdata(client);
 	u8 databuf[2];    
 	int res = 0;
-
+	APS_LOG("TMD2771_init_client int top half time = %lld\n", int_top_time);
 	databuf[0] = (TAOS_TRITON_CMD_REG|TAOS_TRITON_CMD_SPL_FN|0x00);
 	res = TMD2771_i2c_master_operate(client, databuf, 0x1, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 1 err!\n");
 		goto EXIT_ERR;
 	}
 	
@@ -547,32 +550,36 @@ static int TMD2771_init_client(struct i2c_client *client)
 	if(obj->hw->polling_mode_ps == 0)
 	databuf[1] = 0x28;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 2 err!\n");		
 		goto EXIT_ERR;
 	}
 	
 	databuf[0] = TMD2771_CMM_ATIME;    
 	databuf[1] = 0xF6;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 3 err!\n");
 		goto EXIT_ERR;
 	}
 
 	databuf[0] = TMD2771_CMM_PTIME;    
 	databuf[1] = 0xFF;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 4 err!\n");
 		goto EXIT_ERR;
 	}
 
 	databuf[0] = TMD2771_CMM_WTIME;    
 	databuf[1] = 0xFC;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 5 err!\n");
 		goto EXIT_ERR;
 	}
 	/*for interrup work mode support -- by liaoxl.lenovo 12.08.2011*/
@@ -583,60 +590,68 @@ static int TMD2771_init_client(struct i2c_client *client)
 			databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;	
 			databuf[1] = (u8)(ps_cali.far_away & 0x00FF);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 6 err!\n");
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_LOW_THD_HIGH;	
 			databuf[1] = (u8)((ps_cali.far_away & 0xFF00) >> 8);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 7 err!\n");
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;	
 			databuf[1] = (u8)(ps_cali.close & 0x00FF);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 8 err!\n");
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_HIGH_THD_HIGH;	
 			databuf[1] = (u8)((ps_cali.close & 0xFF00) >> 8);;
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 9 err!\n");
 				goto EXIT_ERR;
 			}
 		}
 		else
 		{
 			databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;	
-			databuf[1] = (u8)(750 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low)) & 0x00FF);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 10 err!\n");
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_LOW_THD_HIGH;	
-			databuf[1] = (u8)((750 & 0xFF00) >> 8);
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_low)) & 0xFF00) >> 8);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 11 err!\n");
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;	
-			databuf[1] = (u8)(900 & 0x00FF);
+			databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high)) & 0x00FF);
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 12 err!\n");
 				goto EXIT_ERR;
 			}
 			databuf[0] = TMD2771_CMM_INT_HIGH_THD_HIGH;	
-			databuf[1] = (u8)((900 & 0xFF00) >> 8);;
+			databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_high)) & 0xFF00) >> 8);;
 			res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-			if(res <= 0)
+			if(res < 0)
 			{
+				APS_LOG(" TMD2771_init_client function 13 err!\n");
 				goto EXIT_ERR;
 			}
 
@@ -645,8 +660,9 @@ static int TMD2771_init_client(struct i2c_client *client)
 		databuf[0] = TMD2771_CMM_Persistence;
 		databuf[1] = 0x20;
 		res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-		if(res <= 0)
+		if(res < 0)
 		{
+			APS_LOG(" TMD2771_init_client function 14 err!\n");
 			goto EXIT_ERR;
 		}
 
@@ -655,8 +671,9 @@ static int TMD2771_init_client(struct i2c_client *client)
 	databuf[0] = TMD2771_CMM_CONFIG;    
 	databuf[1] = 0x00;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 15 err!\n");
 		goto EXIT_ERR;
 	}
 
@@ -664,8 +681,9 @@ static int TMD2771_init_client(struct i2c_client *client)
 	databuf[0] = TMD2771_CMM_PPCOUNT;    
 	databuf[1] = TMD2771_CMM_PPCOUNT_VALUE;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 16 err!\n");
 		goto EXIT_ERR;
 	}
 
@@ -673,8 +691,9 @@ static int TMD2771_init_client(struct i2c_client *client)
 	databuf[0] = TMD2771_CMM_CONTROL;    
 	databuf[1] = TMD2771_CMM_CONTROL_VALUE;
 	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
-	if(res <= 0)
+	if(res < 0)
 	{
+		APS_LOG(" TMD2771_init_client function 17 err!\n");
 		goto EXIT_ERR;
 	}
 	/*for interrup work mode support -- by liaoxl.lenovo 12.08.2011*/
@@ -716,7 +735,7 @@ int TMD2771_read_als(struct i2c_client *client, u16 *data)
 	
 	buffer[0]=TMD2771_CMM_C0DATA_L;
 	res = TMD2771_i2c_master_operate(client, buffer, 0x201, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -727,7 +746,7 @@ int TMD2771_read_als(struct i2c_client *client, u16 *data)
 
 	buffer[0]=TMD2771_CMM_C1DATA_L;
 	res = TMD2771_i2c_master_operate(client, buffer, 0x201, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -800,7 +819,7 @@ int TMD2771_read_als_ch0(struct i2c_client *client, u16 *data)
 //get adc channel 0 value
 	buffer[0]=TMD2771_CMM_C0DATA_L;
 	res = TMD2771_i2c_master_operate(client, buffer, 0x201, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -875,7 +894,7 @@ long TMD2771_read_ps(struct i2c_client *client, u16 *data)
 
 	buffer[0]=TMD2771_CMM_PDATA_L;
 	res = TMD2771_i2c_master_operate(client, buffer, 0x201, I2C_FLAG_READ);
-	if(res <= 0)
+	if(res < 0)
 	{
 		goto EXIT_ERR;
 	}
@@ -1004,7 +1023,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 #ifdef DEBUG_TMD2771
 		databuf[0]= TMD2771_CMM_ENABLE;
 		res = TMD2771_i2c_master_operate(obj->client, databuf, 0x101, I2C_FLAG_READ);
-		if(res <= 0)
+		if(res < 0)
 		{
 			goto EXIT_ERR;
 		}
@@ -1012,7 +1031,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 		
 		databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;
 		res = TMD2771_i2c_master_operate(obj->client, databuf, 0x201, I2C_FLAG_READ);
-		if(res <= 0)
+		if(res < 0)
 		{
 			goto EXIT_ERR;
 		}
@@ -1020,7 +1039,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 
 		databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;
 		res = TMD2771_i2c_master_operate(obj->client, databuf, 0x201, I2C_FLAG_READ);
-		if(res <= 0)
+		if(res < 0)
 		{
 			goto EXIT_ERR;
 		}
@@ -1031,7 +1050,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;	
 						databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low)) & 0x00FF);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1039,14 +1058,14 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_LOW_THD_HIGH;	
 						databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_low)) & 0xFF00) >> 8);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
 						databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;	
 						databuf[1] = (u8)(0x00FF);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1054,7 +1073,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_HIGH_THD_HIGH; 
 						databuf[1] = (u8)((0xFF00) >> 8);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1064,7 +1083,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;	
 						databuf[1] = (u8)(0 & 0x00FF);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1072,7 +1091,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_LOW_THD_HIGH;	
 						databuf[1] = (u8)((0 & 0xFF00) >> 8);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1080,7 +1099,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;	
 						databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high)) & 0x00FF);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1088,8 +1107,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 						databuf[0] = TMD2771_CMM_INT_HIGH_THD_HIGH; 
 						databuf[1] = (u8)(((atomic_read(&obj->ps_thd_val_high)) & 0xFF00) >> 8);
 						res = TMD2771_i2c_master_operate(obj->client, databuf, 0x2, I2C_FLAG_WRITE);
-						res = i2c_master_send(obj->client, databuf, 0x2);
-						if(res <= 0)
+						if(res < 0)
 						{
 							goto EXIT_ERR;
 						}
@@ -1099,7 +1117,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 		#ifdef DEBUG_TMD2771
 		databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;
 		res = TMD2771_i2c_master_operate(obj->client, databuf, 0x201, I2C_FLAG_READ);
-		if(res <= 0)
+		if(res < 0)
 		{
 			goto EXIT_ERR;
 		}
@@ -1107,7 +1125,7 @@ static void TMD2771_eint_work(struct work_struct *work)
 
 		databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;
 		res = TMD2771_i2c_master_operate(obj->client, databuf, 0x201, I2C_FLAG_READ);
-		if(res <= 0)
+		if(res < 0)
 		{
 			goto EXIT_ERR;
 		}
@@ -1120,11 +1138,11 @@ static void TMD2771_eint_work(struct work_struct *work)
 	}
 	
 	TMD2771_clear_intr(obj->client);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM); 
+	mt_eint_unmask(CUST_EINT_ALS_NUM); 
 	return;
 	EXIT_ERR:
 	TMD2771_clear_intr(obj->client);
-	mt65xx_eint_unmask(CUST_EINT_ALS_NUM); 
+	mt_eint_unmask(CUST_EINT_ALS_NUM); 
 	APS_ERR("i2c_transfer error = %d\n", res);
 	return;
 }
@@ -1152,6 +1170,48 @@ static int TMD2771_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static int set_psensor_threshold(struct i2c_client *client)
+{
+	struct TMD2771_priv *obj = i2c_get_clientdata(client); 
+	u8 databuf[3];    
+	int res = 0;
+	APS_ERR("set_psensor_threshold function high: 0x%x, low:0x%x\n",atomic_read(&obj->ps_thd_val_high),atomic_read(&obj->ps_thd_val_low));
+	
+	databuf[0] = TMD2771_CMM_INT_LOW_THD_LOW;	
+	databuf[1] = (u8)(atomic_read(&obj->ps_thd_val_low) & 0x00FF);
+	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res < 0)
+	{
+		APS_LOG(" set_psensor_threshold 1 err!\n");
+		return res;
+	}
+	databuf[0] = TMD2771_CMM_INT_LOW_THD_HIGH;	
+	databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_low) & 0xFF00) >> 8);
+	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res < 0)
+	{
+		APS_LOG(" set_psensor_threshold 2 err!\n");
+		return res;
+	}
+	databuf[0] = TMD2771_CMM_INT_HIGH_THD_LOW;	
+	databuf[1] = (u8)(atomic_read(&obj->ps_thd_val_high) & 0x00FF);
+	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res < 0)
+	{
+		APS_LOG(" set_psensor_threshold 3 err!\n");
+		return res;
+	}
+	databuf[0] = TMD2771_CMM_INT_HIGH_THD_HIGH; 
+	databuf[1] = (u8)((atomic_read(&obj->ps_thd_val_high) & 0xFF00) >> 8);;
+	res = TMD2771_i2c_master_operate(client, databuf, 0x2, I2C_FLAG_WRITE);
+	if(res < 0)
+	{
+		APS_LOG(" set_psensor_threshold 4 err!\n");
+		return res;
+	}
+
+	return 0;
+}
 /*----------------------------------------------------------------------------*/
 static long TMD2771_unlocked_ioctl(struct file *file, unsigned int cmd,
        unsigned long arg)
@@ -1163,6 +1223,8 @@ static long TMD2771_unlocked_ioctl(struct file *file, unsigned int cmd,
 	int dat;
 	uint32_t enable;
 	int ps_result;
+		int ps_cali;
+		int threshold[2];
 
 	switch (cmd)
 	{
@@ -1311,6 +1373,67 @@ static long TMD2771_unlocked_ioctl(struct file *file, unsigned int cmd,
 				goto err_out;
 			}			   
 			break;
+			case ALSPS_IOCTL_CLR_CALI:
+				if(copy_from_user(&dat, ptr, sizeof(dat)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				if(dat == 0)
+					obj->ps_cali = 0;
+				break;
+
+			case ALSPS_IOCTL_GET_CALI:
+				ps_cali = obj->ps_cali ;
+				if(copy_to_user(ptr, &ps_cali, sizeof(ps_cali)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
+
+			case ALSPS_IOCTL_SET_CALI:
+				if(copy_from_user(&ps_cali, ptr, sizeof(ps_cali)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+
+				obj->ps_cali = ps_cali;
+				break;
+
+			case ALSPS_SET_PS_THRESHOLD:
+				if(copy_from_user(threshold, ptr, sizeof(threshold)))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				APS_ERR("%s set threshold high: 0x%x, low: 0x%x\n", __func__, threshold[0],threshold[1]); 
+				atomic_set(&obj->ps_thd_val_high,  (threshold[0]+obj->ps_cali));
+				atomic_set(&obj->ps_thd_val_low,  (threshold[1]+obj->ps_cali));//need to confirm
+
+				set_psensor_threshold(obj->client);
+				
+				break;
+			case ALSPS_GET_PS_THRESHOLD_HIGH:
+				threshold[0] = atomic_read(&obj->ps_thd_val_high) - obj->ps_cali;
+				APS_ERR("%s get threshold high: 0x%x\n", __func__, threshold[0]); 
+				if(copy_to_user(ptr, &threshold[0], sizeof(threshold[0])))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
+				
+			case ALSPS_GET_PS_THRESHOLD_LOW:
+				threshold[0] = atomic_read(&obj->ps_thd_val_low) - obj->ps_cali;
+				APS_ERR("%s get threshold low: 0x%x\n", __func__, threshold[0]); 
+				if(copy_to_user(ptr, &threshold[0], sizeof(threshold[0])))
+				{
+					err = -EFAULT;
+					goto err_out;
+				}
+				break;
 			/*------------------------------------------------------------------------------------------*/
 		default:
 			APS_ERR("%s not supported = 0x%04x", __FUNCTION__, cmd);
@@ -1692,8 +1815,11 @@ static int TMD2771_i2c_probe(struct i2c_client *client, const struct i2c_device_
 	atomic_set(&obj->ps_cmd_val,  0xC1);
 	atomic_set(&obj->ps_thd_val_high,  obj->hw->ps_threshold_high);
 	atomic_set(&obj->ps_thd_val_low,  obj->hw->ps_threshold_low);
+	atomic_set(&obj->als_thd_val_high,  obj->hw->als_threshold_high);
+	atomic_set(&obj->als_thd_val_low,  obj->hw->als_threshold_low);
 	obj->enable = 0;
 	obj->pending_intr = 0;
+	obj->ps_cali = 0;
 	obj->als_level_num = sizeof(obj->hw->als_level)/sizeof(obj->hw->als_level[0]);
 	obj->als_value_num = sizeof(obj->hw->als_value)/sizeof(obj->hw->als_value[0]);  
 	/*Lenovo-sw chenlj2 add 2011-06-03,modified gain 16 to 1/5 accoring to actual thing */

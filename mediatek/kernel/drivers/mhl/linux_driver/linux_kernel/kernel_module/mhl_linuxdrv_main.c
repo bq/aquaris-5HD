@@ -667,6 +667,10 @@ static void __exit SiiMhlExit(void)
 #ifdef USE_PROC
     mhldrv_remove_proc();
 #endif
+#ifdef MDT_SUPPORT
+	mdt_deregister(); //MDT initialization; support dynamic input_dev loading.
+#endif
+
 	StopMhlTxDevice();
 	device_destroy(siiMhlClass, MKDEV(devMajor, 0));
     class_destroy(siiMhlClass);

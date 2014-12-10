@@ -33,7 +33,7 @@ typedef enum
 /* Display Assertion Layer API */
 
 unsigned int DAL_GetLayerSize(void);
-
+DAL_STATUS DAL_SetScreenColor(DAL_COLOR color);
 DAL_STATUS DAL_Init(unsigned int layerVA, unsigned int layerPA);
 DAL_STATUS DAL_SetColor(unsigned int fgColor, unsigned int bgColor);
 DAL_STATUS DAL_Clean(void);

@@ -54,6 +54,17 @@ FTABLE_SCENE_INDEP()
                 MtkCameraParameters::EFFECT_AQUA,   
                 MtkCameraParameters::EFFECT_WHITEBOARD, 
                 MtkCameraParameters::EFFECT_BLACKBOARD, 
+                #ifdef MTK_CAM_LOMO_SUPPORT
+                MtkCameraParameters::EFFECT_NASHVILLE,
+                MtkCameraParameters::EFFECT_HEFE,
+                MtkCameraParameters::EFFECT_VALENCIA ,
+                MtkCameraParameters::EFFECT_XPROII ,
+                MtkCameraParameters::EFFECT_LOFI,
+                MtkCameraParameters::EFFECT_SIERRA ,
+                MtkCameraParameters::EFFECT_KELVIN ,
+                MtkCameraParameters::EFFECT_WALDEN ,
+                MtkCameraParameters::EFFECT_F1977 ,
+                #endif
             )
         ), 
     )
@@ -163,29 +174,46 @@ FTABLE_SCENE_INDEP()
     //==========================================================================
 #if 1
     //  Video Snapshot
+#if (1 == VSS_SUPPORTED)
     FTABLE_CONFIG_AS_TYPE_OF_USER(
         KEY_AS_(MtkCameraParameters::KEY_VIDEO_SNAPSHOT_SUPPORTED), 
         SCENE_AS_DEFAULT_SCENE(
             ITEM_AS_DEFAULT_(MtkCameraParameters::TRUE), 
         ), 
     )
+#else
+    FTABLE_CONFIG_AS_TYPE_OF_USER(
+        KEY_AS_(MtkCameraParameters::KEY_VIDEO_SNAPSHOT_SUPPORTED), 
+        SCENE_AS_DEFAULT_SCENE(
+            ITEM_AS_DEFAULT_(MtkCameraParameters::FALSE), 
+        ), 
+    )
+#endif
 #endif
     //==========================================================================
 #if 1
     //  Video Stabilization (EIS)
+#if (1 == EIS_SUPPORTED)    
     FTABLE_CONFIG_AS_TYPE_OF_DEFAULT_SUPPORTED(
         KEY_AS_(MtkCameraParameters::KEY_VIDEO_STABILIZATION), 
         SCENE_AS_DEFAULT_SCENE(
             ITEM_AS_DEFAULT_(MtkCameraParameters::FALSE), 
-            ITEM_AS_SUPPORTED_(
-            #if 0
-                MtkCameraParameters::FALSE
-            #else
-                MtkCameraParameters::TRUE
-            #endif
+            ITEM_AS_SUPPORTED_(           
+                MtkCameraParameters::TRUE            
             )
         ), 
     )
+#else
+    FTABLE_CONFIG_AS_TYPE_OF_DEFAULT_SUPPORTED(
+        KEY_AS_(MtkCameraParameters::KEY_VIDEO_STABILIZATION), 
+        SCENE_AS_DEFAULT_SCENE(
+            ITEM_AS_DEFAULT_(MtkCameraParameters::FALSE), 
+            ITEM_AS_SUPPORTED_(            
+                MtkCameraParameters::FALSE
+            )
+        ), 
+    )
+#endif
 #endif
     //==========================================================================
 #if 1
@@ -228,9 +256,10 @@ FTABLE_SCENE_INDEP()
                 MtkCameraParameters::CAPTURE_MODE_FACE_BEAUTY, 
                 MtkCameraParameters::CAPTURE_MODE_CONTINUOUS_SHOT, 
                 MtkCameraParameters::CAPTURE_MODE_SMILE_SHOT, 
-                MtkCameraParameters::CAPTURE_MODE_BEST_SHOT, 
-                MtkCameraParameters::CAPTURE_MODE_EV_BRACKET_SHOT, 
-                MtkCameraParameters::CAPTURE_MODE_AUTO_PANORAMA_SHOT, 
+                MtkCameraParameters::CAPTURE_MODE_BEST_SHOT,
+                MtkCameraParameters::CAPTURE_MODE_AUTO_PANORAMA_SHOT,
+                MtkCameraParameters::CAPTURE_MODE_MAV_SHOT,
+                MtkCameraParameters::CAPTURE_MODE_ASD_SHOT,
             )
         ), 
     )
@@ -244,7 +273,7 @@ FTABLE_SCENE_INDEP()
             ITEM_AS_DEFAULT_(MtkCameraParameters::OFF), 
             ITEM_AS_VALUES_(
                 MtkCameraParameters::OFF, 
-                MtkCameraParameters::ON, 
+                //MtkCameraParameters::ON, 
             )
         ), 
     )

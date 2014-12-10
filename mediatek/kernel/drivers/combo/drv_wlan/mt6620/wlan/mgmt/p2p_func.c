@@ -1436,7 +1436,7 @@ p2pFuncValidateAuth (
         prAuthFrame = (P_WLAN_AUTH_FRAME_T)prSwRfb->pvHeader;
 
 
-        if (prP2pBssInfo->eCurrentOPMode != OP_MODE_ACCESS_POINT) {
+        if ((prP2pBssInfo->eCurrentOPMode != OP_MODE_ACCESS_POINT) || (prP2pBssInfo->eIntendOPMode != OP_MODE_NUM)) {
             /* We are not under AP Mode yet. */
             fgReplyAuth = FALSE;
             DBGLOG(P2P, WARN, ("Current OP mode is not under AP mode. (%d)\n", prP2pBssInfo->eCurrentOPMode));
@@ -1491,6 +1491,7 @@ p2pFuncValidateAuth (
             /* GROUP limit full. */
             /* P2P 3.2.8 */
             DBGLOG(P2P, WARN, ("Group Limit Full. (%d)\n", (INT_16)prP2pBssInfo->rStaRecOfClientList.u4NumElem));
+			bssRemoveStaRecFromClientList(prAdapter, prP2pBssInfo, prStaRec);
             cnmStaRecFree(prAdapter, prStaRec, FALSE);
             break;
         }
@@ -2277,6 +2278,8 @@ p2pFuncParseBeaconContent (
                                 (u2SubTypeVersion == VERSION_WPA)) {
                             kalP2PSetCipher(prAdapter->prGlueInfo, IW_AUTH_CIPHER_TKIP);
                             ucNewSecMode = TRUE;
+                            kalMemCopy(prP2pSpecificBssInfo->aucWpaIeBuffer, pucIE, IE_SIZE(pucIE));
+                            prP2pSpecificBssInfo->u2WpaIeLen = IE_SIZE(pucIE);
                         }
                         else if ((ucOuiType == VENDOR_OUI_TYPE_WPS)) {
                             kalP2PUpdateWSC_IE(prAdapter->prGlueInfo, 0, pucIE, IE_SIZE(pucIE));
@@ -2845,8 +2848,6 @@ p2pFuncProcessP2pProbeRsp (
                         }
 
                     }
-					
-
 
                     else {
                         if((prAdapter->prGlueInfo->prP2PInfo->u2VenderIELen+IE_SIZE(pucIEBuf))<512) {

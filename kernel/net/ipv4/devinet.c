@@ -748,9 +748,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 		goto out;
 	}
 
-    printk(KERN_INFO "[mtk_net_dev]devinet_ioctl cmd = 0x%x rtnl_lock++\n", cmd);
 	rtnl_lock();
-    printk(KERN_INFO "[mtk_net_dev]devinet_ioctl cmd = 0x%x rtnl_lock--\n", cmd);
 
 	ret = -ENODEV;
 	dev = __dev_get_by_name(net, ifr.ifr_name);

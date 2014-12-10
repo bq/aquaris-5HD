@@ -1,3 +1,37 @@
+/*
+ * MUSB OTG driver defines
+ *
+ * Copyright 2005 Mentor Graphics Corporation
+ * Copyright (C) 2005-2006 by Texas Instruments
+ * Copyright (C) 2006-2007 Nokia Corporation
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA
+ *
+ * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN
+ * NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
 #ifndef __MUSB_CORE_H__
 #define __MUSB_CORE_H__
 
@@ -6,51 +40,18 @@
 #include <linux/interrupt.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
-#include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb.h>
 #include <linux/usb/otg.h>
 #include <linux/musb/musb.h>
-#include <linux/time.h>
-
-
-#ifdef CONFIG_MT6589_FPGA
+#include <linux/wakelock.h>
+#include <linux/version.h>
 #include <mach/mt_typedefs.h>
-#else	/* CONFIG_REAL_CHIP */
-
-#if defined(MT6575)
-#include <mach/mt_typedefs.h>
-#endif
-
-#if defined(MT6577)
-#include <mach/mt_typedefs.h>
-#endif
-#endif
-/* Temp mark*/
-/* #define ENABLE_STORAGE_LOGGER */
-#ifdef ENABLE_STORAGE_LOGGER
-#include <mach/mt_storage_logger.h>
-#endif
-
-/*#define CONFIG_USB_MTK_HDRC_GADGET
-#define CONFIG_USB_MTK_OTG
-#define CONFIG_USB_MTK_HDRC
-#define CONFIG_USB_MTK_DEBUG_FS
-#define CONFIG_USB_MUSB_DEBUG
-*/
-
-typedef enum
-{
-	USB_SUSPEND = 0,
-	USB_UNCONFIGURED,
-	USB_CONFIGURED
-}usb_state_enum;
 
 
 #define SHARE_IRQ -1
-extern struct musb* mtk_musb;
 
 struct musb;
 struct musb_hw_ep;
@@ -67,20 +68,17 @@ extern volatile bool usb_is_host;
 #define MUSB_HWVERS_1900	0x784
 #define MUSB_HWVERS_2000	0x800
 #define MUSB_HUB_SUPPORT    0x4000
-#include <mach/mtk_musb.h>
+#include "mtk_musb.h"
 
 #include "musb_debug.h"
 #include "musb_dma.h"
 
 #include "musb_io.h"
-#include "musb_regs.h"
+#include <mach/mt_musb_reg.h>
 
 #include "musb_gadget.h"
 #include <linux/usb/hcd.h>
 #include "musb_host.h"
-#include <linux/semaphore.h>
-
-extern bool mtk_usb_power;
 
 #ifdef ENABLE_STORAGE_LOGGER
 #define USB_LOGGER(msg_id, func_name, ...) \
@@ -93,26 +91,11 @@ extern bool mtk_usb_power;
 #define USB_LOGGER(msg_id,func_name, args...) do{} while(0)
 #endif
 
-#ifdef CONFIG_USB_MTK_OTG
-
-#define	is_peripheral_enabled(musb)	(1)
-#define	is_host_enabled(musb)		(1)
-#define	is_otg_enabled(musb)		(1)
-
 /* NOTE:  otg and peripheral-only state machines start at B_IDLE.
  * OTG or host-only go to A_IDLE when ID is sensed.
  */
 #define is_peripheral_active(m)		(!(m)->is_host)
 #define is_host_active(m)		((m)->is_host)
-
-#else
-#define	is_peripheral_enabled(musb)	is_peripheral_capable()
-#define	is_host_enabled(musb)		is_host_capable()
-#define	is_otg_enabled(musb)		0
-
-#define	is_peripheral_active(musb)	is_peripheral_capable()
-#define	is_host_active(musb)		is_host_capable()
-#endif
 
 #ifdef CONFIG_PROC_FS
 #include <linux/fs.h>
@@ -120,10 +103,6 @@ extern bool mtk_usb_power;
 #endif
 
 /****************************** PERIPHERAL ROLE *****************************/
-
-#ifdef CONFIG_USB_MTK_HDRC_GADGET
-
-#define	is_peripheral_capable()	(1)
 
 extern irqreturn_t musb_g_ep0_irq(struct musb *);
 extern void musb_g_tx(struct musb *, u8);
@@ -134,44 +113,15 @@ extern void musb_g_resume(struct musb *);
 extern void musb_g_wakeup(struct musb *);
 extern void musb_g_disconnect(struct musb *);
 
-#else
-
-#define	is_peripheral_capable()	(0)
-
-static inline irqreturn_t musb_g_ep0_irq(struct musb *m) { return IRQ_NONE; }
-static inline void musb_g_reset(struct musb *m) {}
-static inline void musb_g_suspend(struct musb *m) {}
-static inline void musb_g_resume(struct musb *m) {}
-static inline void musb_g_wakeup(struct musb *m) {}
-static inline void musb_g_disconnect(struct musb *m) {}
-
-#endif
-
 /****************************** HOST ROLE ***********************************/
-
-#ifdef CONFIG_USB_MTK_HDRC_HCD
-
-#define	is_host_capable()	(1)
-
 extern irqreturn_t musb_h_ep0_irq(struct musb *);
 extern void musb_host_tx(struct musb *, u8);
 extern void musb_host_rx(struct musb *, u8);
 
-#else
-
-#define	is_host_capable()	(0)
-
-static inline irqreturn_t musb_h_ep0_irq(struct musb *m) { return IRQ_NONE; }
-static inline void musb_host_tx(struct musb *m, u8 e) {}
-static inline void musb_host_rx(struct musb *m, u8 e) {}
-
-#endif
-
-
 /****************************** CONSTANTS ********************************/
 
 #ifndef MUSB_C_NUM_EPS
-#define MUSB_C_NUM_EPS ((u8)9)
+#define MUSB_C_NUM_EPS ((u8)16)
 #endif
 
 #ifndef MUSB_MAX_END0_PACKET
@@ -198,6 +148,17 @@ enum musb_g_ep0_state {
 	MUSB_EP0_STAGE_ACKWAIT,		/* after zlp, before statusin */
 } __attribute__ ((packed));
 
+/*
+ * OTG protocol constants.  See USB OTG 1.3 spec,
+ * sections 5.5 "Device Timings" and 6.6.5 "Timers".
+ */
+#define OTG_TIME_A_WAIT_VRISE	100		/* msec (max) */
+#define OTG_TIME_A_WAIT_BCON	1100		/* min 1 second */
+#define OTG_TIME_A_AIDL_BDIS	200		/* min 200 msec */
+#define OTG_TIME_B_ASE0_BRST	100		/* min 3.125 ms */
+
+
+/*************************** REGISTER ACCESS ********************************/
 
 #define musb_ep_select(_mbase, _epnum) \
 	musb_writeb((_mbase), MUSB_INDEX, (_epnum))
@@ -227,6 +188,34 @@ void dumpTime(writeFunc_enum func, int epnum);
 
 /******************************** TYPES *************************************/
 
+/**
+ * struct musb_platform_ops - Operations passed to musb_core by HW glue layer
+ * @init:	turns on clocks, sets up platform-specific registers, etc
+ * @exit:	undoes @init
+ * @set_mode:	forcefully changes operating mode
+ * @try_ilde:	tries to idle the IP
+ * @vbus_status: returns vbus status if possible
+ * @set_vbus:	forces vbus status
+ * @adjust_channel_params: pre check for standard dma channel_program func
+ */
+struct musb_platform_ops {
+	int	(*init)(struct musb *musb);
+	int	(*exit)(struct musb *musb);
+
+	void	(*enable)(struct musb *musb);
+	void	(*disable)(struct musb *musb);
+
+	int	(*set_mode)(struct musb *musb, u8 mode);
+	void	(*try_idle)(struct musb *musb, unsigned long timeout);
+
+	int	(*vbus_status)(struct musb *musb);
+	void	(*set_vbus)(struct musb *musb, int on);
+
+	int	(*adjust_channel_params)(struct dma_channel *channel,
+				u16 packet_sz, u8 *mode,
+				dma_addr_t *dma_addr, u32 *len);
+};
+
 /*
  * struct musb_hw_ep - endpoint hardware (bidirectional)
  *
@@ -239,7 +228,7 @@ struct musb_hw_ep {
 
 	/* index in musb->endpoints[]  */
 	u8			epnum;
-	enum musb_ep_mode ep_mode;
+	enum musb_ep_mode       ep_mode;
 
 	/* hardware configuration, possibly dynamic */
 	bool			is_shared_fifo;
@@ -250,7 +239,8 @@ struct musb_hw_ep {
 
 	struct dma_channel	*tx_channel;
 	struct dma_channel	*rx_channel;
-#ifdef CONFIG_USB_MTK_HDRC_HCD
+
+	void __iomem		*target_regs;
 
 	/* currently scheduled peripheral endpoint */
 	struct musb_qh		*in_qh;
@@ -258,31 +248,20 @@ struct musb_hw_ep {
 
 	u8			rx_reinit;
 	u8			tx_reinit;
-#endif
 
-#ifdef CONFIG_USB_MTK_HDRC_GADGET
 	/* peripheral side */
 	struct musb_ep		ep_in;			/* TX */
 	struct musb_ep		ep_out;			/* RX */
-#endif
 };
 
 static inline struct musb_request *next_in_request(struct musb_hw_ep *hw_ep)
 {
-#ifdef CONFIG_USB_MTK_HDRC_GADGET
 	return next_request(&hw_ep->ep_in);
-#else
-	return NULL;
-#endif
 }
 
 static inline struct musb_request *next_out_request(struct musb_hw_ep *hw_ep)
 {
-#ifdef CONFIG_USB_MTK_HDRC_GADGET
 	return next_request(&hw_ep->ep_out);
-#else
-	return NULL;
-#endif
 }
 
 struct musb_csr_regs {
@@ -298,7 +277,6 @@ struct musb_csr_regs {
 struct musb_context_registers {
 
 	u8 power;
-	u16 intrtxe, intrrxe;
 	u8 intrusbe;
 	u16 frame;
 	u8 index, testmode;
@@ -314,27 +292,32 @@ struct musb_context_registers {
  * struct musb - Driver instance data.
  */
 struct musb {
-	/* user context lock, to seperate gadget from OTG flow */
 	struct semaphore musb_lock;
-	struct musb_context_registers context;
 	/* device lock */
 	spinlock_t		lock;
+
+	const struct musb_platform_ops *ops;
+	struct musb_context_registers context;
+
 	irqreturn_t		(*isr)(int, void *);
+	struct work_struct	irq_work;
+	struct work_struct	otg_notifier_work;
 	u16			hwvers;
 	struct delayed_work	id_pin_work;
 
 	struct musb_fifo_cfg * fifo_cfg;
-	unsigned		fifo_cfg_size;
-    struct musb_fifo_cfg * fifo_cfg_host;
-	unsigned		fifo_cfg_host_size;
+	unsigned	       fifo_cfg_size;
+	struct musb_fifo_cfg * fifo_cfg_host;
+	unsigned	       fifo_cfg_host_size;
 	u32 fifo_size;
 
+	u16			intrrxe;
+	u16			intrtxe;
 /* this hub status bit is reserved by USB 2.0 and not seen by usbcore */
 #define MUSB_PORT_STAT_RESUME	(1 << 31)
 
 	u32			port1_status;
 
-#ifdef CONFIG_USB_MTK_HDRC_HCD
 	unsigned long		rh_timer;
 
 	enum musb_h_ep0_state	ep0_stage;
@@ -351,12 +334,8 @@ struct musb {
 	struct list_head	in_bulk;	/* of musb_qh */
 	struct list_head	out_bulk;	/* of musb_qh */
 
-#endif
-
-	/* called with IRQs blocked; ON/nonzero implies starting a session,
-	 * and waiting at least a_wait_vrise_tmout.
-	 */
-	void			(*board_set_vbus)(struct musb *, int is_on);
+	struct timer_list	otg_timer;
+	struct notifier_block	nb;
 
 	struct dma_controller	*dma_controller;
 
@@ -369,31 +348,36 @@ struct musb {
 	u16			int_rx;
 	u16			int_tx;
 
+	struct usb_phy		*xceiv;
+	u8			xceiv_event;
+
 	int nIrq;
 	int dma_irq;
-	int id_pin_irq;
+	unsigned		irq_wake:1;
 
 	struct musb_hw_ep	 endpoints[MUSB_C_NUM_EPS];
 #define control_ep		endpoints
 
 #define VBUSERR_RETRY_COUNT	3
 	u16			vbuserr_retry;
+	u16 epmask;
 	u8 nr_endpoints;
 
+	int			(*board_set_power)(int state);
+
+	u8			min_power;	/* vbus for periph, in mA/2 */
+
 	bool			is_host;
-	bool            power;
-    bool            usb_if;
+	bool	in_ipo_off;
+
+	int			a_wait_bcon;	/* VBUS timeout in msecs */
+	unsigned long		idle_timeout;	/* Next timeout in jiffies */
+
 	/* active means connected and not suspended */
 	unsigned		is_active:1;
 
-	/*ready means musb and gadget is ready*/
-	bool        is_ready:1;
-
-	/*indicated device is in IPO shutdown state*/
-	bool	in_ipo_off;
-
 	unsigned is_multipoint:1;
-	unsigned ignore_disconnect:1;
+	unsigned ignore_disconnect:1;	/* during bus resets */
 
 	unsigned		hb_iso_rx:1;	/* high bandwidth iso rx? */
 	unsigned		hb_iso_tx:1;	/* high bandwidth iso tx? */
@@ -407,7 +391,6 @@ struct musb {
 #define	can_bulk_combine(musb,type) \
 	(((type) == USB_ENDPOINT_XFER_BULK) && (musb)->bulk_combine)
 
-#ifdef CONFIG_USB_MTK_HDRC_GADGET
 	/* is_suspended means USB B_PERIPHERAL suspend */
 	unsigned		is_suspended:1;
 
@@ -428,39 +411,48 @@ struct musb {
 	u8			address;
 	u8			test_mode_nr;
 	u16			ackpend;		/* ep0 */
-	bool        get_desc_cmd;
-	u8  next_ep_num_in;
-	u8  next_ep_num_out;
-	u16 fifo_addr;
 	enum musb_g_ep0_state	ep0_state;
 	struct usb_gadget	g;			/* the gadget */
 	struct usb_gadget_driver *gadget_driver;	/* its driver */
 	struct wake_lock usb_lock;
 
-#endif
+	/*
+	 * FIXME: Remove this flag.
+	 *
+	 * This is only added to allow Blackfin to work
+	 * with current driver. For some unknown reason
+	 * Blackfin doesn't work with double buffering
+	 * and that's enabled by default.
+	 *
+	 * We added this flag to forcefully disable double
+	 * buffering until we get it working.
+	 */
+	unsigned                double_buffer_not_ok:1;
+
+	struct musb_hdrc_config	*config;
 
 #ifdef MUSB_CONFIG_PROC_FS
 	struct proc_dir_entry *proc_entry;
 #endif
+	int			xceiv_old_state;
+#ifdef CONFIG_DEBUG_FS
+	struct dentry		*debugfs_root;
+#endif
+	bool power;
+	bool is_ready:1;
+	bool usb_if;
+	u16 fifo_addr;
 };
 
-
-static inline void musb_set_vbus(struct musb *musb, int is_on)
-{
-	musb->board_set_vbus(musb, is_on);
-}
-
-#ifdef CONFIG_USB_MTK_HDRC_GADGET
 static inline struct musb *gadget_to_musb(struct usb_gadget *g)
 {
 	return container_of(g, struct musb, g);
 }
-#endif
 
 static inline int musb_read_fifosize(struct musb *musb,
 		struct musb_hw_ep *hw_ep, u8 epnum)
 {
-	void *mbase = musb->mregs;
+	void __iomem *mbase = musb->mregs;
 	u8 reg = 0;
 
 	/* read from core using indexed model */
@@ -470,6 +462,7 @@ static inline int musb_read_fifosize(struct musb *musb,
 		return -ENODEV;
 
 	musb->nr_endpoints++;
+	musb->epmask |= (1 << epnum);
 
 	hw_ep->max_packet_sz_tx = 1 << (reg & 0x0f);
 
@@ -500,37 +493,81 @@ extern const char musb_driver_name[];
 
 extern void musb_start(struct musb *musb);
 extern void musb_stop(struct musb *musb);
+extern int musb_get_id(struct device *dev, gfp_t gfp_mask);
+extern void musb_put_id(struct device *dev, int id);
 
 extern void musb_write_fifo(struct musb_hw_ep *ep, u16 len, const u8 *src);
 extern void musb_read_fifo(struct musb_hw_ep *ep, u16 len, u8 *dst);
 
 extern void musb_load_testpacket(struct musb *);
-
+extern void musb_generic_disable(struct musb *);
 extern irqreturn_t musb_interrupt(struct musb *);
-
-extern void musb_platform_enable(struct musb *musb);
-extern void musb_platform_disable(struct musb *musb);
-extern void musb_generic_disable(struct musb *musb);
-extern void musb_platform_reset(struct musb *musb);
-extern void musb_sync_with_bat(struct musb *musb,int usb_state);
-extern int __init musb_platform_init(struct musb *musb);
-extern int musb_platform_exit(struct musb *musb);
-
-extern bool musb_is_host(void);
-extern void switch_int_to_device(void);
-extern void switch_int_to_host(void);
-extern void switch_int_to_host_and_mask(void);
-extern void otg_int_init(void);
-extern void musb_id_pin_interrup(void);
-extern void musb_phy_reset(void);
-
-#if defined(CONFIG_MT6575T_FPGA) || defined(CONFIG_MT6585_FPGA) || defined(CONFIG_MT6589_FPGA) || defined(CONFIG_MT6582_FPGA)
-extern int add_usb_i2c_driver();
-#endif
-
-extern u8 musb_read_clear_dma_interrupt(struct musb *musb);
-extern void musb_read_clear_generic_interrupt(struct musb *musb);
-extern irqreturn_t generic_interrupt(int irq, void *__hci);
 extern irqreturn_t dma_controller_irq(int irq, void *private_data);
+
+extern void musb_hnp_stop(struct musb *musb);
+
+static inline void musb_platform_set_vbus(struct musb *musb, int is_on)
+{
+	if (musb->ops->set_vbus)
+		musb->ops->set_vbus(musb, is_on);
+}
+
+static inline void musb_platform_enable(struct musb *musb)
+{
+	if (musb->ops->enable)
+		musb->ops->enable(musb);
+}
+
+static inline void musb_platform_disable(struct musb *musb)
+{
+	if (musb->ops->disable)
+		musb->ops->disable(musb);
+}
+
+static inline int musb_platform_set_mode(struct musb *musb, u8 mode)
+{
+	if (!musb->ops->set_mode)
+		return 0;
+
+	return musb->ops->set_mode(musb, mode);
+}
+
+static inline void musb_platform_try_idle(struct musb *musb,
+		unsigned long timeout)
+{
+	if (musb->ops->try_idle)
+		musb->ops->try_idle(musb, timeout);
+}
+
+static inline int musb_platform_get_vbus_status(struct musb *musb)
+{
+	if (!musb->ops->vbus_status)
+		return 0;
+
+	return musb->ops->vbus_status(musb);
+}
+
+static inline int musb_platform_init(struct musb *musb)
+{
+	if (!musb->ops->init)
+		return -EINVAL;
+
+	return musb->ops->init(musb);
+}
+
+static inline int musb_platform_exit(struct musb *musb)
+{
+	if (!musb->ops->exit)
+		return -EINVAL;
+
+	return musb->ops->exit(musb);
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
+static inline const char *otg_state_string(enum usb_otg_state state)
+{
+	return usb_otg_state_string(state);
+}
+#endif
 
 #endif	/* __MUSB_CORE_H__ */

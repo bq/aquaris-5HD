@@ -13,7 +13,14 @@ typedef struct
     unsigned char Sleep[7];           // Sleep mode configuration
     unsigned char BtFTR[2];           // Other feature setting
     unsigned char TxPWOffset[3];      // TX power channel offset compensation
-} ap_nvram_btradio_mt6610_struct;
+    unsigned char CoexAdjust[6];      // BT/WIFI coexistence performance adjustment
+    unsigned char Reserved1[2];       // Reserved
+    unsigned char Reserved2[2];       // Reserved
+    unsigned char Reserved3[4];       // Reserved
+    unsigned char Reserved4[4];       // Reserved
+    unsigned char Reserved5[8];       // Reserved
+    unsigned char Reserved6[8];       // Reserved
+} ap_nvram_btradio_struct, ap_nvram_btradio_mt6610_struct;
 #else
 // MT661x is phased out, current for MT662x
 typedef struct
@@ -34,11 +41,11 @@ typedef struct
     unsigned char Reserved2[2];       // Reserved
     unsigned char Reserved3[4];       // Reserved
     unsigned char Reserved4[16];      // Reserved
-} ap_nvram_btradio_mt6610_struct;
+} ap_nvram_btradio_struct, ap_nvram_btradio_mt6610_struct;
 #endif
 
 //the record size and number of bt nvram file
-#define CFG_FILE_BT_ADDR_REC_SIZE    sizeof(ap_nvram_btradio_mt6610_struct)
+#define CFG_FILE_BT_ADDR_REC_SIZE    sizeof(ap_nvram_btradio_struct)
 #define CFG_FILE_BT_ADDR_REC_TOTAL   1
 
 #endif

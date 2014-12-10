@@ -632,6 +632,55 @@ DPI_STATUS DPI1_ConfigHDMI()
 }
 EXPORT_SYMBOL(DPI1_ConfigHDMI);
 
+DPI_STATUS DPI1_ConfigBG(BOOL enable, UINT32 BG_W, UINT32 GB_H)
+{
+    if(enable = false)
+    {
+        DPI_REG_CNTL pol = DPI1_REG->CNTL;
+        pol.DPI_BG_EN = 0;
+        OUTREG32(&DPI1_REG->CNTL, AS_UINT32(&pol));
+        return DPI_STATUS_OK;
+    }
+    
+    if((BG_W == 0) || (GB_H == 0))
+    {
+        return DPI_STATUS_OK;
+    }
+        
+    DPI_REG_CNTL pol = DPI1_REG->CNTL;
+    pol.DPI_BG_EN = 1;
+    OUTREG32(&DPI1_REG->CNTL, AS_UINT32(&pol));
+
+    DPI_REG_BG_HCNTL pol2 = DPI1_REG->BG_HCNTL;
+    pol2.BG_RIGHT = BG_W/2;
+    pol2.BG_LEFT = BG_W/2;
+    OUTREG32(&DPI1_REG->BG_HCNTL, AS_UINT32(&pol2));
+
+    DPI_REG_BG_VCNTL pol3 = DPI1_REG->BG_VCNTL;
+    pol3.BG_BOT = GB_H/2;
+    pol3.BG_TOP = GB_H/2;
+    OUTREG32(&DPI1_REG->BG_VCNTL, AS_UINT32(&pol3));
+
+    DPI_REG_BG_COLOR pol4 = DPI1_REG->BG_COLOR;
+    pol4.BG_B = 0;
+    pol4.BG_G = 0;
+    pol4.BG_R = 0;
+    OUTREG32(&DPI1_REG->BG_COLOR, AS_UINT32(&pol4));
+    
+    return DPI_STATUS_OK;
+}
+EXPORT_SYMBOL(DPI1_ConfigBG);
+
+DPI_STATUS DPI1_ConfigInRBSwap(BOOL enable)
+{
+    DPI_REG_CNTL pol = DPI1_REG->CNTL;
+	 
+    pol.IN_RB_SWAP = enable ? 1 : 0;
+    OUTREG32(&DPI1_REG->CNTL, AS_UINT32(&pol));
+    
+    return DPI_STATUS_OK;
+}
+EXPORT_SYMBOL(DPI1_ConfigInRBSwap);
 
 DPI_STATUS DPI1_ConfigDataEnable(DPI_POLARITY polarity)
 {

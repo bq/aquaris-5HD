@@ -568,6 +568,9 @@ int usb_match_one_id(struct usb_interface *interface,
 	    (id->bInterfaceProtocol != intf->desc.bInterfaceProtocol))
 		return 0;
 
+	if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_NUMBER) &&
+	    (id->bInterfaceNumber != intf->desc.bInterfaceNumber))
+		return 0;
 	return 1;
 }
 EXPORT_SYMBOL_GPL(usb_match_one_id);
@@ -1023,8 +1026,12 @@ static int usb_suspend_device(struct usb_device *udev, pm_message_t msg)
 
 	/* For devices that don't have a driver, we do a generic suspend. */
 	if (udev->dev.driver)
+	{
+		MYDBG("");	
 		udriver = to_usb_device_driver(udev->dev.driver);
+	}
 	else {
+		MYDBG("");	
 		udev->do_remote_wakeup = 0;
 		udriver = &usb_generic_driver;
 	}
@@ -1059,8 +1066,10 @@ static int usb_resume_device(struct usb_device *udev, pm_message_t msg)
 	if (udev->quirks & USB_QUIRK_RESET_RESUME)
 		udev->reset_resume = 1;
 
+	MYDBG("");	
 	udriver = to_usb_device_driver(udev->dev.driver);
 	status = udriver->resume(udev, msg);
+	MYDBG("");	
 
  done:
 	dev_vdbg(&udev->dev, "%s: status %d\n", __func__, status);
@@ -1167,6 +1176,8 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i = 0, n = 0;
 	struct usb_interface	*intf;
+	
+	MYDBG("");	
 
 	if (udev->state == USB_STATE_NOTATTACHED ||
 			udev->state == USB_STATE_SUSPENDED)
@@ -1187,6 +1198,7 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
 		}
 	}
 	if (status == 0) {
+		MYDBG("");	
 		status = usb_suspend_device(udev, msg);
 
 		/*
@@ -1246,16 +1258,21 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i;
 	struct usb_interface	*intf;
+	MYDBG("");	
 
 	if (udev->state == USB_STATE_NOTATTACHED) {
 		status = -ENODEV;
 		goto done;
 	}
+	MYDBG("");	
 	udev->can_submit = 1;
 
 	/* Resume the device */
 	if (udev->state == USB_STATE_SUSPENDED || udev->reset_resume)
+	{
+		MYDBG("");	
 		status = usb_resume_device(udev, msg);
+	}
 
 	/* Resume the interfaces */
 	if (status == 0 && udev->actconfig) {
@@ -1669,6 +1686,7 @@ int usb_runtime_suspend(struct device *dev)
 	struct usb_device	*udev = to_usb_device(dev);
 	int			status;
 
+	MYDBG("");	
 	/* A USB device can be suspended if it passes the various autosuspend
 	 * checks.  Runtime suspend for a USB device means suspending all the
 	 * interfaces and then the device itself.
@@ -1676,17 +1694,25 @@ int usb_runtime_suspend(struct device *dev)
 	if (autosuspend_check(udev) != 0)
 		return -EAGAIN;
 
+	MYDBG("");	
 	status = usb_suspend_both(udev, PMSG_AUTO_SUSPEND);
 
 	/* Allow a retry if autosuspend failed temporarily */
 	if (status == -EAGAIN || status == -EBUSY)
+	{
+		MYDBG("");	
 		usb_mark_last_busy(udev);
+	}
 
 	/* The PM core reacts badly unless the return code is 0,
 	 * -EAGAIN, or -EBUSY, so always return -EBUSY on an error.
 	 */
 	if (status != 0)
+	{
+		MYDBG("");	
 		return -EBUSY;
+	}
+	MYDBG("");	
 	return status;
 }
 
@@ -1694,11 +1720,14 @@ int usb_runtime_resume(struct device *dev)
 {
 	struct usb_device	*udev = to_usb_device(dev);
 	int			status;
+	
+	MYDBG("");	
 
 	/* Runtime resume for a USB device means resuming both the device
 	 * and all its interfaces.
 	 */
 	status = usb_resume_both(udev, PMSG_AUTO_RESUME);
+	MYDBG("");	
 	return status;
 }
 

@@ -21,13 +21,13 @@
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
-#ifdef MT6575
+
 #include "tpd_custom_GT813.h"
-#include <mach/mt6575_pm_ldo.h>
-#include <mach/mt6575_typedefs.h>
-#include <mach/mt6575_boot.h>
-#include <mach/mt6575_gpt.h>
-#endif
+#include <mach/mt_pm_ldo.h>
+#include <mach/mt_typedefs.h>
+#include <mach/mt_boot.h>
+#include <mach/mt_gpt.h>
+
 #include "tpd.h"
 #include <cust_eint.h>
 #include <linux/jiffies.h>
@@ -61,6 +61,7 @@ static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
 static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
+#if 0
 extern void mt65xx_eint_unmask(unsigned int line);
 extern void mt65xx_eint_mask(unsigned int line);
 extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
@@ -68,7 +69,7 @@ extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
 extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
                                      kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
                                      kal_bool auto_umask);
-
+#endif
 #define TPD_OK 0
 
 #define TPD_CONFIG_REG_BASE           0xF80
@@ -416,7 +417,7 @@ static void tpd_esd_check_func(struct work_struct *work)
     }
 
     if(tpd_halt) {
-		mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+		mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
     } else {
         queue_delayed_work(tpd_esd_check_workqueue, &tpd_esd_check_work, 1000);
     }
@@ -641,36 +642,24 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
 #ifdef ESD_PROTECT
 	int ret;
 #endif
-#ifdef MT6573
-#else
+
     //power on, need confirm with SA
 #ifdef TPD_POWER_SOURCE_CUSTOM
 		hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_2800, "TP");
 #else
 		hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
 #endif
+
 #ifdef TPD_POWER_SOURCE_1800
 		hwPowerOn(TPD_POWER_SOURCE_1800, VOL_1800, "TP");
 #endif
-#endif    
+   
     // set deep sleep off
     mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
     mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
     mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);  
     msleep(10);  
-#ifdef MT6573
-    // power down CTP
-    mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_EN_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_EN_PIN, GPIO_OUT_ZERO);
-    msleep(10);
-
-    // power on CTP
-    mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_EN_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_EN_PIN, GPIO_OUT_ONE);
-    msleep(10);
-#endif    
+ 
      
     memset( &tpd_info, 0, sizeof( struct tpd_info_t ) );
    // i2c_write_dummy( client, TPD_HANDSHAKING_START_REG );
@@ -761,11 +750,11 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     mt_set_gpio_pull_enable(GPIO_CTP_EINT_PIN, GPIO_PULL_DISABLE);
     //mt_set_gpio_pull_select(GPIO_CTP_EINT_PIN, GPIO_PULL_UP);
 
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    //mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
+    //mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
     //mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_POLARITY_HIGH, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_TYPE, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 
     mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
 
@@ -833,7 +822,7 @@ static void tpd_up(int x, int y, int id)
     //input_report_abs(tpd->dev, ABS_MT_POSITION_X, x);
     //input_report_abs(tpd->dev, ABS_MT_POSITION_Y, y);
     /* track id Start 0 */
-   // input_report_abs(tpd->dev, ABS_MT_TRACKING_ID, id);
+    //input_report_abs(tpd->dev, ABS_MT_TRACKING_ID, id);
     input_mt_sync(tpd->dev);
     TPD_EM_PRINT(x, y, x, y, id, 0);
 	//add by hupeng 120216 for ftm ,already report key_value ,so don't use tpd_button
@@ -1076,7 +1065,7 @@ static void tpd_suspend( struct early_suspend *h )
   //  i2c_write_dummy( i2c_client, TPD_HANDSHAKING_START_REG );
     i2c_write_bytes( i2c_client, TPD_POWER_MODE_REG, &mode, 1 );
     i2c_write_dummy( i2c_client, TPD_HANDSHAKING_END_REG );    
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 
 #ifdef ESD_PROTECT
     flush_workqueue(tpd_esd_check_workqueue);
@@ -1108,7 +1097,7 @@ static void tpd_resume( struct early_suspend *h )
     mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_EINT);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
 
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
 
     tpd_halt = 0;
     TPD_DMESG(TPD_DEVICE " tpd_resume end \n" ); 	    

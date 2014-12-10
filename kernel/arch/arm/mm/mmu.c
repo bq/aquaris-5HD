@@ -31,6 +31,7 @@
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <mach/mtk_memcfg.h>
 
 #include "mm.h"
 
@@ -497,7 +498,7 @@ static void __init build_mem_type_table(void)
 #endif
 
 	for (i = 0; i < 16; i++) {
-		unsigned long v = pgprot_val(protection_map[i]);
+		pteval_t v = pgprot_val(protection_map[i]);
 		protection_map[i] = __pgprot(v | user_pgprot);
 	}
 
@@ -805,9 +806,6 @@ void __init iotable_init(struct map_desc *io_desc, int nr)
 	}
 }
 
-//Update Patch from Google
-//https://android.googlesource.com/kernel/common/+/937bff779cd840aca9f74dd7f2d43dafad3979bb%5E..937bff779cd840aca9f74dd7f2d43dafad3979bb/#F0
-
 #ifndef CONFIG_ARM_LPAE
 
 /*
@@ -830,7 +828,7 @@ static void __init pmd_empty_section_gap(unsigned long addr)
 	vm = early_alloc_aligned(sizeof(*vm), __alignof__(*vm));
 	vm->addr = (void *)addr;
 	vm->size = SECTION_SIZE;
-	vm->flags = VM_IOREMAP | VM_ARM_STATIC_MAPPING;
+	vm->flags = VM_IOREMAP | VM_ARM_EMPTY_MAPPING;
 	vm->caller = pmd_empty_section_gap;
 	vm_area_add_early(vm);
 }
@@ -843,7 +841,7 @@ static void __init fill_pmd_gaps(void)
 
 	/* we're still single threaded hence no lock needed here */
 	for (vm = vmlist; vm; vm = vm->next) {
-		if (!(vm->flags & VM_ARM_STATIC_MAPPING))
+		if (!(vm->flags & (VM_ARM_STATIC_MAPPING | VM_ARM_EMPTY_MAPPING)))
 			continue;
 		addr = (unsigned long)vm->addr;
 		if (addr < next)
@@ -880,7 +878,6 @@ static void __init fill_pmd_gaps(void)
 #else
 #define fill_pmd_gaps() do { } while (0)
 #endif
-
 
 static void * __initdata vmalloc_min =
 	(void *)(VMALLOC_END - (240 << 20) - VMALLOC_OFFSET);
@@ -1163,9 +1160,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	 */
 	if (mdesc->map_io)
 		mdesc->map_io();
-        //Update Patch from Google
-        //https://android.googlesource.com/kernel/common/+/937bff779cd840aca9f74dd7f2d43dafad3979bb%5E..937bff779cd840aca9f74dd7f2d43dafad3979bb/#F0
-        fill_pmd_gaps();
+	fill_pmd_gaps();
 
 	/*
 	 * Finally flush the caches and tlb to ensure that we're in a
@@ -1197,6 +1192,10 @@ static void __init map_lowmem(void)
 	for_each_memblock(memory, reg) {
 		start = reg->base;
 		end = start + reg->size;
+                MTK_MEMCFG_LOG_AND_PRINTK(KERN_ALERT"[PHY layout]kernel   :   0x%08llx - 0x%08llx (0x%08llx)\n",
+                      (unsigned long long)start,
+                      (unsigned long long)end - 1,
+                      (unsigned long long)reg->size);
 
 		if (end > lowmem_limit)
 			end = lowmem_limit;
@@ -1208,10 +1207,10 @@ static void __init map_lowmem(void)
 		map.length = end - start;
 		map.type = MT_MEMORY;
 
-                printk(KERN_ALERT"creating mapping start pfn: %ld @ 0x%08lx "
-                        ", end: %ld @ 0x%08lx\n",
-                        map.pfn, map.virtual,
-                       __phys_to_pfn(end), __phys_to_virt(end));
+                printk(KERN_ALERT"creating mapping start pa: 0x%08llx @ 0x%08llx "
+                        ", end pa: 0x%08llx @ 0x%08llx\n",
+                       (unsigned long long)start, (unsigned long long)map.virtual,
+                       (unsigned long long)end, (unsigned long long)__phys_to_virt(end));
 		create_mapping(&map, false);
 	}
 

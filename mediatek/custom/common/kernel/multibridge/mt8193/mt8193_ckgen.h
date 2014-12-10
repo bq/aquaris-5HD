@@ -3,7 +3,7 @@
 
 /*
 
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/fb.h>
@@ -38,7 +38,7 @@
 #include <asm/uaccess.h>
 #include <linux/slab.h>
 
-#include <linux/autoconf.h>
+#include <generated/autoconf.h>
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/init.h>
@@ -67,6 +67,9 @@
 */
 
 #define MT8193_CKGEN_VFY 1
+
+#define MT8193_DISABLE_DCXO 0
+
 
 #define CKGEN_IOW(num, dtype)     _IOW('H', num, dtype)
 #define CKGEN_IOR(num, dtype)     _IOR('H', num, dtype)
@@ -160,6 +163,7 @@
 
 #define REG_RW_PLLGP_ANACFG0              0x34c
 #define PLLGP_ANACFG0_PLL1_RESERVED             1
+#define PLLGP_ANACFG0_PLL1_NFIPLL_EN      (1U<<1)
 #define PLLGP_ANACFG0_PLL1_EN             (1U<<31)
 
 
@@ -170,6 +174,30 @@
 #define REG_RW_DCXO_ANACFG9              0x388
 #define DCXO_ANACFG9_BUS_CK_SOURCE_SEL_SHIFT   9
 #define DCXO_ANACFG9_BUS_CK_SOURCE_SEL_MASK    0x7
+#define DCX0_ANACFG9_VALUE               0x801025  
+
+
+/* DCXO */
+
+#define REG_RW_DCXO_ANACFG2              0x308
+#define DCXO_ANACFG2_LDO4_EN             (1U<<2)
+#define DCXO_ANACFG2_LDO4_MAN_EN         (1U<<3)
+#define DCXO_ANACFG2_LDO3_EN             (1U<<4)
+#define DCXO_ANACFG2_LDO3_MAN_EN         (1U<<5)
+#define DCXO_ANACFG2_LDO2_EN             (1U<<6)
+#define DCXO_ANACFG2_LDO2_MAN_EN         (1U<<7)
+#define DCXO_ANACFG2_LDO1_EN             (1U<<8)
+#define DCXO_ANACFG2_LDO1_MAN_EN         (1U<<9)
+#define DCXO_ANACFG2_PO_MAN              (1U<<29)
+
+
+
+
+#define REG_RW_DCXO_ANACFG4              0x370
+#define DCXO_ANACFG4_BT_MAN             (1U<<18)
+#define DCXO_ANACFG4_EXT2_MAN           (1U<<19)
+#define DCXO_ANACFG4_EXT1_MAN           (1U<<20)
+
 
 
 

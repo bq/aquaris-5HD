@@ -16,6 +16,7 @@
 #include <asm/hwcap.h>
 #include <asm/pgtable-hwdef.h>
 #include <asm/pgtable.h>
+#include <asm/vfpmacros.h>
 
 #include "proc-macros.S"
 
@@ -94,7 +95,7 @@ ENDPROC(cpu_v7_dcache_clean_area)
 .equ	cpu_v7_suspend_size, 4 * 8
 #ifdef CONFIG_ARM_CPU_SUSPEND
 ENTRY(cpu_v7_do_suspend)
-	stmfd	sp!, {r4 - r10, lr}
+	stmfd	sp!, {r4 - r11, lr}
 	mrc	p15, 0, r4, c13, c0, 0	@ FCSE/PID
 	mrc	p15, 0, r5, c13, c0, 3	@ User r/o thread ID
 	stmia	r0!, {r4 - r5}
@@ -105,7 +106,7 @@ ENTRY(cpu_v7_do_suspend)
 	mrc	p15, 0, r9, c1, c0, 1	@ Auxiliary control register
 	mrc	p15, 0, r10, c1, c0, 2	@ Co-processor access control
 	stmia	r0, {r6 - r11}
-	ldmfd	sp!, {r4 - r10, pc}
+	ldmfd	sp!, {r4 - r11, pc}
 ENDPROC(cpu_v7_do_suspend)
 
 ENTRY(cpu_v7_do_resume)
@@ -153,6 +154,29 @@ ENDPROC(cpu_v7_do_resume)
  *	It is assumed that:
  *	- cache type register is implemented
  */
+        
+    @mrc    p15, 0, r10, c1, c0, 1
+    @orr    r10, r10, #1 << 28
+    @mcr    p15, 0, r10, c1, c0, 1
+
+    @stmfd sp!, {r1, r5}
+	@VFPFMRX	r1, FPEXC		@ Is the VFP enabled?
+	@orr	r1, r1, #FPEXC_EN	@ user FPEXC has the enable bit set
+	@bic	r5, r1, #FPEXC_EX	@ make sure exceptions are disabled
+	@VFPFMXR	FPEXC, r5		@ enable VFP, disable any pending
+    @ldmfd sp!, {r1, r5}
+    
+#ifdef CONFIG_VFP_OPT
+    @ enable CP10 / CP11 access right
+    ldr r10, =(0xF << 20)
+    mcr p15, 0, r10, c1, c0, 2
+    orr r10, r10, #FPEXC_EN   @ user FPEXC has the enable bit set
+    bic r10, r10, #FPEXC_EX   @ make sure exceptions are disabled
+    VFPFMXR FPEXC, r10       @ enable VFP, disable any pending
+					@ exceptions, so we can get at the
+					@ rest of it
+#endif                    
+
 __v7_ca5mp_setup:
 __v7_ca9mp_setup:
 	mov	r10, #(1 << 0)			@ TLB ops broadcasting

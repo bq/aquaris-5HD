@@ -260,8 +260,8 @@ static struct lock_class_key af_callback_keys[AF_MAX];
 #define SK_RMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
 
 /* Run time adjustable parameters. */
-__u32 sysctl_wmem_max __read_mostly = SK_WMEM_MAX;
-__u32 sysctl_rmem_max __read_mostly = SK_RMEM_MAX;
+__u32 sysctl_wmem_max __read_mostly = (SK_WMEM_MAX*16);
+__u32 sysctl_rmem_max __read_mostly = (SK_RMEM_MAX*16);
 __u32 sysctl_wmem_default __read_mostly = SK_WMEM_MAX;
 __u32 sysctl_rmem_default __read_mostly = SK_RMEM_MAX;
 
@@ -297,9 +297,11 @@ static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen)
 		*timeo_p = 0;
 		if (warned < 10 && net_ratelimit()) {
 			warned++;
-			printk(KERN_INFO "sock_set_timeout: `%s' (pid %d) "
+			#ifdef CONFIG_MTK_NET_LOGGING  
+			printk(KERN_INFO "[mtk_net][sock]sock_set_timeout: `%s' (pid %d) "
 			       "tries to set negative timeout\n",
 				current->comm, task_pid_nr(current));
+			#endif
 		}
 		return 0;
 	}
@@ -317,8 +319,10 @@ static void sock_warn_obsolete_bsdism(const char *name)
 	static char warncomm[TASK_COMM_LEN];
 	if (strcmp(warncomm, current->comm) && warned < 5) {
 		strcpy(warncomm,  current->comm);
-		printk(KERN_WARNING "process `%s' is using obsolete "
+		#ifdef CONFIG_MTK_NET_LOGGING  
+		printk(KERN_WARNING "[mtk_net][sock]process `%s' is using obsolete "
 		       "%s SO_BSDCOMPAT\n", warncomm, name);
+		#endif
 		warned++;
 	}
 }
@@ -647,7 +651,8 @@ set_rcvbuf:
 
 	case SO_KEEPALIVE:
 #ifdef CONFIG_INET
-		if (sk->sk_protocol == IPPROTO_TCP)
+		if (sk->sk_protocol == IPPROTO_TCP &&
+		    sk->sk_type == SOCK_STREAM)
 			tcp_set_keepalive(sk, valbool);
 #endif
 		sock_valbool_flag(sk, SOCK_KEEPOPEN, valbool);
@@ -817,15 +822,20 @@ EXPORT_SYMBOL(sock_setsockopt);
 
 
 void cred_to_ucred(struct pid *pid, const struct cred *cred,
-		   struct ucred *ucred)
+		   struct ucred *ucred, bool use_effective)
 {
 	ucred->pid = pid_vnr(pid);
 	ucred->uid = ucred->gid = -1;
 	if (cred) {
 		struct user_namespace *current_ns = current_user_ns();
 
-		ucred->uid = user_ns_map_uid(current_ns, cred, cred->euid);
-		ucred->gid = user_ns_map_gid(current_ns, cred, cred->egid);
+		if (use_effective) {
+			ucred->uid = user_ns_map_uid(current_ns, cred, cred->euid);
+			ucred->gid = user_ns_map_gid(current_ns, cred, cred->egid);
+		} else {
+			ucred->uid = user_ns_map_uid(current_ns, cred, cred->uid);
+			ucred->gid = user_ns_map_gid(current_ns, cred, cred->gid);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(cred_to_ucred);
@@ -986,7 +996,8 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		struct ucred peercred;
 		if (len > sizeof(peercred))
 			len = sizeof(peercred);
-		cred_to_ucred(sk->sk_peer_pid, sk->sk_peer_cred, &peercred);
+		cred_to_ucred(sk->sk_peer_pid, sk->sk_peer_cred,
+			      &peercred, true);
 		if (copy_to_user(optval, &peercred, len))
 			return -EFAULT;
 		goto lenout;
@@ -1087,18 +1098,6 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 	nsk->sk_security = sptr;
 	security_sk_clone(osk, nsk);
 #endif
-}
-
-/*
- * caches using SLAB_DESTROY_BY_RCU should let .next pointer from nulls nodes
- * un-modified. Special care is taken when initializing object to zero.
- */
-static inline void sk_prot_clear_nulls(struct sock *sk, int size)
-{
-	if (offsetof(struct sock, sk_node.next) != 0)
-		memset(sk, 0, offsetof(struct sock, sk_node.next));
-	memset(&sk->sk_node.pprev, 0,
-	       size - offsetof(struct sock, sk_node.pprev));
 }
 
 void sk_prot_clear_portaddr_nulls(struct sock *sk, int size)
@@ -1250,8 +1249,12 @@ static void __sk_free(struct sock *sk)
 	sock_disable_timestamp(sk, SK_FLAGS_TIMESTAMP);
 
 	if (atomic_read(&sk->sk_omem_alloc))
-		printk(KERN_DEBUG "%s: optmem leakage (%d bytes) detected.\n",
+	{	
+		#ifdef CONFIG_MTK_NET_LOGGING  
+		printk(KERN_DEBUG "[mtk_net][sock]%s: optmem leakage (%d bytes) detected.\n",
 		       __func__, atomic_read(&sk->sk_omem_alloc));
+		#endif
+    }
 
 	if (sk->sk_peer_cred)
 		put_cred(sk->sk_peer_cred);
@@ -1414,6 +1417,7 @@ void sk_setup_caps(struct sock *sk, struct dst_entry *dst)
 		} else {
 			sk->sk_route_caps |= NETIF_F_SG | NETIF_F_HW_CSUM;
 			sk->sk_gso_max_size = dst->dev->gso_max_size;
+			sk->sk_gso_max_segs = dst->dev->gso_max_segs;
 		}
 	}
 }
@@ -1427,8 +1431,8 @@ void __init sk_init(void)
 		sysctl_wmem_default = 32767;
 		sysctl_rmem_default = 32767;
 	} else if (totalram_pages >= 131072) {
-		sysctl_wmem_max = 131071;
-		sysctl_rmem_max = 131071;
+		sysctl_wmem_max = 2097152;
+		sysctl_rmem_max = 2097152;
 	}
 }
 
@@ -1606,41 +1610,54 @@ static int sock_dump_info(struct sock *sk)
 		  struct sock *other = NULL;
 		  if( (u->path.dentry !=NULL)&&(u->path.dentry->d_iname!=NULL))
 		  {
-		    printk(KERN_INFO "sockdbg: socket-Name:%s \n",u->path.dentry->d_iname);
-		    
+		  	  #ifdef CONFIG_MTK_NET_LOGGING  
+		      printk(KERN_INFO "[mtk_net][sock]sockdbg: socket-Name:%s \n",u->path.dentry->d_iname);
+		      #endif
 		  }
 		   else
 		  {
-              printk(KERN_INFO "sockdbg:socket Name (NULL)\n" );
+		  	   #ifdef CONFIG_MTK_NET_LOGGING  
+               printk(KERN_INFO "[mtk_net][sock]sockdbg:socket Name (NULL)\n" );
+               #endif
 		   }
 		   
 		   if(sk->sk_socket && SOCK_INODE(sk->sk_socket))
 		  {
-		      printk(KERN_INFO "sockdbg:socket Inode[%lu]\n" ,SOCK_INODE(sk->sk_socket)->i_ino);
+		   	  	#ifdef CONFIG_MTK_NET_LOGGING  
+		        printk(KERN_INFO "[mtk_net][sock]sockdbg:socket Inode[%lu]\n" ,SOCK_INODE(sk->sk_socket)->i_ino);
+		        #endif
 		   }		 
 
 		    other = unix_sk(sk)->peer ;
 			if (!other)
 			{
-		         printk(KERN_INFO "sockdbg:peer is (NULL) \n");
+				#ifdef CONFIG_MTK_NET_LOGGING  
+		        printk(KERN_INFO "[mtk_net][sock]sockdbg:peer is (NULL) \n");
+		        #endif
 			 } else{
 			 
 				if ((((struct unix_sock *)other)->path.dentry != NULL)&&(((struct unix_sock *)other)->path.dentry->d_iname != NULL))
 				{
-		           printk(KERN_INFO "sockdbg: Peer Name:%s \n",((struct unix_sock *)other)->path.dentry->d_iname);
+					#ifdef CONFIG_MTK_NET_LOGGING  
+		            printk(KERN_INFO "[mtk_net][sock]sockdbg: Peer Name:%s \n",((struct unix_sock *)other)->path.dentry->d_iname);
+		            #endif
 				 }				
 				else
 				{
-                     printk(KERN_INFO "sockdbg: Peer Name (NULL) \n");
+					#ifdef CONFIG_MTK_NET_LOGGING  
+                    printk(KERN_INFO "[mtk_net][sock]sockdbg: Peer Name (NULL) \n");
+                    #endif
 				}
 
 				if(other->sk_socket && SOCK_INODE(other->sk_socket))
 				   {
-		             printk(KERN_INFO "sockdbg: Peer Inode [%lu] \n", SOCK_INODE(other->sk_socket)->i_ino);
+					#ifdef CONFIG_MTK_NET_LOGGING  
+		            printk(KERN_INFO "[mtk_net][sock]sockdbg: Peer Inode [%lu] \n", SOCK_INODE(other->sk_socket)->i_ino);
+		            #endif
 				    }
-
-				 printk(KERN_INFO "sockdbg: Peer Recieve Queue len:%d \n",other->sk_receive_queue.qlen);
-
+	            #ifdef CONFIG_MTK_NET_LOGGING  
+				printk(KERN_INFO "[mtk_net][sock]sockdbg: Peer Recieve Queue len:%d \n",other->sk_receive_queue.qlen);
+                #endif
 				 //dump receiver queue 128 bytes
 						/* if ((skb = skb_peek_tail(&other->sk_receive_queue)) == NULL) {
 		                        
@@ -1758,13 +1775,15 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
 			goto interrupted;
 
         sock_dump_info(sk);
-		printk(KERN_INFO "sockdbg: wait_for_wmem, timeo =%ld, wmem =%d, snd buf =%d \n",
+        #ifdef CONFIG_MTK_NET_LOGGING  
+		printk(KERN_INFO "[mtk_net][sock]sockdbg: wait_for_wmem, timeo =%ld, wmem =%d, snd buf =%d \n",
 			 timeo, atomic_read(&sk->sk_wmem_alloc), sk->sk_sndbuf); 
-
+        #endif
 		timeo = sock_wait_for_wmem(sk, timeo);
-		
-		printk(KERN_INFO "sockdbg: wait_for_wmem done, header_len=0x%lx, data_len=0x%lx,timeo =%ld \n",
+		#ifdef CONFIG_MTK_NET_LOGGING  
+		printk(KERN_INFO "[mtk_net][sock]sockdbg: wait_for_wmem done, header_len=0x%lx, data_len=0x%lx,timeo =%ld \n",
 			 header_len, data_len ,timeo);
+	    #endif
 	}
 
 	skb_set_owner_w(skb, sk);
@@ -2536,7 +2555,7 @@ static void assign_proto_idx(struct proto *prot)
 	prot->inuse_idx = find_first_zero_bit(proto_inuse_idx, PROTO_INUSE_NR);
 
 	if (unlikely(prot->inuse_idx == PROTO_INUSE_NR - 1)) {
-		printk(KERN_ERR "PROTO_INUSE_NR exhausted\n");
+		printk(KERN_ERR "[mtk_net][sock]PROTO_INUSE_NR exhausted\n");
 		return;
 	}
 
@@ -2566,7 +2585,7 @@ int proto_register(struct proto *prot, int alloc_slab)
 					NULL);
 
 		if (prot->slab == NULL) {
-			printk(KERN_CRIT "%s: Can't create sock SLAB cache!\n",
+			printk(KERN_CRIT "[mtk_net][sock]%s: Can't create sock SLAB cache!\n",
 			       prot->name);
 			goto out;
 		}
@@ -2581,7 +2600,7 @@ int proto_register(struct proto *prot, int alloc_slab)
 								 SLAB_HWCACHE_ALIGN, NULL);
 
 			if (prot->rsk_prot->slab == NULL) {
-				printk(KERN_CRIT "%s: Can't create request sock SLAB cache!\n",
+				printk(KERN_CRIT "[mtk_net][sock]%s: Can't create request sock SLAB cache!\n",
 				       prot->name);
 				goto out_free_request_sock_slab_name;
 			}

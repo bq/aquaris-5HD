@@ -21,8 +21,8 @@
 /*#include <linux/usb/android_composite.h>*/
 #include <linux/musb/musb_core.h>
 #include <linux/musb/musb_gadget.h>
+#include <linux/musb/mtk_musb.h>
 #include <linux/usb/cdc.h>
-#include <mach/mtk_musb.h>
 #include <linux/console.h>
 #include <linux/tty.h>
 #include <linux/vmalloc.h>
@@ -368,7 +368,7 @@ static struct usb_gadget_strings *acm_strings[] = {
 /*
  * config usb
  */
-void usb_write_fifo(u16 len, const u8 *src, u8 ep_num)
+static void usb_write_fifo(u16 len, const u8 *src, u8 ep_num)
 {
 	void __iomem *fifo = (void __iomem *)MUSB_FIFO_OFFSET(ep_num);
 	if (likely((0x01 & (unsigned long) src) == 0)) {
@@ -401,7 +401,7 @@ void usb_write_fifo(u16 len, const u8 *src, u8 ep_num)
 /*
  * Unload an endpoint's FIFO
  */
-void usb_read_fifo(u16 len, u8 *dst,u8 ep_num)
+static void usb_read_fifo(u16 len, u8 *dst,u8 ep_num)
 {
 	void __iomem *fifo = (void __iomem *)MUSB_FIFO_OFFSET(ep_num);
 
@@ -438,7 +438,7 @@ void usb_read_fifo(u16 len, u8 *dst,u8 ep_num)
  * send data function,
  * will send all data in the buffer,return send data count
  */
-void copy_config_desc(char *buf,bool high_speed)
+static void copy_config_desc(char *buf,bool high_speed)
 {
 	struct usb_descriptor_header **acm_desc = NULL;
 	if(buf == NULL)
@@ -466,7 +466,7 @@ void copy_config_desc(char *buf,bool high_speed)
  * send/receive data function,
  * will send/receive all data in the buffer,return send/receive data count
  */
-void recv_data(u32 ep_num,u8 *pbuffer,u16 data_len)
+static void recv_data(u32 ep_num,u8 *pbuffer,u16 data_len)
 {
 
 	u16 rxcsr = 0;
@@ -645,7 +645,7 @@ u32 send_data(u32 ep_num,u8 *pbuffer,u32 data_len)
 	return count;
 }
 
-void ep0_hand_shake(void)
+static void ep0_hand_shake(void)
 {
 	u32 csr = 0;
 	usb_writeb(0,MUSB_INDEX);
@@ -703,7 +703,7 @@ static bool send_descriptor(struct usb_ctrlrequest* pudr)
 	}
 	return TRUE;
 }
-void process_standard_request(struct usb_ctrlrequest* pudr)
+static void process_standard_request(struct usb_ctrlrequest* pudr)
 {
 
 	switch(pudr->bRequest)   {
@@ -767,7 +767,7 @@ void process_standard_request(struct usb_ctrlrequest* pudr)
 		;
 	}
 }
-void process_class_request(struct usb_ctrlrequest* request)
+static void process_class_request(struct usb_ctrlrequest* request)
 {
 
 
@@ -807,7 +807,7 @@ static void process_setup_packet(struct usb_ctrlrequest* pudr)
 	}
 }
 
-void usb_reset(void)
+static void usb_reset(void)
 {
 	u16 swrst = 0;
 
@@ -856,7 +856,7 @@ void usb_reset(void)
 	printk("usb is hight speed  %d %x\n",is_high_speed,usb_readb(MUSB_POWER));
 }
 
-void config_usb_acm(void)
+static void config_usb_acm(void)
 {
 
 	u8 power = 0;
@@ -993,7 +993,7 @@ void usb_console_write(struct console *co, const char *s,unsigned int count) {
 */
 
 /*---------------------------------------------------------------------------*/
-int usb_console_setup(struct console *co, char *options)
+static int usb_console_setup(struct console *co, char *options)
 {
 	usb_hs_config_desc = kmalloc(config_desc.wTotalLength,GFP_KERNEL);
 	usb_fs_config_desc = kmalloc(config_desc.wTotalLength,GFP_KERNEL);

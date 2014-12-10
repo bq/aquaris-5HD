@@ -1753,6 +1753,18 @@ assocProcessRxAssocReqFrame (
         #if 1 /* ICS */
         {
             PUINT_8 cp = (PUINT_8)&prAssocReqFrame->u2CapInfo;
+			P_UINT_8 prNewAssocReqIe = NULL;
+			
+			if (u2IELength) {
+				prNewAssocReqIe= kalMemAlloc(u2IELength, VIR_MEM_TYPE);
+				if (NULL == prNewAssocReqIe) {
+					DBGLOG(AIS, WARN, ("allocate memory for (Re)assocReqIe fail,IELength=%d!\n",u2IELength));
+					u2StatusCode = STATUS_CODE_INVALID_INFO_ELEMENT;
+					return WLAN_STATUS_FAILURE;
+					/*note: if return WLAN_STATUS_FAILURE, we wouldn't reply the GC!so he need wait util timeout
+					   should we change to WLAN_STATUS_SUCCESS? but memory allocate fail may also cause reply fail*/
+				}
+            } 
             if (prStaRec->fgIsReAssoc)
                 cp += 10;
             else
@@ -1763,7 +1775,7 @@ assocProcessRxAssocReqFrame (
             }
             prStaRec->u2AssocReqIeLen = u2IELength;
             if (u2IELength) {
-                prStaRec->pucAssocReqIe = kalMemAlloc(u2IELength, VIR_MEM_TYPE);
+                prStaRec->pucAssocReqIe = prNewAssocReqIe;
                 kalMemCopy(prStaRec->pucAssocReqIe, cp, u2IELength);
             }
         }

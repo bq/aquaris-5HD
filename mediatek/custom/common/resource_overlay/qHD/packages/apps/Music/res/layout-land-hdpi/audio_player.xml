@@ -24,14 +24,12 @@
     <!-- This is the LinearLayout that contains the album art, function buttons and album/artist/track info -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dip"
-        android:layout_weight="1"
+        android:layout_height="200dip"
         android:orientation="horizontal"
         android:gravity="center">
 
         <ImageView
             android:id="@+id/album"
-            android:background="@drawable/album_border_large"
             android:layout_width="200dip"
             android:layout_height="200dip"
             android:layout_marginRight="30dip"
@@ -53,7 +51,9 @@
                 android:orientation="horizontal"
                 android:baselineAligned="false"
                 android:paddingTop="9dip"
-                android:paddingBottom="9dip">
+                android:paddingBottom="9dip"
+                android:layout_weight="1"
+	            android:gravity="center">
 
                 <ImageView
                     android:layout_width="wrap_content"
@@ -78,7 +78,9 @@
                 android:orientation="horizontal"
                 android:baselineAligned="false"
                 android:paddingTop="9dip"
-                android:paddingBottom="9dip">
+                android:paddingBottom="9dip"
+                android:layout_weight="1"
+	            android:gravity="center">
 
                 <ImageView
                     android:layout_width="wrap_content"
@@ -103,7 +105,9 @@
                 android:orientation="horizontal"
                 android:baselineAligned="false"
                 android:paddingTop="9dip"
-                android:paddingBottom="9dip">
+                android:paddingBottom="9dip"
+                android:layout_weight="1"
+	            android:gravity="center">
 
                 <ImageView
                     android:layout_width="wrap_content"

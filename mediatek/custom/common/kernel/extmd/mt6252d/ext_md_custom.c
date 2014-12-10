@@ -5,13 +5,13 @@
 //#include <mach/mt6575_gpio.h>
 #include <cust_eint.h>
 
-extern unsigned int mt65xx_eint_set_sens(unsigned int, unsigned int);
-extern void mt65xx_eint_set_polarity(unsigned char, unsigned char);
-extern void mt65xx_eint_set_hw_debounce(unsigned char, unsigned int);
-extern void mt65xx_eint_registration(unsigned char, unsigned char, unsigned char, void(*func)(void),
-					unsigned char);
-extern void mt65xx_eint_unmask(unsigned int);
-extern void mt65xx_eint_mask(unsigned int);
+extern void mt_eint_mask(unsigned int eint_num);
+extern void mt_eint_unmask(unsigned int eint_num);
+extern void mt_eint_set_hw_debounce(unsigned int eint_num, unsigned int ms);
+extern void mt_eint_set_polarity(unsigned int eint_num, unsigned int pol);
+extern unsigned int mt_eint_set_sens(unsigned int eint_num, unsigned int sens);
+extern void mt_eint_registration(unsigned int eint_num, unsigned int flow, void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+
 
 int cm_do_md_power_on(void)
 {
@@ -130,22 +130,22 @@ void cm_ext_md_rst(void)
 
 void cm_enable_ext_md_wdt_irq(void)
 {
-	mt65xx_eint_unmask(CUST_EINT_DT_EXT_MD_WDT_NUM);
+	mt_eint_unmask(CUST_EINT_DT_EXT_MD_WDT_NUM);
 }
 
 void cm_disable_ext_md_wdt_irq(void)
 {
-	mt65xx_eint_mask(CUST_EINT_DT_EXT_MD_WDT_NUM);
+	mt_eint_mask(CUST_EINT_DT_EXT_MD_WDT_NUM);
 }
 
 void cm_enable_ext_md_wakeup_irq(void)
 {
-	mt65xx_eint_unmask(CUST_EINT_DT_EXT_MD_WK_UP_NUM);
+	mt_eint_unmask(CUST_EINT_DT_EXT_MD_WK_UP_NUM);
 }
 
 void cm_disable_ext_md_wakeup_irq(void)
 {
-	mt65xx_eint_mask(CUST_EINT_DT_EXT_MD_WK_UP_NUM);
+	mt_eint_mask(CUST_EINT_DT_EXT_MD_WK_UP_NUM);
 }
 
 

@@ -1,15 +1,9 @@
 #ifndef __CCIF_H__
 #define __CCIF_H__
 
-//#include <ccci_common.h>
-
 // CCIF common macro definition
 #define CCIF_INTR_MAX_RE_ENTER_CNT			(5)
 
-// CCIF HW specific macro definition
-#define CCIF_STD_V1_MAX_CH_NUM				(8)
-#define CCIF_STD_V1_RUN_TIME_DATA_OFFSET	(0x140)
-#define CCIF_STD_V1_RUM_TIME_MEM_MAX_LEN	(256-64)
 
 typedef struct _ccif_statistics
 {
@@ -38,6 +32,7 @@ typedef int (*ccif_notify_funct_t)(void);
 typedef struct _ccif
 {
 	unsigned long		m_reg_base;
+	unsigned long		m_md_reg_base;
 	unsigned long		m_status;
 	unsigned int		m_rx_idx;
 	unsigned int		m_tx_idx;
@@ -60,17 +55,17 @@ typedef struct _ccif
 	int  (*ccif_register_intr)(struct _ccif *);
 	int  (*ccif_en_intr)(struct _ccif *);
 	void (*ccif_dis_intr)(struct _ccif *);
-	int  (*ccif_reg_dump)(struct _ccif *, unsigned int buf[], int len);
+	int  (*ccif_dump_reg)(struct _ccif *, unsigned int buf[], int len);
 	int  (*ccif_read_phy_ch_data)(struct _ccif *, int ch, unsigned int buf[]);
 	int  (*ccif_write_phy_ch_data)(struct _ccif *, unsigned int buf[], int retry_en);
 	int  (*ccif_get_rx_ch)(struct _ccif *);
 	int  (*ccif_get_busy_state)(struct _ccif *);
 	void (*ccif_set_busy_state)(struct _ccif *, unsigned int val);
 	int  (*ccif_ack_phy_ch)(struct _ccif *, int ch);
-	int  (*ccif_clear_share_mem)(struct _ccif *);
-	int  (*ccif_set_runtime_data)(struct _ccif *, int buf[], int len);
+	int  (*ccif_clear_sram)(struct _ccif *);
+	int  (*ccif_write_runtime_data)(struct _ccif *, unsigned int buf[], int len);
 	int  (*ccif_intr_handler)(struct _ccif *);
-	int  (*ccif_reset_to_default)(struct _ccif *);
+	int  (*ccif_reset)(struct _ccif *);
 }ccif_t;
 
 //ccif_t* ccif_create_instance(ccif_hw_info_t *info, void* ctl_b, int md_id);

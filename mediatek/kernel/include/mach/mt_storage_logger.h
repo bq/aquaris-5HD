@@ -198,11 +198,11 @@ enum logger_type
 
 #ifndef USER_BUILD_KERNEL//engineering mode
 
-#define CREATE_PROC_ENTRY(proc,x,y,z) proc = create_proc_entry(x,y,z)
+#define CREATE_PROC_ENTRY(proc,x,y,z,o) proc = proc_create(x,y,z,o)
 
 #else
 
-#define CREATE_PROC_ENTRY(proc,x,y,z)
+#define CREATE_PROC_ENTRY(proc,x,y,z,o)
 
 #endif
 

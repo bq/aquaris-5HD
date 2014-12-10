@@ -7,6 +7,7 @@
 #include <mach/mt_spi.h>
 
 #include <linux/sched.h>
+#include "mt_spi_hal.h"
 #include <linux/kthread.h>
 
 #define SPIDEV_LOG(fmt, args...) printk("[SPI-UT]: [%s]:[%d]" fmt, __func__, __LINE__, ##args) 

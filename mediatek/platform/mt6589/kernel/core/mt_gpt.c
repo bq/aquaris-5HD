@@ -7,6 +7,7 @@
 #include <linux/proc_fs.h>
 #include <linux/syscore_ops.h>
 #include <asm/sched_clock.h>
+#include <linux/version.h>
 
 #include <mach/mt_reg_base.h>
 #include <mach/mt_gpt.h>
@@ -45,10 +46,13 @@
 #define GPT_CLKSRC_ID       (GPT2)
 #endif
 
+#define GPT4_1MS_TICK       ((U32)13000)        // 1000000 / 76.92ns = 13000.520
+
 #define GPT_IRQEN           (APMCU_GPTIMER_BASE + 0x0000)
 #define GPT_IRQSTA          (APMCU_GPTIMER_BASE + 0x0004)
 #define GPT_IRQACK          (APMCU_GPTIMER_BASE + 0x0008)
 #define GPT1_BASE           (APMCU_GPTIMER_BASE + 0x0010)
+#define GPT4_BASE           (APMCU_GPTIMER_BASE + 0x0040)
 
 #define GPT_CON             (0x00)
 #define GPT_CLK             (0x04)
@@ -91,6 +95,16 @@ struct gpt_device {
 };
 static struct gpt_device gpt_devs[NR_GPTS];
 
+/************************return GPT4 count(before init clear) to record kernel start time between LK and kernel****************************/
+static unsigned int boot_time_value = 0;
+
+static unsigned int xgpt_boot_up_time(void)
+{
+	unsigned int tick;
+	tick = DRV_Reg32(GPT4_BASE + GPT_CNT);
+	return ((tick + (GPT4_1MS_TICK - 1)) / GPT4_1MS_TICK);
+}
+/**************************************************************************************************************************/
 static struct gpt_device *id_to_dev(unsigned int id)
 {
     return id < NR_GPTS ? gpt_devs + id : NULL;
@@ -547,6 +561,12 @@ int gpt_check_and_ack_irq(unsigned int id)
 }
 EXPORT_SYMBOL(gpt_check_and_ack_irq);
 
+unsigned int gpt_boot_time(void)
+{
+	return boot_time_value;
+}
+EXPORT_SYMBOL(gpt_boot_time);
+
 
 static int mt_gpt_set_next_event(unsigned long cycles,
                 struct clock_event_device *evt)
@@ -676,8 +696,11 @@ static inline void setup_clksrc(void)
 
     setup_gpt_dev_locked(dev, GPT_FREE_RUN, GPT_CLK_SRC_SYS, GPT_CLK_DIV_1,
                 0, NULL, 0);
-
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0))
+    setup_sched_clock_needs_suspend((void *)mt_read_sched_clock, 32, SYS_CLK_RATE);
+#else
     setup_sched_clock((void *)mt_read_sched_clock, 32, SYS_CLK_RATE);
+#endif
 }
 #else
 static inline void setup_clksrc(void) {}
@@ -808,7 +831,9 @@ static void mt_gpt_init(void)
 {
     int i;
     unsigned long save_flags;
-
+	
+    boot_time_value = xgpt_boot_up_time(); /*record the time when init GPT*/
+	
     gpt_update_lock(save_flags);
 
     gpt_devs_init();

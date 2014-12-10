@@ -3259,7 +3259,7 @@ static int __init mt_fm_init(void)
 
 	WCN_DBG(L4|D_ALL,"Enter %s\n", __FUNCTION__);
 
-#ifdef MT6516
+#if 0//def MT6516
 	WCN_DBG(L4|D_ALL,"i2c_add_driver PORT = 2, client addr = 0xe0\n");
 #else
 	WCN_DBG(L4|D_ALL,"i2c_add_driver PORT = 1, client addr = 0xe0\n");

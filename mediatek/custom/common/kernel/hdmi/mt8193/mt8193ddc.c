@@ -95,7 +95,7 @@ u32 DDCM_Init(void)
 {
     MT8193_DDC_FUNC();
     SIF_SET_BIT(DDC_DDCMCTL0, DDCM_SM0EN); 
-    SIF_SET_BIT(DDC_DDCMCTL0, DDCM_ODRAIN);
+    SIF_CLR_BIT(DDC_DDCMCTL0, DDCM_ODRAIN);
 
 	return 1;
 }
@@ -140,6 +140,22 @@ static u8 _DDCMRead(u8 ucCurAddrMode, u32 u4ClkDiv, u8 ucDev, u32 u4Addr, SIF_BI
     DDCM_CLK_DIV_WRITE(u4ClkDiv);
 
     DDCM_TrigMode(DDCM_START);
+
+	if (ucDev > EDID_ID) //Max'0619'04, 4-block EEDID reading
+	{
+  	   DDCM_DATA0_WRITE(0x60);
+
+       DDCM_DATA1_WRITE(ucDev-EDID_ID);
+       DDCM_PGLEN_WRITE(0x01);
+       DDCM_TrigMode(DDCM_WRITE_DATA);
+       u4Ack = DDCM_ACK_READ();
+       if(u4Ack != 0x3)
+       {
+        goto ddc_master_read_end;
+       }
+  	   DDCM_TrigMode(DDCM_START);
+	   ucDev = EDID_ID;
+	}
 
     if(ucCurAddrMode == 0)
     {

@@ -10,56 +10,42 @@
 ##     TARGET_MODULES     := true                       # do make modules
 ##
 
-#ifeq ($(MTK_PROJECT), gw616)
-#  KERNEL_CONFIG_FILE := config-mt6516-phone
-#else
-#  ifeq ($(MTK_PROJECT), ds269)
-#    KERNEL_CONFIG_FILE := config-mt6516-gemini
-#  else
-#    ifeq ($(MTK_PROJECT), oppo)
-#      KERNEL_CONFIG_FILE := config-mt6516-oppo
-#    else
-#      ifeq ($(MTK_PROJECT), mt6516_evb)
-#        KERNEL_CONFIG_FILE := config-mt6516-evb
-#      else
-#        ifeq ($(MTK_PROJECT), mt6573_evb)
-#          KERNEL_CONFIG_FILE := config-mt6573-evb
-#        else
-#          ifeq ($(MTK_PROJECT), zte73v1)
-#            KERNEL_CONFIG_FILE := config-mt6573-zte73v1
-#          else
-#            KERNEL_CONFIG_FILE := config-mt6516-$(MTK_PROJECT)
-#          endif
-#        endif
-#      endif
-#    endif
-#  endif
-#endif
 
-$(info using $(KERNEL_CONFIG_FILE) .... )
+MTK_CURRENT_KERNEL_DIR := $(call my-dir)
+ifeq (kernel, $(lastword  $(subst /, , $(MTK_CURRENT_KERNEL_DIR))))
+KERNEL_DIR := kernel
+#KERNEL_DIR := $(call my-dir)
+KERNEL_DIR_TO_ROOT := ..
+#ARCH ?= arm
+#CROSS_COMPILE ?= arm-linux-androideabi-
+KERNEL_MAKE_CMD := + make MTK_PROJECT=$(MTK_PROJECT) -C $(KERNEL_DIR) $(if $(strip $(SHOW_COMMANDS)),V=1)
+
+ifeq ($(strip $(KBUILD_OUTPUT_SUPPORT)),yes)
+KBUILD_OUTPUT := $(KERNEL_DIR_TO_ROOT)/$(MTK_ROOT_OUT)/KERNEL_OBJ
+KERNEL_OUTPUT_TO_ROOT := $(KERNEL_DIR_TO_ROOT)/../../../../..
+KERNEL_DOTCONFIG_FILE := $(KBUILD_OUTPUT)/.config
+KERNEL_MAKE_CMD += O=$(KBUILD_OUTPUT)
+$(shell mkdir -p $(MTK_ROOT_OUT)/KERNEL_OBJ)
+else
+KERNEL_OUTPUT :=
+KERNEL_OUTPUT_TO_ROOT := $(KERNEL_DIR_TO_ROOT)
+KERNEL_DOTCONFIG_FILE := .config
+endif
+
+ifneq ($(filter /% ~%,$(TARGET_OUT)),)
+KERNEL_MODULE_INSTALL_PATH := $(TARGET_OUT)
+else
+KERNEL_MODULE_INSTALL_PATH := $(KERNEL_OUTPUT_TO_ROOT)/$(TARGET_OUT)
+endif
+
+#$(info using $(KERNEL_CONFIG_FILE) .... )
 ifeq ($(TARGET_KMODULES),true)
 ALL_PREBUILT += $(TARGET_OUT)/lib/modules/modules.order
 $(BUILT_SYSTEMIMAGE): kernel_modules
 $(TARGET_OUT)/lib/modules/modules.order: kernel_modules
-
-ifeq ($(strip $(MTK_WLAN_SUPPORT)),yes)
-$(BUILT_SYSTEMIMAGE): wlanLink
-$(TARGET_OUT)/lib/modules/modules.order: wlanLink
+ifneq ($(ONE_SHOT_MAKEFILE),)
+all_modules: kernel_modules
 endif
-
-kernel_modules:
-	@echo "building linux kernel modules..."
-#ifneq (,$(KERNEL_CONFIG_FILE))
-#	@cat kernel/$(KERNEL_CONFIG_FILE) > kernel/.config
-#endif
-ifeq ($(strip $(KBUILD_OUTPUT_SUPPORT)),yes)	
-	make MTK_PROJECT=$(MTK_PROJECT) -C  kernel O=out modules
-	INSTALL_MOD_STRIP=1 MTK_PROJECT=$(MTK_PROJECT) INSTALL_MOD_PATH=../../$(TARGET_OUT) INSTALL_MOD_DIR=../../$(TARGET_OUT) make -C kernel O=out android_modules_install
-else
-	make MTK_PROJECT=$(MTK_PROJECT) -C  kernel modules
-	INSTALL_MOD_STRIP=1 MTK_PROJECT=$(MTK_PROJECT) INSTALL_MOD_PATH=../$(TARGET_OUT) INSTALL_MOD_DIR=../$(TARGET_OUT) make -C kernel android_modules_install
-endif
-#end of KBUILD_OUTPUT_SUPPORT
 
 ################
 ## For WLAN switch
@@ -75,14 +61,13 @@ CUR_P2P_KO_NAME := p2p$(KO_POSTFIX).ko
 CUR_WLAN_KO_PATH := $(TARGET_OUT)/lib/modules/$(CUR_WLAN_KO_NAME)
 CUR_P2P_KO_PATH := $(TARGET_OUT)/lib/modules/$(CUR_P2P_KO_NAME)
 
-$(CUR_WLAN_KO_PATH) : kernel_modules 
-$(CUR_P2P_KO_PATH) : kernel_modules
-
-wlanLink : $(CUR_WLAN_KO_PATH) $(CUR_P2P_KO_PATH)
-	@echo "select wlan chip"
-	#select the right chip and copy
+kernel_modules:
+	@echo "building linux kernel modules..."
+	$(KERNEL_MAKE_CMD) modules
+	$(KERNEL_MAKE_CMD) INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH=$(KERNEL_MODULE_INSTALL_PATH) INSTALL_MOD_DIR=$(KERNEL_MODULE_INSTALL_PATH) android_modules_install
+ifeq ($(strip $(MTK_WLAN_SUPPORT)),yes)
 	-@ln -sf $(CUR_WLAN_KO_NAME) $(LINK_WLAN_NAME).ko
-	#-@ln -sf $(CUR_P2P_KO_NAME) $(LINK_P2P_NAME).ko
-
 endif
 
+endif #ifeq ($(TARGET_KMODULES),true)
+endif

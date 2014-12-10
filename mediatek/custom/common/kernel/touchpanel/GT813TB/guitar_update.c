@@ -39,7 +39,7 @@
 //#ifdef AUTO_UPDATE_GUITAR
 
 
-//****************************Éı¼¶Ä£¿é²ÎÊı******************************************
+//****************************Ä£******************************************
 #define SEARCH_FILE_TIMES      50
 #define UPDATE_FILE_PATH_2   "/data/goodix/_goodix_update_.bin"
 #define UPDATE_FILE_PATH_1   "/sdcard/goodix/_goodix_update_.bin"
@@ -73,7 +73,7 @@
 #define RESET_PORT             GPIO_CTP_RST_PIN
 #define INT_PORT               GPIO_CTP_EINT_PIN
 
-extern void mt65xx_eint_unmask(unsigned int line);
+extern void mt_eint_unmask(unsigned int line);
 
 #define GPIO_DIRECTION_INPUT(port)          do {mt_set_gpio_mode(port, port##_M_GPIO);\
                                                 mt_set_gpio_dir(port, GPIO_DIR_IN);}while(0)
@@ -83,7 +83,7 @@ extern void mt65xx_eint_unmask(unsigned int line);
                                                 mt_set_gpio_out(port, GPIO_OUT_ZERO);}while(0)
 #define GPIO_PULL_UPDOWN(port, val)         do {val?mt_set_gpio_pull_enable(port, GPIO_PULL_DISABLE):\
                                                 mt_set_gpio_pull_enable(port, GPIO_PULL_DISABLE);}while(0)
-#define GPIO_CFG_PIN(port, cfg)             mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM)
+#define GPIO_CFG_PIN(port, cfg)             mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM)
 
 
 #define fail    0
@@ -130,13 +130,13 @@ extern int tpd_init_panel(void);
 #pragma pack(1)
 typedef struct 
 {
-    u8  type;          //²úÆ·ÀàĞÍ//
-    u16 version;       //FW°æ±¾ºÅ//
-    u8  msk_ver[4];    //MASK°æ±¾//
-    u8  st_addr[2];    //ÉÕÂ¼µÄÆğÊ¼µØÖ·//
-    u16 lenth;         //FW³¤¶È//
+    u8  type;          //Æ·//
+    u16 version;       //FWæ±¾//
+    u8  msk_ver[4];    //MASKæ±¾//
+    u8  st_addr[2];    //Â¼Ê¼Ö·//
+    u16 lenth;         //FW//
     u8  chk_sum[3];
-    u8  force_update[6];//Ç¿ÖÆÉı¼¶±êÖ¾,Îª"GOODIX"ÔòÇ¿ÖÆÉı¼¶//
+    u8  force_update[6];//Ç¿Ö¾,Îª"GOODIX"Ç¿//
 }st_fw_head;
 #pragma pack()
 
@@ -174,13 +174,13 @@ static int gt_i2c_read_bytes(struct i2c_client *client, uint8_t *buf, int len)
     struct i2c_msg msgs[2];
     int ret=-1;
 
-    //·¢ËÍĞ´µØÖ·
-    msgs[0].flags=!I2C_M_RD; //Ğ´ÏûÏ¢
+    //Ğ´Ö·
+    msgs[0].flags=!I2C_M_RD; //Ğ´Ï¢
     msgs[0].addr=client->addr;
     msgs[0].len=2;
     msgs[0].buf=&buf[0];
-    //½ÓÊÕÊı¾İ
-    msgs[1].flags=I2C_M_RD;//¶ÁÏûÏ¢
+    //
+    msgs[1].flags=I2C_M_RD;//Ï¢
     msgs[1].addr=client->addr;
     msgs[1].len=len-2;
     msgs[1].buf=&buf[2];
@@ -192,15 +192,15 @@ static int gt_i2c_read_bytes(struct i2c_client *client, uint8_t *buf, int len)
 }
 
 /*******************************************************	
-¹¦ÄÜ£º
-	Ïò´Ó»úĞ´Êı¾İ
-²ÎÊı£º
-	client:	i2cÉè±¸£¬°üº¬Éè±¸µØÖ·
-	buf[0]~buf[1]£º	 Ê××Ö½ÚÎªĞ´µØÖ·
-	buf[2]~buf[len]£ºÊı¾İ»º³åÇø
-	len£º	Êı¾İ³¤¶È	
-return£º
-	Ö´ĞĞÏûÏ¢Êı
+Ü£
+	Ó»Ğ´
+
+	client:	i2cè±¸è±¸Ö·
+	buf[0]~buf[1]	 Ö½ÎªĞ´Ö·
+	buf[2]~buf[len]İ»
+	len	İ³	
+return
+	Ö´Ï¢
 *******************************************************/
 /*Function as i2c_master_send */
 static int gt_i2c_write_bytes(struct i2c_client *client,uint8_t *buf,int len)
@@ -226,8 +226,8 @@ static int gt_i2c_write_bytes(struct i2c_client *client,uint8_t *buf,int len)
     struct i2c_msg msg;
     int ret=-1;
     
-    //·¢ËÍÉè±¸µØÖ·
-    msg.flags=!I2C_M_RD;//Ğ´ÏûÏ¢
+    //è±¸Ö·
+    msg.flags=!I2C_M_RD;//Ğ´Ï¢
     msg.addr=client->addr;
     msg.len=len;
     msg.buf=data;        
@@ -239,13 +239,13 @@ static int gt_i2c_write_bytes(struct i2c_client *client,uint8_t *buf,int len)
 }
 
 /*******************************************************
-¹¦ÄÜ£º
-	·¢ËÍºó×ºÃüÁî
+Ü£
+	Íº×º
 	
-	ts:	clientË½ÓĞÊı¾İ½á¹¹Ìå
-return£º
+	ts:	clientË½İ½á¹¹
+return
 
-	Ö´ĞĞ½á¹ûÂë£¬0±íÊ¾Õı³£Ö´ĞĞ
+	Ö´Ğ½ë£¬0Ê¾Ö´
 *******************************************************/
 static int i2c_end_cmd(struct i2c_client *client)
 {
@@ -420,11 +420,11 @@ static u8 get_ic_fw_msg(struct i2c_client *client)
 
 /*
 * Steps of reset guitar
-*1. INT½ÅÊä³öµÍ£¬ÑÓÊ±5ms
-*2. RESET½ÅÀ­µÍ100ms£¬×ªÊäÈëĞü¸¡Ì¬
+*1. INTÍ£Ê±5ms
+*2. RESET100ms×ªÌ¬
 *3. I2CÑ°Ö·GUITAR
-*4. ÑÓÊ±100ms¶ÁÈ¡0xff(3¡¢4ÂÖÑ¯80´Î£¬Ö±ÖÁ³É¹¦)
-*5. OxffµÈÓÚ0x55Ôò·µ»Ø³É¹¦£¬·ñÔòÊ§°Ü
+*4. Ê±100msÈ¡0xff(34Ñ¯80Î£Ö±É¹)
+*5. Oxff0x55ò·µ»Ø³É¹Ê§
 */
 static int guitar_update_mode(struct i2c_client *client)
 {

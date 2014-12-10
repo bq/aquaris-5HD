@@ -1690,4 +1690,66 @@ nicCmdEventBuildDateCode (
 }
 #endif
 
+/*----------------------------------------------------------------------------*/
+/*!
+* @brief This function is called when event for query STA link status
+*        has been retrieved
+*
+* @param prAdapter          Pointer to the Adapter structure.
+* @param prCmdInfo          Pointer to the command information
+* @param pucEventBuf        Pointer to the event buffer
+*
+* @return none
+*
+*/
+/*----------------------------------------------------------------------------*/
+VOID
+nicCmdEventQueryStaStatistics (
+    IN P_ADAPTER_T  prAdapter,
+    IN P_CMD_INFO_T prCmdInfo,
+    IN PUINT_8      pucEventBuf
+    )
+{
+    UINT_32 u4QueryInfoLen;
+    P_EVENT_STA_STATISTICS_T prEvent;
+    P_GLUE_INFO_T prGlueInfo;
+    P_PARAM_GET_STA_STATISTICS prStaStatistics;
+
+    ASSERT(prAdapter);
+    ASSERT(prCmdInfo);
+    ASSERT(pucEventBuf);
+    ASSERT(prCmdInfo->pvInformationBuffer);
+
+    if (prCmdInfo->fgIsOid) {
+        prGlueInfo = prAdapter->prGlueInfo;
+        prEvent = (P_EVENT_STA_STATISTICS_T)pucEventBuf;
+        prStaStatistics = (P_PARAM_GET_STA_STATISTICS)prCmdInfo->pvInformationBuffer;
+
+        u4QueryInfoLen = sizeof(PARAM_GET_STA_STA_STATISTICS);
+
+        /* Statistics from FW is valid */
+        if(prEvent->u4Flags & BIT(0)) {
+            prStaStatistics->ucPer = prEvent->ucPer;
+            prStaStatistics->ucRcpi = prEvent->ucRcpi;
+            prStaStatistics->u4PhyMode = prEvent->u4PhyMode;
+            prStaStatistics->u2LinkSpeed = prEvent->u2LinkSpeed;
+            
+            prStaStatistics->u4TxFailCount = prEvent->u4TxFailCount;
+            prStaStatistics->u4TxLifeTimeoutCount = prEvent->u4TxLifeTimeoutCount;
+
+            if(prEvent->u4TxCount) {
+                UINT_32 u4TxDoneAirTimeMs = USEC_TO_MSEC(prEvent->u4TxDoneAirTime * 32);
+                
+                prStaStatistics->u4TxAverageAirTime = (u4TxDoneAirTimeMs / prEvent->u4TxCount);
+            }
+            else {
+                prStaStatistics->u4TxAverageAirTime = 0;
+            }            
+        }
+        
+        kalOidComplete(prGlueInfo, prCmdInfo->fgSetQuery, u4QueryInfoLen, WLAN_STATUS_SUCCESS);
+    }
+    
+}
+
 

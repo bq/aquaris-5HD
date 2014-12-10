@@ -13,16 +13,12 @@ typedef unsigned int        u32;
 typedef signed long long    s64;
 typedef unsigned long long  u64;
 
-u32 PTP_VO_0, PTP_VO_1, PTP_VO_2, PTP_VO_3, PTP_VO_4, PTP_VO_5, PTP_VO_6, PTP_VO_7;
-u32 PTP_init2_VO_0, PTP_init2_VO_1, PTP_init2_VO_2, PTP_init2_VO_3, PTP_init2_VO_4, PTP_init2_VO_5, PTP_init2_VO_6, PTP_init2_VO_7;
-u32 PTP_INIT_FLAG = 0;
-u32 PTP_DCVOFFSET = 0;
-u32 PTP_AGEVOFFSET = 0;
-
 #define En_PTP_OD 1
 #define PTP_Get_Real_Val 1
 #define Set_PMIC_Volt 1
 #define En_ISR_log 0
+
+#define ENHANCE_TURBO_OPP 1
 
 #define ptp_fsm_int_b_IRQ_ID 32
 

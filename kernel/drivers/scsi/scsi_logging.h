@@ -51,16 +51,7 @@ do {								\
 		} while (0);					\
 } while (0)
 #else
-#define SCSI_CHECK_LOGGING(SHIFT, BITS, LEVEL, CMD)     
-//ALPS00445134, add more debug message for CR debugging
-//if Need more scsi debugging message, enable this defined, and remark scsi_scan #963, and scsi_error #180
-/*#define SCSI_CHECK_LOGGING(SHIFT, BITS, LEVEL, CMD)		\
-do {								\
-		do {						\
-			CMD;					\
-		} while (0);					\
-} while (0)*/
-//ALPS00445134, add more debug message for CR debugging
+#define SCSI_CHECK_LOGGING(SHIFT, BITS, LEVEL, CMD)
 #endif /* CONFIG_SCSI_LOGGING */
 
 /*

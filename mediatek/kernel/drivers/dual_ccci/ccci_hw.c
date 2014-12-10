@@ -2,11 +2,11 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
-#include <ccci.h>
 #include <linux/delay.h>
-#include <ccif.h>
 #include <ccci_common.h>
 
+
+#define  CCIF_DEBUG    //ccif issue debug
 
 extern unsigned long long lg_ch_tx_debug_enable[];
 extern unsigned long long lg_ch_rx_debug_enable[];
@@ -43,26 +43,31 @@ static void __ccif_v1_dis_intr(ccif_t* ccif)
 }
 
 
-static int __ccif_v1_reg_dump(ccif_t* ccif, unsigned int buf[], int len)
+static int __ccif_v1_dump_reg(ccif_t* ccif, unsigned int buf[], int len)
 {
 	int i,j;
 	volatile unsigned int *curr_ccif_smem_addr = (volatile unsigned int *)CCIF_TXCHDATA(ccif->m_reg_base);
 
 	CCCI_DBG_MSG(ccif->m_md_id, "cci", "[CCCI REG_INFO]\n");
-	CCCI_DBG_MSG(ccif->m_md_id, "cci", "CON(%lx)=%08x, BUSY(%lx)=%08x, START(%lx)=%08x, RCHNUM(%lx)=%08x\n", 
+	CCCI_DBG_MSG(ccif->m_md_id, "cci", "CON(%lx)=%08X, BUSY(%lx)=%08x, START(%lx)=%08x, MRCHNUM(%lx)=%08x\n", 
 					CCIF_CON(ccif->m_reg_base), ccci_read32(CCIF_CON(ccif->m_reg_base)),
 					CCIF_BUSY(ccif->m_reg_base), ccci_read32(CCIF_BUSY(ccif->m_reg_base)),
 					CCIF_START(ccif->m_reg_base), ccci_read32(CCIF_START(ccif->m_reg_base)),
+					MD_CCIF_RCHNUM(ccif->m_md_reg_base), ccci_read32(MD_CCIF_RCHNUM(ccif->m_md_reg_base)));
+	CCCI_DBG_MSG(ccif->m_md_id, "cci", "MCON(%lx)=%08X, MBUSY(%lx)=%08x, MSTART(%lx)=%08x, RCHNUM(%lx)=%08x\n", 
+					MD_CCIF_CON(ccif->m_md_reg_base), ccci_read32(MD_CCIF_CON(ccif->m_md_reg_base)),
+					MD_CCIF_BUSY(ccif->m_md_reg_base), ccci_read32(MD_CCIF_BUSY(ccif->m_md_reg_base)),
+					MD_CCIF_START(ccif->m_md_reg_base), ccci_read32(MD_CCIF_START(ccif->m_md_reg_base)),
 					CCIF_RCHNUM(ccif->m_reg_base), ccci_read32(CCIF_RCHNUM(ccif->m_reg_base)));
 
 	for(i=0; i<16; i++){
-		CCCI_DBG_MSG(ccif->m_md_id, "cci", "%lx: %08x %08x %08x %08x\n", CCIF_TXCHDATA(ccif->m_reg_base), \
+		CCCI_DBG_MSG(ccif->m_md_id, "cci", "%08X: %08X %08X %08X %08X\n", (unsigned int)curr_ccif_smem_addr, \
 			curr_ccif_smem_addr[0], curr_ccif_smem_addr[1],
 			curr_ccif_smem_addr[2], curr_ccif_smem_addr[3]);
 		curr_ccif_smem_addr+=4;
 	}
 
-	if(buf == NULL || len < (4*16+4)){
+	if(buf == NULL || len < (4*16+8)){
 		// Only dump by log
 		return 0;
 	}else{
@@ -70,7 +75,13 @@ static int __ccif_v1_reg_dump(ccif_t* ccif, unsigned int buf[], int len)
 		buf[j++] = ccci_read32(CCIF_CON(ccif->m_reg_base));
 		buf[j++] = ccci_read32(CCIF_BUSY(ccif->m_reg_base));
 		buf[j++] = ccci_read32(CCIF_START(ccif->m_reg_base));
+		buf[j++] = ccci_read32(MD_CCIF_RCHNUM(ccif->m_reg_base));
+		
+		buf[j++] = ccci_read32(MD_CCIF_CON(ccif->m_reg_base));
+		buf[j++] = ccci_read32(MD_CCIF_BUSY(ccif->m_reg_base));
+		buf[j++] = ccci_read32(MD_CCIF_START(ccif->m_reg_base));
 		buf[j++] = ccci_read32(CCIF_RCHNUM(ccif->m_reg_base));
+		curr_ccif_smem_addr = (volatile unsigned int *)CCIF_TXCHDATA(ccif->m_reg_base);
 		for(i=0; i<4*16; i++)
 			buf[j++] = curr_ccif_smem_addr[i];
 	}
@@ -133,6 +144,7 @@ static int  __ccif_v1_write_phy_ch_data(ccif_t* ccif, unsigned int buf[], int re
 			//mb();
 
 			ccci_write32(CCIF_TCHNUM(ccif->m_reg_base), ch);
+			
 			spin_unlock_irqrestore(&ccif->m_lock,flag);
 
 			ret = sizeof(ccif_msg_t);
@@ -150,6 +162,9 @@ static int  __ccif_v1_write_phy_ch_data(ccif_t* ccif, unsigned int buf[], int re
 
 static int  __ccif_v1_get_rx_ch(ccif_t* ccif)
 {
+	while (CCIF_CON_ARB != ccci_read32(CCIF_CON(ccif->m_reg_base))){
+		ccci_write32(CCIF_CON(ccif->m_reg_base), CCIF_CON_ARB);
+	}
 	return ccci_read32(CCIF_RCHNUM(ccif->m_reg_base));
 }
 
@@ -176,7 +191,7 @@ static int  __ccif_v1_ack(ccif_t* ccif, int ch)
 }
 
 
-static int  __ccif_v1_clear_share_mem(ccif_t* ccif)
+static int  __ccif_v1_clear_sram(ccif_t* ccif)
 {
 	int i;
 	volatile unsigned int *ccif_tx_addr = (volatile unsigned int *) CCIF_TXCHDATA(ccif->m_reg_base);
@@ -188,7 +203,7 @@ static int  __ccif_v1_clear_share_mem(ccif_t* ccif)
 }
 
 
-static int  __ccif_v1_set_runtime_data(ccif_t* ccif, int buf[], int len)
+static int  __ccif_v1_write_runtime_data(ccif_t* ccif, unsigned int buf[], int len)
 {
 	int i;
 	volatile unsigned int *curr_ccif_smem_addr = (unsigned int*)(ccif->m_reg_base+CCIF_STD_V1_RUN_TIME_DATA_OFFSET);
@@ -198,7 +213,7 @@ static int  __ccif_v1_set_runtime_data(ccif_t* ccif, int buf[], int len)
 	for(i=0; i<len; i++){
 		ccci_write32(&curr_ccif_smem_addr[i], buf[i]);
 	}
-	//__ccif_v1_reg_dump(ccif, NULL, 0);
+	//__ccif_v1_dump_reg(ccif, NULL, 0);
 	return 0;
 }
 
@@ -210,7 +225,7 @@ static int  __ccif_v1_reset(ccif_t* ccif)
 	ccif->m_tx_idx = 0;
 	// ACK MD all channel
 	ccci_write32(CCIF_ACK(ccif->m_reg_base), 0xFF);
-	__ccif_v1_clear_share_mem(ccif);
+	__ccif_v1_clear_sram(ccif);
 
 	return 0;
 }
@@ -226,11 +241,12 @@ static irqreturn_t __ccif_irq_handler(int irq, void *data)
 	if(ret){
 		CCCI_MSG_INF(ccif->m_md_id, "cci", "ccif_irq_handler fail: %d!\n", ret);
 	}
+	
 	return IRQ_HANDLED;
 }
 
 
-static int __ccif_v1_intr_reg(ccif_t* ccif)
+static int __ccif_v1_reg_intr(ccif_t* ccif)
 {
 	int ret;
 	unsigned long flags;
@@ -247,13 +263,13 @@ static int __ccif_v1_intr_reg(ccif_t* ccif)
 static int __ccif_v1_init(ccif_t* ccif)
 {
 	//*CCIF_CON(ccif->m_reg_base) = 1;
-	ccci_write32(CCIF_CON(ccif->m_reg_base), 1);
+	ccci_write32(CCIF_CON(ccif->m_reg_base), CCIF_CON_ARB);
 	ccif->m_rx_idx = 0;
 	ccif->m_tx_idx = 0;
 	// ACK MD all channel
 	//*CCIF_ACK(ccif->m_reg_base) = 0xFF;
 	ccci_write32(CCIF_ACK(ccif->m_reg_base), 0xFF);
-	__ccif_v1_clear_share_mem(ccif);
+	__ccif_v1_clear_sram(ccif);
 
 	return 0;
 }
@@ -261,8 +277,8 @@ static int __ccif_v1_init(ccif_t* ccif)
 
 static int __ccif_v1_de_init(ccif_t* ccif)
 {
-	// Disable ccif irq
-	ccif->ccif_dis_intr(ccif);
+	// Disable ccif irq, no need for there is kernel waring of free already-free irq when free_irq
+	//ccif->ccif_dis_intr(ccif);
 
 	// Check if TOP half is running
 	while(test_bit(CCIF_TOP_HALF_RUNNING,&ccif->m_status))
@@ -313,21 +329,36 @@ static int __ccif_v1_intr_handler(ccif_t *ccif)
 	int				i;
 	int				rx_ch;
 	int				md_id = ccif->m_md_id;
+	bool 			reg_err = FALSE;
+	unsigned int    msg[4];
 
 	CCCI_FUNC_ENTRY(md_id);
 	set_bit(CCIF_TOP_HALF_RUNNING,&ccif->m_status);
+							
+	//CCCI_DBG_MSG(md_id, "cci", "ISR\n");
+							
 	if(ccif->isr_notify)
 		ccif->isr_notify(md_id);
 
 	rx_ch = ccif->m_rx_idx;
 
-	while( (r_ch_val = ccci_read32(CCIF_RCHNUM(ccif->m_reg_base))) && (re_enter_cnt<CCIF_INTR_MAX_RE_ENTER_CNT) )
+	while( (r_ch_val = ccif->ccif_get_rx_ch(ccif)) && (re_enter_cnt<CCIF_INTR_MAX_RE_ENTER_CNT) )
 	{
 		for(i=0; i<CCIF_STD_V1_MAX_CH_NUM; i++)
 		{
 			if (r_ch_val&(1<<rx_ch)) {
 				// We suppose always read success
 				ccif->ccif_read_phy_ch_data(ccif, rx_ch, (unsigned int*)&phy_ch_data);
+				#ifdef CCIF_DEBUG
+				if (phy_ch_data.channel >= CCCI_MAX_CH_NUM) {
+					if (!reg_err) {
+						reg_err = TRUE;
+						__ccif_v1_dump_reg(ccif, NULL, 0);
+						CCCI_MSG_INF(md_id, "cci", "[CCIF Register Error]RX: %08X, %08X, %02d, %08X (%02d)\n", phy_ch_data.data[0], \
+							phy_ch_data.data[1], phy_ch_data.channel, phy_ch_data.reserved, rx_ch);
+					}
+				}
+				#endif
 
 				if((lg_ch_rx_debug_enable[md_id] & ENABLE_ALL_RX_LOG) || 
 					(lg_ch_rx_debug_enable[md_id] & (1<< phy_ch_data.channel))) {
@@ -341,7 +372,7 @@ static int __ccif_v1_intr_handler(ccif_t *ccif)
 							phy_ch_data.data[0], phy_ch_data.data[1], phy_ch_data.channel, phy_ch_data.reserved);
 				} else {
 					if ( ccif->push_msg(&phy_ch_data, ccif->m_logic_ctl_block) != sizeof(ccif_msg_t) ) {
-						CCCI_DBG_MSG(md_id, "cci", "push data fail(ch%d)\n", phy_ch_data.channel);
+						//CCCI_DBG_MSG(md_id, "cci", "push data fail(ch%d)\n", phy_ch_data.channel);
 					}
 				}
 
@@ -353,7 +384,7 @@ static int __ccif_v1_intr_handler(ccif_t *ccif)
 				if (r_ch_val != 0) {
 					// We suppose rx channel usage should be fifo mode
 					CCCI_DBG_MSG(md_id, "cci", "rx channel error(rx>%02x : %d<curr)\n", r_ch_val, rx_ch);
-					__ccif_v1_reg_dump(ccif, NULL, 0);
+					__ccif_v1_dump_reg(ccif, NULL, 0);
 				} else {
 					break;
 				}
@@ -363,9 +394,10 @@ static int __ccif_v1_intr_handler(ccif_t *ccif)
 		}
 		re_enter_cnt++;
 	}
+	
 	if( (re_enter_cnt>=CCIF_INTR_MAX_RE_ENTER_CNT) && (r_ch_val!=0) ) {
 		CCCI_DBG_MSG(md_id, "cci", "too much message to process\n");
-		__ccif_v1_reg_dump(ccif, NULL, 0);
+		__ccif_v1_dump_reg(ccif, NULL, 0);
 	}
 
 	// Store latest rx channel index
@@ -379,6 +411,18 @@ static int __ccif_v1_intr_handler(ccif_t *ccif)
 	}
 
 	clear_bit(CCIF_TOP_HALF_RUNNING,&ccif->m_status);
+
+	
+	#ifdef CCIF_DEBUG
+	if (reg_err) {		
+		reg_err = FALSE;
+		msg[0]	= 0xFFFFFFFF;
+		msg[1]	= 0x5B5B5B5B;
+		msg[2]	= CCCI_FORCE_ASSERT_CH;
+		msg[3]  = 0xB5B5B5B5;
+		__ccif_v1_write_phy_ch_data(ccif, msg, 0);
+	}
+	#endif
 
 	return 0;
 }
@@ -410,6 +454,7 @@ ccif_t* ccif_create_instance(ccif_hw_info_t *info, void* ctl_b, int md_id)
 			ccif->m_ccif_type = info->type;
 			ccif->m_irq_id = info->irq_id;
 			ccif->m_reg_base = info->reg_base;
+			ccif->m_md_reg_base = info->md_reg_base;
 			ccif->m_irq_attr = info->irq_attr;
 			ccif->m_status = 0;
 			ccif->m_rx_idx = 0;
@@ -419,20 +464,20 @@ ccif_t* ccif_create_instance(ccif_hw_info_t *info, void* ctl_b, int md_id)
 			ccif->register_isr_notify_func = __ccif_v1_register_isr_notify;
 			ccif->ccif_init = __ccif_v1_init;
 			ccif->ccif_de_init = __ccif_v1_de_init;
-			ccif->ccif_register_intr = __ccif_v1_intr_reg;
+			ccif->ccif_register_intr = __ccif_v1_reg_intr;
 			ccif->ccif_en_intr = __ccif_v1_en_intr;
 			ccif->ccif_dis_intr = __ccif_v1_dis_intr;
-			ccif->ccif_reg_dump = __ccif_v1_reg_dump;
+			ccif->ccif_dump_reg = __ccif_v1_dump_reg;
 			ccif->ccif_read_phy_ch_data = __ccif_v1_read_phy_ch_data;
 			ccif->ccif_write_phy_ch_data = __ccif_v1_write_phy_ch_data;
 			ccif->ccif_get_rx_ch = __ccif_v1_get_rx_ch;
 			ccif->ccif_get_busy_state = __ccif_v1_get_busy_state;
 			ccif->ccif_set_busy_state = __ccif_v1_set_busy_state;
 			ccif->ccif_ack_phy_ch = __ccif_v1_ack;
-			ccif->ccif_clear_share_mem = __ccif_v1_clear_share_mem;
-			ccif->ccif_set_runtime_data = __ccif_v1_set_runtime_data;
+			ccif->ccif_clear_sram = __ccif_v1_clear_sram;
+			ccif->ccif_write_runtime_data = __ccif_v1_write_runtime_data;
 			ccif->ccif_intr_handler = __ccif_v1_intr_handler;
-			ccif->ccif_reset_to_default = __ccif_v1_reset;
+			ccif->ccif_reset = __ccif_v1_reset;
 			ccif->m_logic_ctl_block = ctl_b;
 			ccif->m_irq_dis_cnt = 0;
 			return ccif;

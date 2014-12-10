@@ -1,3 +1,4 @@
+#include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
@@ -5,6 +6,8 @@
 #include <linux/utsname.h>
 #include <asm/uaccess.h>
 #include <linux/sched.h>
+#include <linux/mt_wq_debug.h>
+#include <linux/xlog.h>
 #include "prof_ctl.h"
 
 
@@ -141,6 +144,7 @@ static int mt_cputime_show(struct seq_file *m, void *v)
 	int i = 0;
 	unsigned long long end_ts;
 	unsigned long long total_excul_time = 0, thread_time = 0;
+	unsigned long long cpu_idle_time[mt_cpu_num];
 	u32 div_value;
 	struct task_struct *tsk;
 	struct task_struct *idle;
@@ -174,6 +178,12 @@ static int mt_cputime_show(struct seq_file *m, void *v)
 					mt_cpu_info_head[i].cpu_idletime_end = mt_cpu_info_head[i].cpu_idletime_start;
 				}
 			}
+		cpu_idle_time[i]=mt_cpu_info_head[i].cpu_idletime_end - mt_cpu_info_head[i].cpu_idletime_start;
+		if(cpu_idle_time[i]*1000 > prof_dur_ts)
+		{
+			cpu_idle_time[i]= prof_dur_ts;
+			do_div(cpu_idle_time[i], 1000);
+		}
 
 		if(mtsched_enabled || (0 == mt_cpu_info_head[i].cpu_iowait_end))
 		{
@@ -200,18 +210,18 @@ static int mt_cputime_show(struct seq_file *m, void *v)
 		SEQ_printf(m, "-----------------------------------------------\n");
 		SEQ_printf(m, "         Process:Status:   PID:  TGID:          CPUtime:       Percenta%%:          Elapsed:   User: Kernel:  ISR  type:   ISRTime:\n");
 
-	do_div(prof_dur_ts, 1000000);		// change  to
+	do_div(prof_dur_ts, 1000);		// change  to us
 	for(i = 0; i < mt_cpu_num; i++)
 	{
-		thread_time = cputime_sub(mt_cpu_info_head[i].cpu_idletime_end, mt_cpu_info_head[i].cpu_idletime_start) * 1000;
+		thread_time = cpu_idle_time[i] * 1000000;
 		do_div(thread_time, prof_dur_ts);
 		div_value = (u32)thread_time;
 		idle = idle_task(i);
 
-		SEQ_printf(m, "          Idle-%1d:     L:%6d:     0:%10Ld.%06ld:%10d.%04d%%:%10Ld.%06ld:      0:      0:%7d:%10Ld.%06ld:\n",
+		SEQ_printf(m, "          Idle-%1d:     L:%6d:     0:%10Ld.%03ld000:%10d.%04d%%:%10Ld.%06ld:      0:      0:%7d:%10Ld.%06ld:\n",
 			i,
 			0-i,
-			SPLIT_US(mt_cpu_info_head[i].cpu_idletime_end - mt_cpu_info_head[i].cpu_idletime_start),
+			SPLIT_US(cpu_idle_time[i]),
 			div_value /10000,
 			div_value % 10000,
 			SPLIT_NS(end_ts - prof_start_ts),
@@ -219,7 +229,7 @@ static int mt_cputime_show(struct seq_file *m, void *v)
 			SPLIT_NS(idle->se.mtk_isr_time)
 				);
 
-		total_excul_time += (mt_cpu_info_head[i].cpu_idletime_end - mt_cpu_info_head[i].cpu_idletime_start) * 1000;
+		total_excul_time += (cpu_idle_time[i]) * 1000;
 	}
 
 	while(mtproc != NULL)
@@ -334,7 +344,7 @@ static ssize_t mt_cputime_write(struct file *filp, const char *ubuf,
     if (copy_from_user(&buf, ubuf, cnt))
 	return -EFAULT;
 	
-printk("mtsched_proc input stream:%s, count %d.\n", buf, cnt);
+printk("mtsched_proc input count %d.\n", cnt);
 
     buf[cnt] = 0;
 
@@ -383,6 +393,117 @@ static ssize_t mt_status_write(struct file *filp, const char *ubuf,
     printk("[mtprof] new status = 0x%x\n", (unsigned int)mtprof_status);
     return cnt;
 }
+/* 5. workqueue debug */
+#ifdef CONFIG_MTK_WQ_DEBUG
+
+extern int mt_dump_wq_debugger(void);
+int wq_tracing = 0;
+int wq_debugger_enable = 1;
+
+MT_DEBUG_ENTRY(wq_dump);
+static int mt_wq_dump_show(struct seq_file *m, void *v)
+{
+    return 0;
+}
+
+static ssize_t mt_wq_dump_write(struct file *filp, const char *ubuf,
+	size_t cnt, loff_t *data)
+{
+    char buf[64];
+    unsigned long val;
+    int ret;
+    if (cnt >= sizeof(buf))
+		return -EINVAL;
+
+    if (copy_from_user(&buf, ubuf, cnt))
+		return -EFAULT;
+
+    buf[cnt] = 0;
+
+    ret = strict_strtoul(buf, 10, &val);
+    if (ret < 0)
+		return ret;
+
+    mt_dump_wq_debugger();
+
+    return cnt;
+}
+
+static void print_help(struct seq_file *m)
+{
+#define WQ_LOG_TAG "wq_debug"
+
+	if (m != NULL) {
+		SEQ_printf(m, "\n*** Usage ***\n");
+		SEQ_printf(m, "commands to enable logs\n");
+		SEQ_printf(m, "  echo [queue work] [activate work] [execute work] [wq debugger] > wq_enable_logs\n");
+		SEQ_printf(m, "  ex. echo 1 1 1 1  > wq_enable_logs, to enable all logs \n");
+		SEQ_printf(m, "  ex. echo 1 0 0 1  > wq_enable_logs, to enable \"queue work\" & \"wq debug\" logs \n");
+		SEQ_printf(m, "  Note, please try to enable [wq debugger] as possible as you can.\n");	
+	} else {
+		xlog_printk(ANDROID_LOG_ERROR, WQ_LOG_TAG, "\n*** Usage ***\n");
+		xlog_printk(ANDROID_LOG_ERROR, WQ_LOG_TAG, "commands to enable logs\n");
+		xlog_printk(ANDROID_LOG_ERROR, WQ_LOG_TAG, "  echo [queue work] [activate work] [execute work] [wq debugger] > wq_enable_logs\n");
+		xlog_printk(ANDROID_LOG_ERROR, WQ_LOG_TAG, "  ex. echo 1 1 1 1  > wq_enable_logs, to enable all logs \n");
+		xlog_printk(ANDROID_LOG_ERROR, WQ_LOG_TAG, "  ex. echo 1 0 0 1  > wq_enable_logs, to enable \"queue work\" & \"wq debug\" logs \n");
+		xlog_printk(ANDROID_LOG_ERROR, WQ_LOG_TAG, "  Note, please try to enable [wq debugger] as possible as you can.\n");
+	}	
+}
+
+MT_DEBUG_ENTRY(wq_log);
+static int mt_wq_log_show(struct seq_file *m, void *v)
+{
+	if (wq_tracing & WQ_DUMP_QUEUE_WORK)
+		SEQ_printf(m, "wq: queue work log enabled\n");
+	if (wq_tracing & WQ_DUMP_ACTIVE_WORK)
+		SEQ_printf(m, "wq: active work log enabled\n");
+	if (wq_tracing & WQ_DUMP_EXECUTE_WORK)
+		SEQ_printf(m, "wq: execute work log enabled\n");
+	if (wq_tracing == 0)
+		SEQ_printf(m, "wq: no log enabled\n");
+
+	if (wq_debugger_enable)
+		SEQ_printf(m, "wq: wq debugger is enabled\n");
+	else
+		SEQ_printf(m, "wq: wq debugger is disabled\n");
+
+	print_help(m);
+    return 0;
+}
+
+static ssize_t mt_wq_log_write(struct file *filp, const char *ubuf,
+	size_t cnt, loff_t *data)
+{
+	int log_queue_work = 0, log_activate_work = 0, log_execute_work = 0;
+	int log_wq_debugger_enable = 0;
+    char buf[64];
+
+    if (cnt > sizeof(buf))
+		return -EINVAL;
+		
+    if (copy_from_user(&buf, ubuf, cnt))
+		return -EFAULT;
+
+    buf[cnt] = '\0';
+	printk (KERN_DEBUG "rex %s\n", buf);
+	
+    if (sscanf(buf, "%d %d %d %d", &log_queue_work, &log_activate_work, &log_execute_work, &log_wq_debugger_enable) == 4)
+    {
+		wq_tracing = 0;
+		wq_tracing |= (log_queue_work ? WQ_DUMP_QUEUE_WORK : 0);
+		wq_tracing |= (log_activate_work ? WQ_DUMP_ACTIVE_WORK : 0);
+		wq_tracing |= (log_execute_work ? WQ_DUMP_EXECUTE_WORK : 0);
+
+		wq_debugger_enable = log_wq_debugger_enable;
+    }
+	else
+		print_help(NULL);
+    
+    return cnt;
+}
+
+#endif //CONFIG_MTK_WQ_DEBUG
+
 /*-------------------------------------------------------------------*/
 static int __init init_mtsched_prof(void)
 {
@@ -396,6 +517,16 @@ static int __init init_mtsched_prof(void)
     pe = proc_create("mtprof/cputime", 0664, NULL, &mt_cputime_fops);
     if (!pe)
 	return -ENOMEM;
+
+#ifdef CONFIG_MTK_WQ_DEBUG
+    pe = proc_create("mtprof/wq_dump", 0664, NULL, &mt_wq_dump_fops);
+    if (!pe)
+        return -ENOMEM;
+
+    pe = proc_create("mtprof/wq_enable_logs", 0664, NULL, &mt_wq_log_fops);
+    if (!pe)
+        return -ENOMEM;
+#endif
 
 	mt_cpu_num = num_present_cpus();
 	mt_cpu_info_head = kmalloc(mt_cpu_num * sizeof(struct mt_cpu_info), GFP_ATOMIC);

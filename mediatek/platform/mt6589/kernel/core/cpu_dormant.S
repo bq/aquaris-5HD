@@ -2114,10 +2114,10 @@ mt_restore_control_registers:
         @mcr    p15,0,r3,c13,c0,3    @ TPIDRURO
         @mcr    p15,0,r12,c13,c0,4   @ TPIDRPRW
         @
-        ldmne  r0!, {r1,r2}
+        ldm    r0!, {r1,r2}
         mcr    p15,0,r1,c13,c0,1    @ CONTEXTIDR
         mcr    p15,0,r2,c13,c0,2    @ TPIDRURW
-        ldmne  r0!, {r1,r2}
+        ldm    r0!, {r1,r2}
         mcr    p15,0,r1,c13,c0,3    @ TPIDRURO
         mcr    p15,0,r2,c13,c0,4   @ TPIDRPRW
         

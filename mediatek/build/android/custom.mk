@@ -2,9 +2,9 @@ include mediatek/build/Makefile
 $(call codebase-path)
 
 .PHONY: mtk-custom-files
-*: mtk-custom-folder
-mtk-custom-folder: mtk-custom-files
-mtk-custom-files := $(strip $(call mtk.custom.generate-rules,mtk-custom-files))
+#*: mtk-custom-folder
+#mtk-custom-folder: mtk-custom-files
+#mtk-custom-files := $(strip $(call mtk.custom.generate-rules,mtk-custom-files))
 custom-files: ;
 
 mtk-custom-folder := 
@@ -29,10 +29,11 @@ define _generate-custom-folder
 mtk-custom-folder: $(1)
 $(1): PRIVATE_CUSTOM_PATH := $(2)
 $(1): PRIVATE_DISPLAY_CUSTOM_PATH := $(patsubst $(CURDIR)/%,%,$(abspath $(LOCAL_PATH)/$(2)))
-$(1): $$(mtk-custom-files) FORCE
+$(1): FORCE
 	@echo "Custom: $$(@) -> $$(PRIVATE_DISPLAY_CUSTOM_PATH)"
 	@rm -rf $$@
 	@ln -s $$(PRIVATE_CUSTOM_PATH) $$@
+$(eval $(info Symlink: $(2) -> $(1)))
 $(eval $(shell rm -rf $(1); ln -s $(2) $(1)))
 endef
 

@@ -29,11 +29,7 @@
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
 #include <asm/dma-mapping.h>
-
-#include "ccci.h"
-#include "ccci_fs.h"
-#include "ccci_common.h"
-
+#include <ccci.h>
 #define CCCI_FS_DEVNAME  "ccci_fs"
 
 extern unsigned long long lg_ch_tx_debug_enable[];
@@ -54,6 +50,7 @@ typedef struct _fs_ctl_block
 	int					reset_handle;
 	wait_queue_head_t	fs_waitq;
 	struct wake_lock	fs_wake_lock;
+	char                fs_wakelock_name[16];
 	int					fs_smem_size;
 }fs_ctl_block_t;
 
@@ -150,7 +147,7 @@ static int ccci_fs_send(int md_id, unsigned long arg)
 		return -EFAULT;
 	}
 
-	msg.data0 = ctl_b->fs_buffers_phys_addr + (sizeof(fs_stream_buffer_t) * message.index);
+	msg.data0 = ctl_b->fs_buffers_phys_addr - get_md2_ap_phy_addr_fixed() + (sizeof(fs_stream_buffer_t) * message.index);
 	msg.data1 = message.length + 4;
 	msg.channel = CCCI_FS_TX;
 	msg.reserved = message.index;
@@ -216,7 +213,7 @@ static int ccci_fs_mmap(struct file *file, struct vm_area_struct *vma)
 
 	off += start & PAGE_MASK;
 	vma->vm_pgoff  = off >> PAGE_SHIFT;
-	vma->vm_flags |= VM_RESERVED;
+	vma->vm_flags |= VM_IO;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
     
 	CCCI_FS_MSG(md_id, "mmap--\n");
@@ -253,6 +250,21 @@ static long ccci_fs_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	return ret;
 }
 
+// clear kfifo invalid data which may not be processed before close operation
+void ccci_fs_resetfifo(int md_id)
+{
+	fs_ctl_block_t *ctl_b = fs_ctl_block[md_id];
+	unsigned long   flag;
+
+	CCCI_MSG("ccci_fs_resetfifo\n");
+
+	// Reset FS KFIFO
+	spin_lock_irqsave(&ctl_b->fs_spinlock, flag);
+	kfifo_reset(&ctl_b->fs_fifo);
+	spin_unlock_irqrestore(&ctl_b->fs_spinlock, flag);
+
+	return;
+}
 
 static int ccci_fs_open(struct inode *inode, struct file *file)
 {
@@ -285,7 +297,7 @@ static int ccci_fs_release(struct inode *inode, struct file *file)
 	int				md_id;
 	int				major;
 	fs_ctl_block_t	*ctl_b;
-	unsigned long   flag;
+	// unsigned long   flag;
 
 	major = imajor(inode);
 	md_id = get_md_id_by_dev_major(major);
@@ -300,10 +312,11 @@ static int ccci_fs_release(struct inode *inode, struct file *file)
 	memset(ctl_b->fs_buffers, 0, ctl_b->fs_smem_size);
 	ccci_user_ready_to_reset(md_id, ctl_b->reset_handle);
 
+	// CR: 1260702
 	// clear kfifo invalid data which may not be processed before close operation
-	spin_lock_irqsave(&ctl_b->fs_spinlock,flag);
-	kfifo_reset(&ctl_b->fs_fifo);
-	spin_unlock_irqrestore(&ctl_b->fs_spinlock,flag);
+	// spin_lock_irqsave(&ctl_b->fs_spinlock,flag);
+	// kfifo_reset(&ctl_b->fs_fifo);
+	// spin_unlock_irqrestore(&ctl_b->fs_spinlock,flag);
 
 	return 0;
 }
@@ -373,7 +386,6 @@ int __init ccci_fs_init(int md_id)
 {
 	int				ret;
 	int				major, minor;
-	char			buf[16];
 	fs_ctl_block_t	*ctl_b;
 
 	ret = get_dev_id_by_md_id(md_id, "fs", &major, &minor);
@@ -394,10 +406,10 @@ int __init ccci_fs_init(int md_id)
 	spin_lock_init(&ctl_b->fs_spinlock);
 	init_waitqueue_head(&ctl_b->fs_waitq);
 	ctl_b->fs_dev_num = MKDEV(major, minor);
-	snprintf(buf, 16, "%s%d", CCCI_FS_DEVNAME, md_id);	
-	wake_lock_init(&ctl_b->fs_wake_lock, WAKE_LOCK_SUSPEND, buf); 
-	ret = register_chrdev_region(ctl_b->fs_dev_num, 1, buf);
-
+	snprintf(ctl_b->fs_wakelock_name, sizeof(ctl_b->fs_wakelock_name), "ccci%d_fs", (md_id+1));	
+	wake_lock_init(&ctl_b->fs_wake_lock, WAKE_LOCK_SUSPEND, ctl_b->fs_wakelock_name); 
+	
+	ret = register_chrdev_region(ctl_b->fs_dev_num, 1, ctl_b->fs_wakelock_name);
 	if (ret) {
 		CCCI_MSG_INF(md_id, "fs ", "ccci_fs_init: Register char device failed(%d)\n", ret);
 		goto _REG_CHR_REGION_FAIL;

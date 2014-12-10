@@ -204,7 +204,7 @@ static int cpu_ss_period_mode_read(char *buf, char **start, off_t off, int count
 static ssize_t cpu_ss_period_mode_write(struct file *file, const char *buffer, unsigned long count, void *data)
 {
     int len = 0;
-    char mode[20], desc[32];
+    char mode[16], desc[16];
     ktime_t ktime = ktime_set(mt_cpu_ss_period_s, mt_cpu_ss_period_ns);
 
     len = (count < (sizeof(desc) - 1)) ? count : (sizeof(desc) - 1);
@@ -214,7 +214,7 @@ static ssize_t cpu_ss_period_mode_write(struct file *file, const char *buffer, u
     }
     desc[len] = '\0';
 
-    if (sscanf(desc, "%s", mode) == 1)
+    if (sscanf(desc, "%15s", mode) == 1)
     {
         if (!strcmp(mode, "enable"))
         {
@@ -279,7 +279,7 @@ static int cpu_ss_debug_mode_read(char *buf, char **start, off_t off, int count,
 static ssize_t cpu_ss_debug_mode_write(struct file *file, const char *buffer, unsigned long count, void *data)
 {
     int len = 0;
-    char mode[20], desc[32];
+    char mode[16], desc[16];
 
     len = (count < (sizeof(desc) - 1)) ? count : (sizeof(desc) - 1);
     if (copy_from_user(desc, buffer, len)) 
@@ -288,7 +288,7 @@ static ssize_t cpu_ss_debug_mode_write(struct file *file, const char *buffer, un
     }
     desc[len] = '\0';
 
-    if (sscanf(desc, "%s", mode) == 1)
+    if (sscanf(desc, "%15s", mode) == 1)
     {
         if (!strcmp(mode, "enable"))
         {

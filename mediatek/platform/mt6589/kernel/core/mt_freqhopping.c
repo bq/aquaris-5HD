@@ -27,7 +27,7 @@
 #include <linux/vmalloc.h>
 #include <linux/dma-mapping.h>
 #include <board-custom.h>
-
+#include <linux/seq_file.h>
 
 #include "mach/mt_freqhopping.h"
 #include "mach/mt_fhreg.h"
@@ -40,16 +40,11 @@
 #include "mach/sync_write.h"
 #include "mach/mt_sleep.h"
 
+#include <mach/mt_freqhopping_drv.h>
 
 //#define FH_MSG printk //TODO
 //#define FH_BUG_ON(x) printk("BUGON %s:%d %s:%d",__FUNCTION__,__LINE__,current->comm,current->pid)//TODO
 //#define FH_BUG_ON(...) //TODO
-#define FH_BUG_ON(x) \
-do {    \
-		if((x)){ \
-			printk("BUGON %s:%d %s:%d\n",__FUNCTION__,__LINE__,current->comm,current->pid); \
-        	} \
-} while(0);
 
 #define MT_FH_CLK_GEN 		0
 
@@ -68,7 +63,6 @@ static unsigned int 	g_curr_clkgen=MT658X_FH_PLL_TOTAL_NUM+1; //default clkgen =
 static unsigned char 	g_mempll_fh_table[8];
 
 static unsigned int	g_initialize=0;
-static unsigned int	g_resume_mempll_ssc=false;
 
 static unsigned int 	*g_fh_rank1_pa;
 static unsigned int 	*g_fh_rank1_va;
@@ -171,6 +165,15 @@ unsigned int mt_get_emi_freq(void);
 
 #define PLL_STATUS_ENABLE 1
 #define PLL_STATUS_DISABLE 0
+
+static void mt_fh_hal_default_conf(void)
+{
+	FH_MSG("EN: %s",__func__);
+	
+	freqhopping_config(MT658X_FH_MEM_PLL, 266000, true); //Enable MEMPLL SSC
+}
+
+
 static void update_fhctl_status(const int pll_id, const int enable)
 {
         int i = 0 ;
@@ -566,92 +569,6 @@ Exit:
 			
 	//FH_MSG("Exit");
 	return retVal;
-}
-
-static int __freqhopping_ctrl_lock(struct freqhopping_ioctl* fh_ctl,bool enable)
-{
-	int		retVal=1;
-	unsigned long 	flags;
-
-	FH_MSG("EN: _fctr_lck %d:%d",fh_ctl->pll_id,enable);
-
-	spin_lock_irqsave(&freqhopping_lock, flags);
-	retVal = __freqhopping_ctrl(fh_ctl, enable);
-	spin_unlock_irqrestore(&freqhopping_lock, flags);
-	
-	return retVal;
-}
-
-static int __EnableUsrSetting(struct freqhopping_ioctl* fh_ctl)
-{
-	unsigned long flags;
-	
-	FH_MSG("EN: %s",__func__);
-	FH_MSG("pll_id: %d",fh_ctl->pll_id);
-
-	//Check the wrong Frequency hopping PLL ID
-	FH_BUG_ON(fh_ctl->pll_id>MT658X_FH_MAXIMUMM_PLL);
-	FH_BUG_ON(fh_ctl->pll_id<MT658X_FH_MINIMUMM_PLL);
-	
-	//we don't care the PLL status , we just change the flag & update the table
-	//the setting will be applied during the following FH enable
-
-	spin_lock_irqsave(&freqhopping_lock, flags);
-	memcpy(&mt_ssc_fhpll_userdefined[fh_ctl->pll_id],&(fh_ctl->ssc_setting),sizeof(struct freqhopping_ssc));
-	g_fh_pll[fh_ctl->pll_id].user_defined = true;
-	spin_unlock_irqrestore(&freqhopping_lock, flags);
-
-	//FH_MSG("Exit");
-
-	return 0;
-
-}
-
-static int __DisableUsrSetting(struct freqhopping_ioctl* fh_ctl)
-{
-	unsigned long flags;
-
-	FH_MSG("EN: %s",__func__);
-	FH_MSG("id: %d",fh_ctl->pll_id);
-
-	spin_lock_irqsave(&freqhopping_lock, flags);
-	memset(&mt_ssc_fhpll_userdefined[fh_ctl->pll_id], 0,sizeof(struct freqhopping_ssc));
-	g_fh_pll[fh_ctl->pll_id].user_defined = false;
-	spin_unlock_irqrestore(&freqhopping_lock, flags);
-
-	//FH_MSG("Exit");
-
-	return 0;
-}
-
-
-static int mt_freqhopping_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	//Get the structure of ioctl
-	int ret = 0;
-
-	struct freqhopping_ioctl *freqhopping_ctl = (struct freqhopping_ioctl *)arg;
-	
-	FH_MSG("EN:CMD:%d id:%d",cmd,freqhopping_ctl->pll_id);
-
-	if(FH_CMD_ENABLE == cmd) {
-		ret = __freqhopping_ctrl_lock(freqhopping_ctl,true);
-	}else if(FH_CMD_DISABLE == cmd) { 
-		ret = __freqhopping_ctrl_lock(freqhopping_ctl,false);
-	}
-	else if(FH_CMD_ENABLE_USR_DEFINED == cmd) { 
-		ret = __EnableUsrSetting(freqhopping_ctl);
-	}
-	else if(FH_CMD_DISABLE_USR_DEFINED == cmd) { 
-		ret = __DisableUsrSetting(freqhopping_ctl);
-	}else {
-		//Invalid command is not acceptable!!	
-		WARN_ON(1);
-	}
-	
-	//FH_MSG("Exit");
-
-	return ret;
 }
 
 
@@ -1086,7 +1003,7 @@ static int mt_oc2h_mempll(void)
 }
 
 //mempll 200->266MHz using FHCTL
-int mt_l2h_mempll(void)  //mempll low to high (200->266MHz)
+static int mt_fh_hal_l2h_mempll(void)  //mempll low to high (200->266MHz)
 {
 	unsigned long 	flags;
 	unsigned int	fh_dds=0;
@@ -1231,10 +1148,9 @@ int mt_l2h_mempll(void)  //mempll low to high (200->266MHz)
 	
 	return 0;
 }
-EXPORT_SYMBOL(mt_l2h_mempll);
 
 //mempll 266->200MHz using FHCTL
-int mt_h2l_mempll(void)  //mempll low to high (200->266MHz)
+static int mt_fh_hal_h2l_mempll(void)  //mempll low to high (200->266MHz)
 {
 	unsigned long 	flags;
 	unsigned int	fh_dds=0;
@@ -1382,9 +1298,8 @@ int mt_h2l_mempll(void)  //mempll low to high (200->266MHz)
 
 	return 0;
 }
-EXPORT_SYMBOL(mt_h2l_mempll);
 
-int mt_fh_dram_overclock(int clk)
+static int mt_fh_hal_dram_overclock(int clk)
 {
 	FH_MSG("EN: %s clk:%d",__func__,clk);
 	
@@ -1394,7 +1309,7 @@ int mt_fh_dram_overclock(int clk)
 			return -1;
 		}
 		else{ //let's move from 266 to 208.5
-			return(mt_h2l_mempll());			
+			return(mt_fh_hal_h2l_mempll());			
 		}
 	}
 	
@@ -1414,7 +1329,7 @@ int mt_fh_dram_overclock(int clk)
 			return -1;
 		}
 		else if( g_curr_dramc == LOW_DRAMC ){ //208 -> 266
-			return(mt_l2h_mempll());			
+			return(mt_fh_hal_l2h_mempll());			
 		}
 		else if( g_curr_dramc == 293 ){ //293 -> 266
 			return(mt_oc2h_mempll());			
@@ -1425,54 +1340,37 @@ int mt_fh_dram_overclock(int clk)
 	FH_BUG_ON(1);
 	return(-1);
 }
-EXPORT_SYMBOL(mt_fh_dram_overclock);
 
-int mt_fh_get_dramc(void)
+static int mt_fh_hal_get_dramc(void)
 {
 	return(g_curr_dramc);
 }
-EXPORT_SYMBOL(mt_fh_get_dramc);
 
-void mt_fh_popod_save(void)
+static void mt_fh_hal_popod_save(void)
 {
 	FH_MSG("EN: %s",__func__);
 }
-EXPORT_SYMBOL(mt_fh_popod_save);
 
-void mt_fh_popod_restore(void)
+static void mt_fh_hal_popod_restore(void)
 {
 	FH_MSG("EN: %s",__func__);
 }
-EXPORT_SYMBOL(mt_fh_popod_restore);
 
-static int freqhopping_dramc_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
-
+//static int freqhopping_dramc_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+static int freqhopping_dramc_proc_read(struct seq_file* m, void* v)
 {
-	char *p = page;
-	int len = 0;
-
 	FH_MSG("EN: %s",__func__);
 	
-	p += sprintf(p, "DRAMC: %dMHz\r\n",g_curr_dramc);
-	p += sprintf(p, "mt_get_emi_freq(): %dHz\r\n",mt_get_emi_freq());	
-	p += sprintf(p, "get_ddr_type(): %d\r\n",get_ddr_type());	
-	p += sprintf(p, "rank: 0x%x\r\n",(DRV_Reg32(EMI_CONA) & 0x20000));	
-	p += sprintf(p, "infra: 0x%x\r\n",(slp_will_infra_pdn()));	
-	p += sprintf(p, "g_fh_rank0_pa: %p\r\n",g_fh_rank0_pa);	
-	p += sprintf(p, "g_fh_rank0_va: %p\r\n",g_fh_rank0_va);	
-	p += sprintf(p, "g_fh_rank1_pa: %p\r\n",g_fh_rank1_pa);	
-	p += sprintf(p, "g_fh_rank1_va: %p\r\n",g_fh_rank1_va);	
-
-	*start = page + off;
-
-	len = p - page;
-
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len : count;
+	seq_printf(m, "DRAMC: %dMHz\r\n",g_curr_dramc);
+	seq_printf(m, "mt_get_emi_freq(): %dHz\r\n",mt_get_emi_freq());	
+	seq_printf(m, "get_ddr_type(): %d\r\n",get_ddr_type());	
+	seq_printf(m, "rank: 0x%x\r\n",(DRV_Reg32(EMI_CONA) & 0x20000));	
+	seq_printf(m, "infra: 0x%x\r\n",(slp_will_infra_pdn()));	
+	seq_printf(m, "g_fh_rank0_pa: %p\r\n",g_fh_rank0_pa);	
+	seq_printf(m, "g_fh_rank0_va: %p\r\n",g_fh_rank0_va);	
+	seq_printf(m, "g_fh_rank1_pa: %p\r\n",g_fh_rank1_pa);	
+	seq_printf(m, "g_fh_rank1_va: %p\r\n",g_fh_rank1_va);	
+  return 0;		
 }
 
 
@@ -1497,10 +1395,10 @@ static int freqhopping_dramc_proc_write(struct file *file, const char *buffer, u
 	{
 		if( (freq == 266) || (freq == 200)){
 			FH_MSG("dramc:%d ", freq);
-			(freq==266) ? mt_l2h_mempll() : mt_h2l_mempll();
+			(freq==266) ? mt_fh_hal_l2h_mempll() : mt_fh_hal_h2l_mempll();
 		}
 		else if(freq == 293){
-			mt_fh_dram_overclock(293);
+			mt_fh_hal_dram_overclock(293);
 		}
 		else{
 			FH_MSG("must be 200/266/293!");
@@ -1508,13 +1406,13 @@ static int freqhopping_dramc_proc_write(struct file *file, const char *buffer, u
 
 #if 0 
 		if(freq == 266){
-			FH_MSG("==> %d",mt_fh_dram_overclock(266));
+			FH_MSG("==> %d",mt_fh_hal_dram_overclock(266));
 		}
 		else if(freq == 293){
-			FH_MSG("==> %d",mt_fh_dram_overclock(293));
+			FH_MSG("==> %d",mt_fh_hal_dram_overclock(293));
 		}
 		else if(freq == LOW_DRAMC){
-			FH_MSG("==> %d",mt_fh_dram_overclock(208));
+			FH_MSG("==> %d",mt_fh_hal_dram_overclock(208));
 		}
 #endif
 
@@ -1529,136 +1427,49 @@ static int freqhopping_dramc_proc_write(struct file *file, const char *buffer, u
 }
 
 
-static int freqhopping_debug_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+//static int freqhopping_dumpregs_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+static int freqhopping_dumpregs_proc_read(struct seq_file* m, void* v)
 {
-	char *p = page;
-	int len = 0;
-	
-	FH_MSG("EN: %s",__func__);
-
-	p += sprintf(p, "\r\n[freqhopping debug flag]\r\n");
-	p += sprintf(p, "===============================================\r\n" );
-	p += sprintf(p, "id==MAINPLL==ARMPLL==MSDCPLL==TVPLL==LVDSPLL==MEMPLL\r\n" );
-	p += sprintf(p, "   == %04d====%04d====%04d====%04d====%04d====%04d=\r\n" ,
-				g_fh_pll[MT658X_FH_MAIN_PLL].fh_status, g_fh_pll[MT658X_FH_ARM_PLL].fh_status,
-				g_fh_pll[MT658X_FH_MSDC_PLL].fh_status, g_fh_pll[MT658X_FH_TVD_PLL].fh_status,
-				g_fh_pll[MT658X_FH_LVDS_PLL].fh_status, g_fh_pll[MT658X_FH_MEM_PLL].fh_status);
-	p += sprintf(p, "   == %04d====%04d====%04d====%04d====%04d====%04d=\r\n" ,
-				g_fh_pll[MT658X_FH_MAIN_PLL].setting_id, g_fh_pll[MT658X_FH_ARM_PLL].setting_id,
-				g_fh_pll[MT658X_FH_MSDC_PLL].setting_id, g_fh_pll[MT658X_FH_TVD_PLL].setting_id,
-				g_fh_pll[MT658X_FH_LVDS_PLL].setting_id, g_fh_pll[MT658X_FH_MEM_PLL].setting_id);
-
-	*start = page + off;
-
-	len = p - page;
-
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len : count;
-}
-
-static int freqhopping_debug_proc_write(struct file *file, const char *buffer, unsigned long count, void *data)
-{
-	int 				ret;
-	char 				kbuf[256];
-	unsigned long 			len = 0;
-	unsigned int 			cmd,p1,p2,p3,p4,p5,p6,p7;
-	struct freqhopping_ioctl 	fh_ctl;
-	
-	p1=0;
-	p2=0;
-	p3=0;
-	p4=0;
-	p5=0;
-	p6=0;
-	p7=0;
-
-	FH_MSG("EN: %s",__func__);
-	
-	len = min(count, (unsigned long)(sizeof(kbuf)-1));
-
-	if (count == 0)return -1;
-	if(count > 255)count = 255;
-
-	ret = copy_from_user(kbuf, buffer, count);
-	if (ret < 0)return -1;
-	
-	kbuf[count] = '\0';
-
-	sscanf(kbuf, "%x %x %x %x %x %x %x %x", &cmd, &p1, &p2, &p3, &p4, &p5, &p6, &p7);
-
-	//ccyeh fh_ctl.opcode = p1;
-	fh_ctl.pll_id  = p2;
-	//ccyeh removed fh_ctl.ssc_setting_id = p3;
-	fh_ctl.ssc_setting.dds		= p3;
-	fh_ctl.ssc_setting.df		= p4;
-	fh_ctl.ssc_setting.dt		= p5;
-	fh_ctl.ssc_setting.upbnd	= p6;
-	fh_ctl.ssc_setting.lowbnd	= p7;
-	fh_ctl.ssc_setting.freq		= 0;
-	
-
-	if (cmd < FH_CMD_INTERNAL_MAX_CMD) {
-		mt_freqhopping_ioctl(NULL,cmd,(unsigned long)(&fh_ctl));
-	}
-	else {
-		FH_MSG("CMD error!");		
-	}
-		
-	
-	
-	return count;
-}
-
-
-static int freqhopping_dumpregs_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
-
-{
-	char 	*p = page;
-	int 	len = 0;
 	int 	i=0;
 
 	FH_MSG("EN: %s",__func__);
 
-	p += sprintf(p, "FHDMA_CFG:\r\n");
+	seq_printf(m, "FHDMA_CFG:\r\n");
 
-	p += sprintf(p, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+	seq_printf(m, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 		DRV_Reg32(REG_FHDMA_CFG+(i*0x10)),
 		DRV_Reg32(REG_FHDMA_2G1BASE+(i*0x10)),
 		DRV_Reg32(REG_FHDMA_2G2BASE+(i*0x10)),
 		DRV_Reg32(REG_FHDMA_INTMDBASE+(i*0x10)));
 
-	p += sprintf(p, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+	seq_printf(m, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 		DRV_Reg32(REG_FHDMA_EXTMDBASE+(i*0x10)),
 		DRV_Reg32(REG_FHDMA_BTBASE+(i*0x10)),
 		DRV_Reg32(REG_FHDMA_WFBASE+(i*0x10)),
 		DRV_Reg32(REG_FHDMA_FMBASE+(i*0x10)));
 
-	p += sprintf(p, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+	seq_printf(m, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 		DRV_Reg32(REG_FHSRAM_CON+(i*0x10)),
 		DRV_Reg32(REG_FHSRAM_WR+(i*0x10)),
 		DRV_Reg32(REG_FHSRAM_RD+(i*0x10)),
 		DRV_Reg32(REG_FHCTL_CFG+(i*0x10)));
 
-	p += sprintf(p, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+	seq_printf(m, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 		DRV_Reg32(REG_FHCTL_2G1_CH+(i*0x10)),
 		DRV_Reg32(REG_FHCTL_2G2_CH+(i*0x10)),
 		DRV_Reg32(REG_FHCTL_INTMD_CH+(i*0x10)),
 		DRV_Reg32(REG_FHCTL_EXTMD_CH+(i*0x10)));
 
-	p += sprintf(p, "0x%08x 0x%08x 0x%08x \r\n\r\n",
+	seq_printf(m, "0x%08x 0x%08x 0x%08x \r\n\r\n",
 		DRV_Reg32(REG_FHCTL_BT_CH+(i*0x10)),
 		DRV_Reg32(REG_FHCTL_WF_CH+(i*0x10)),
 		DRV_Reg32(REG_FHCTL_FM_CH+(i*0x10)));
 
 
-	p += sprintf(p, "FHCTL0_CFG:\r\n");
+	seq_printf(m, "FHCTL0_CFG:\r\n");
 
 	for(i=0;i<MT_FHPLL_MAX;i++) {
-		p += sprintf(p, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+		seq_printf(m, "0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 			DRV_Reg32(REG_FHCTL0_CFG+(i*0x10)),
 			DRV_Reg32(REG_FHCTL0_UPDNLMT+(i*0x10)),
 			DRV_Reg32(REG_FHCTL0_DDS+(i*0x10)),
@@ -1666,11 +1477,11 @@ static int freqhopping_dumpregs_proc_read(char *page, char **start, off_t off, i
 	}
 
 	
-	p += sprintf(p, "\r\nPLL_HP_CON0:\r\n0x%08x\r\n",
+	seq_printf(m, "\r\nPLL_HP_CON0:\r\n0x%08x\r\n",
 		DRV_Reg32(PLL_HP_CON0));
 		
 		
-	p += sprintf(p, "\r\nPLL_CON0 :\r\nARM:0x%08x MAIN:0x%08x MSDC:0x%08x TV:0x%08x LVDS:0x%08x UNIV:0x%08x\r\n",
+	seq_printf(m, "\r\nPLL_CON0 :\r\nARM:0x%08x MAIN:0x%08x MSDC:0x%08x TV:0x%08x LVDS:0x%08x UNIV:0x%08x\r\n",
 			DRV_Reg32(ARMPLL_CON0),	
 			DRV_Reg32(MAINPLL_CON0),	
 			DRV_Reg32(MSDCPLL_CON0),	
@@ -1678,7 +1489,7 @@ static int freqhopping_dumpregs_proc_read(char *page, char **start, off_t off, i
 			DRV_Reg32(LVDSPLL_CON0),
 			DRV_Reg32(UNIVPLL_CON0));
 
-	p += sprintf(p, "\r\nPLL_CON1 :\r\nARM:0x%08x MAIN:0x%08x MSDC:0x%08x TV:0x%08x LVDS:0x%08x UNIV:0x%08x\r\n",
+	seq_printf(m, "\r\nPLL_CON1 :\r\nARM:0x%08x MAIN:0x%08x MSDC:0x%08x TV:0x%08x LVDS:0x%08x UNIV:0x%08x\r\n",
 			DRV_Reg32(ARMPLL_CON1),	
 			DRV_Reg32(MAINPLL_CON1),	
 			DRV_Reg32(MSDCPLL_CON1),	
@@ -1686,7 +1497,7 @@ static int freqhopping_dumpregs_proc_read(char *page, char **start, off_t off, i
 			DRV_Reg32(LVDSPLL_CON1),
 			DRV_Reg32(UNIVPLL_CON0 + 0x4));
 		
-	p += sprintf(p, "\r\nPLL_CON2 :\r\nARM:0x%08x MAIN:0x%08x MSDC:0x%08x TV:0x%08x LVDS:0x%08x UNIV:0x%08x\r\n",
+	seq_printf(m, "\r\nPLL_CON2 :\r\nARM:0x%08x MAIN:0x%08x MSDC:0x%08x TV:0x%08x LVDS:0x%08x UNIV:0x%08x\r\n",
 			DRV_Reg32(ARMPLL_CON2),	
 			DRV_Reg32(MAINPLL_CON2),	
 			DRV_Reg32(MSDCPLL_CON2),	
@@ -1695,271 +1506,59 @@ static int freqhopping_dumpregs_proc_read(char *page, char **start, off_t off, i
 			DRV_Reg32(UNIVPLL_CON0 + 0x8));
 
 
-	p += sprintf(p, "\r\nMEMPLL :\r\nMEMPLL9: 0x%08x MEMPLL10: 0x%08x MEMPLL11: 0x%08x MEMPLL12: 0x%08x\r\n",
+	seq_printf(m, "\r\nMEMPLL :\r\nMEMPLL9: 0x%08x MEMPLL10: 0x%08x MEMPLL11: 0x%08x MEMPLL12: 0x%08x\r\n",
 			DRV_Reg32(DDRPHY_BASE+0x624),
 			DRV_Reg32(DDRPHY_BASE+0x628),
 			DRV_Reg32(DDRPHY_BASE+0x62C),
 			DRV_Reg32(DDRPHY_BASE+0x630)); //TODO: Hard code for now...
 		
-	p += sprintf(p, "\r\nCLK26CALI: 0x%08x\r\n",
+	seq_printf(m, "\r\nCLK26CALI: 0x%08x\r\n",
 			DRV_Reg32(CLK26CALI)); 
-
-	*start = page + off;
-
-	len = p - page;
-
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len : count;
+  return 0;		
 }
 
-
-static int freqhopping_status_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	char 	*p = page;
-	int 	len = 0;
-	int 	i=0;
-
-	FH_MSG("EN: %s",__func__);
-
-	p += sprintf(p, "FH status:\r\n");
-
-	p += sprintf(p, "===============================================\r\n" );
-	p += sprintf(p, "id == fh_status == pll_status == setting_id == curr_freq == user_defined ==\r\n" );
-
-
-	for(i=0;i<MT658X_FH_PLL_TOTAL_NUM ;i++) {
-		p += sprintf(p, "%2d    %8d      %8d",
-			i,
-			g_fh_pll[i].fh_status,
-			g_fh_pll[i].pll_status);
-		p += sprintf(p, "      %8d     %8d ",
-			g_fh_pll[i].setting_id,
-			g_fh_pll[i].curr_freq);
-
-		p += sprintf(p, "        %d\r\n",
-			g_fh_pll[i].user_defined);
-	}
-
-	p += sprintf(p, "\r\nPLL status:\r\n");
-	for(i=0;i<MT658X_FH_PLL_TOTAL_NUM ;i++) {
-		p += sprintf(p, "%d ",pll_is_on(i));
-	}
-	p += sprintf(p, "\r\n");
-
-	//TODO: unsigned int mt_get_cpu_freq(void)
-
-
-	*start = page + off;
-
-	len = p - page;
-
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len : count;
-}
-
-static int freqhopping_status_proc_write(struct file *file, const char *buffer, unsigned long count, void *data)
-{
-	int 		ret;
-	char 		kbuf[256];
-	unsigned long 	len = 0;
-	unsigned int	p1,p2,p3,p4,p5,p6;
-	struct 		freqhopping_ioctl fh_ctl;
-	
-	p1=0;
-	p2=0;
-	p3=0;
-	p4=0;
-	p5=0;
-	p6=0;
-
-	FH_MSG("EN: %s",__func__);
-	
-	len = min(count, (unsigned long)(sizeof(kbuf)-1));
-
-	if (count == 0)return -1;
-	if(count > 255)count = 255;
-
-	ret = copy_from_user(kbuf, buffer, count);
-	if (ret < 0)return -1;
-	
-	kbuf[count] = '\0';
-
-	sscanf(kbuf, "%x %x", &p1, &p2);
-	
-	fh_ctl.pll_id  = p2;
-	fh_ctl.ssc_setting.df= 0;
-	fh_ctl.ssc_setting.dt= 0;
-	fh_ctl.ssc_setting.upbnd= 0;
-	fh_ctl.ssc_setting.lowbnd= 0;
-	
-	if( p1 == 0){
-		mt_freqhopping_ioctl(NULL,FH_CMD_DISABLE,(unsigned long)(&fh_ctl));	
-	}
-	else{
-		mt_freqhopping_ioctl(NULL,FH_CMD_ENABLE,(unsigned long)(&fh_ctl));	
-	}
-		
-	return count;
-}
-
-
-static int freqhopping_userdefine_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	char 	*p = page;
-	int 	len = 0;
-	int 	i=0;
-
-	FH_MSG("EN: %s",__func__);
-
-	p += sprintf(p, "user defined settings:\n");
-
-	p += sprintf(p, "===============================================\r\n" );
-	p += sprintf(p, "     freq ==  delta t ==  delta f ==  up bond == low bond ==      dds ==\r\n" );
-
-	for(i=0;i<MT658X_FH_PLL_TOTAL_NUM ;i++) {
-		p += sprintf(p, "%10d  0x%08x  0x%08x  0x%08x  0x%08x  0x%08x\r\n"
-				,mt_ssc_fhpll_userdefined[i].freq
-				,mt_ssc_fhpll_userdefined[i].dt
-				,mt_ssc_fhpll_userdefined[i].df
-				,mt_ssc_fhpll_userdefined[i].upbnd
-				,mt_ssc_fhpll_userdefined[i].lowbnd
-				,mt_ssc_fhpll_userdefined[i].dds);
-	}
-
-	*start = page + off;
-
-	len = p - page;
-
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len : count;
-}
-
-static int freqhopping_userdefine_proc_write(struct file *file, const char *buffer, unsigned long count, void *data)
-{
-	int 		ret;
-	char 		kbuf[256];
-	unsigned long 	len = 0;
-	unsigned int 	p1,p2,p3,p4,p5,p6,p7;
-	struct 		freqhopping_ioctl fh_ctl;
-	
-	p1=0;
-	p2=0;
-	p3=0;
-	p4=0;
-	p5=0;
-	p6=0;
-	p7=0;
-
-	FH_MSG("EN: %s",__func__);
-	
-	len = min(count, (unsigned long)(sizeof(kbuf)-1));
-
-	if (count == 0)return -1;
-	if(count > 255)count = 255;
-
-	ret = copy_from_user(kbuf, buffer, count);
-	if (ret < 0)return -1;
-	
-	kbuf[count] = '\0';
-
-	sscanf(kbuf, "%x %x %x %x %x %x %x", &p1, &p2, &p3, &p4, &p5, &p6, &p7);
-
-	fh_ctl.pll_id  			= p2;
-	fh_ctl.ssc_setting.df		= p3;
-	fh_ctl.ssc_setting.dt		= p4;
-	fh_ctl.ssc_setting.upbnd	= p5;
-	fh_ctl.ssc_setting.lowbnd	= p6;
-	fh_ctl.ssc_setting.dds 		= p7;
-	fh_ctl.ssc_setting.freq		= 0;
-
-	//if (cmd < FH_CMD_INTERNAL_MAX_CMD) {
-	//	mt_freqhopping_ioctl(NULL,cmd,(unsigned long)(&fh_ctl));
-	//}
-	//else {
-	//	FH_MSG("CMD error!");		
-	//}
-	
-	if( p1 == FH_CMD_ENABLE){
-		ret = __EnableUsrSetting(&fh_ctl);
-		if(ret){
-			FH_MSG("__EnableUsrSetting() fail!");
-		}
-	}
-	else{
-		ret = __DisableUsrSetting(&fh_ctl);
-		if(ret){
-			FH_MSG("__DisableUsrSetting() fail!");
-		}
-	}
-		
-	return count;
-}
 
 #if MT_FH_CLK_GEN
 
-static int freqhopping_clkgen_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
-
+//static int freqhopping_clkgen_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+static int freqhopping_clkgen_proc_read(struct seq_file* m, void* v)
 {
-	char *p = page;
-	int len = 0;
 
 	FH_MSG("EN: %s",__func__);
 	
 	if(g_curr_clkgen > MT658X_FH_PLL_TOTAL_NUM ){
-		p += sprintf(p, "no clkgen output.\r\n");
+		seq_printf(m, "no clkgen output.\r\n");
 	}
 	else{
-		p += sprintf(p, "clkgen:%d\r\n",g_curr_clkgen);
+		seq_printf(m, "clkgen:%d\r\n",g_curr_clkgen);
 	}
 
-	p += sprintf(p, "\r\nMBIST :\r\nMBIST_CFG_2: 0x%08x MBIST_CFG_6: 0x%08x MBIST_CFG_7: 0x%08x\r\n",
+	seq_printf(m, "\r\nMBIST :\r\nMBIST_CFG_2: 0x%08x MBIST_CFG_6: 0x%08x MBIST_CFG_7: 0x%08x\r\n",
 			DRV_Reg32(MBIST_CFG_2),
 			DRV_Reg32(MBIST_CFG_6),
 			DRV_Reg32(MBIST_CFG_7));
 			
-	p += sprintf(p, "\r\nCLK_CFG_3: 0x%08x\r\n",
+	seq_printf(m, "\r\nCLK_CFG_3: 0x%08x\r\n",
 			DRV_Reg32(CLK_CFG_3));
 			
-	p += sprintf(p, "\r\nTOP_CKMUXSEL: 0x%08x\r\n",
+	seq_printf(m, "\r\nTOP_CKMUXSEL: 0x%08x\r\n",
 			DRV_Reg32(TOP_CKMUXSEL));
 
-	p += sprintf(p, "\r\nGPIO: 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+	seq_printf(m, "\r\nGPIO: 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 			DRV_Reg32(GPIO_BASE+0xC60),
 			DRV_Reg32(GPIO_BASE+0xC70),
 			DRV_Reg32(GPIO_BASE+0xCD0),
 			DRV_Reg32(GPIO_BASE+0xD90));
 	
 	
-	p += sprintf(p, "\r\nDDRPHY_BASE :\r\n0x%08x 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+	seq_printf(m, "\r\nDDRPHY_BASE :\r\n0x%08x 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
 			DRV_Reg32(DDRPHY_BASE+0x600),
 			DRV_Reg32(DDRPHY_BASE+0x604),
 			DRV_Reg32(DDRPHY_BASE+0x608),
 			DRV_Reg32(DDRPHY_BASE+0x60C),
 			DRV_Reg32(DDRPHY_BASE+0x614),
 			DRV_Reg32(DDRPHY_BASE+0x61C));
-
-	*start = page + off;
-
-	len = p - page;
-
-	if (len > off)
-		len -= off;
-	else
-		len = 0;
-
-	return len < count ? len : count;
+  return 0;		
 }
 
 
@@ -2111,262 +1710,10 @@ static int freqhopping_clkgen_proc_write(struct file *file, const char *buffer, 
 
 #endif //MT_FH_CLK_GEN
 
-static int freqhopping_debug_proc_init(void) 
-{   	
-	struct proc_dir_entry *prDebugEntry;
-	struct proc_dir_entry *prDramcEntry;
-	struct proc_dir_entry *prDumpregEntry;
-	struct proc_dir_entry *prStatusEntry;
-	struct proc_dir_entry *prUserdefEntry;
-	struct proc_dir_entry *fh_proc_dir = NULL;
-	
-	//TODO: check the permission!!
-
-	FH_MSG("EN: %s",__func__);
-	
-	fh_proc_dir = proc_mkdir("freqhopping", NULL);
-	if (!fh_proc_dir){
-		FH_MSG("proc_mkdir fail!");
-		return 1;
-	}
-	else{
-
-
-		/* /proc/freqhopping/freqhopping_debug */
-		prDebugEntry = create_proc_entry("freqhopping_debug",  S_IRUGO | S_IWUSR | S_IWGRP, fh_proc_dir);
-		if(prDebugEntry)
-		{
-			prDebugEntry->read_proc  = freqhopping_debug_proc_read;
-			prDebugEntry->write_proc = freqhopping_debug_proc_write;
-			FH_MSG("[%s]: successfully create /proc/freqhopping_debug", __func__);
-		}else{
-			FH_MSG("[%s]: failed to create /proc/freqhopping/freqhopping_debug", __func__);
-			return 1;
-		}
-		
-	
-		/* /proc/freqhopping/dramc */
-		prDramcEntry = create_proc_entry("dramc",  S_IRUGO | S_IWUSR | S_IWGRP, fh_proc_dir);
-		if(prDramcEntry)
-		{
-			prDramcEntry->read_proc  = freqhopping_dramc_proc_read;
-			prDramcEntry->write_proc = freqhopping_dramc_proc_write;
-			FH_MSG("[%s]: successfully create /proc/freqhopping/prDramcEntry", __func__);
-		}else{
-			FH_MSG("[%s]: failed to create /proc/freqhopping/prDramcEntry", __func__);
-			return 1;
-		}
-
-
-		/* /proc/freqhopping/dumpregs */
-		prDumpregEntry = create_proc_entry("dumpregs",  S_IRUGO | S_IWUSR | S_IWGRP, fh_proc_dir);
-		if(prDumpregEntry)
-		{
-			prDumpregEntry->read_proc  = freqhopping_dumpregs_proc_read;
-			prDumpregEntry->write_proc = NULL;
-			FH_MSG("[%s]: successfully create /proc/freqhopping/dumpregs", __func__);
-		}else{
-			FH_MSG("[%s]: failed to create /proc/freqhopping/dumpregs", __func__);
-			return 1;
-		}
-
-
-		/* /proc/freqhopping/status */
-		prStatusEntry = create_proc_entry("status",  S_IRUGO | S_IWUSR | S_IWGRP, fh_proc_dir);
-		if(prStatusEntry)
-		{
-			prStatusEntry->read_proc  = freqhopping_status_proc_read;
-			prStatusEntry->write_proc = freqhopping_status_proc_write;
-			FH_MSG("[%s]: successfully create /proc/freqhopping/status", __func__);
-		}else{
-			FH_MSG("[%s]: failed to create /proc/freqhopping/status", __func__);
-			return 1;
-		}
-		
-
-		/* /proc/freqhopping/userdefine */
-		prUserdefEntry = create_proc_entry("userdef",  S_IRUGO | S_IWUSR | S_IWGRP, fh_proc_dir);
-		if(prUserdefEntry)
-		{
-			prUserdefEntry->read_proc  = freqhopping_userdefine_proc_read;
-			prUserdefEntry->write_proc = freqhopping_userdefine_proc_write;
-			FH_MSG("[%s]: successfully create /proc/freqhopping/userdef", __func__);
-		}else{
-			FH_MSG("[%s]: failed to create /proc/freqhopping/userdef", __func__);
-			return 1;
-		}
-
-#if MT_FH_CLK_GEN
-		/* /proc/freqhopping/clkgen */
-		prUserdefEntry = create_proc_entry("clkgen",  S_IRUGO | S_IWUSR | S_IWGRP, fh_proc_dir);
-		if(prUserdefEntry)
-		{
-			prUserdefEntry->read_proc  = freqhopping_clkgen_proc_read;
-			prUserdefEntry->write_proc = freqhopping_clkgen_proc_write;
-			FH_MSG("[%s]: successfully create /proc/freqhopping/clkgen", __func__);
-		}else{
-			FH_MSG("[%s]: failed to create /proc/freqhopping/clkgen", __func__);
-			return 1;
-		}
-#endif //MT_FH_CLK_GEN		
-	}
-
-	return 0 ;
-}
-
-
-int freqhopping_config(unsigned int pll_id, unsigned long vco_freq, unsigned int enable)
-{
-	struct freqhopping_ioctl 	fh_ctl;
-	unsigned int			fh_status;
-	unsigned long 			flags=0;
-
-	
-	FH_MSG("conf() id: %d f: %d, e: %d",(int)pll_id, (int)vco_freq, (int)enable);
-	
-	if(g_initialize == 0){
-		FH_MSG("Not init yet, init first.");
-		return 1;
-	}		
-	
-	//TODO: provelock issue spin_lock(&freqhopping_lock);
-	spin_lock_irqsave(&freqhopping_lock, flags);
-
-	
-	//backup
-	fh_status = g_fh_pll[pll_id].fh_status;
-
-	g_fh_pll[pll_id].curr_freq = vco_freq;
-	g_fh_pll[pll_id].pll_status = (enable > 0) ? FH_PLL_ENABLE:FH_PLL_DISABLE;
-
-
-	//prepare freqhopping_ioctl
-	fh_ctl.pll_id = pll_id;
-	
-	if(g_fh_pll[pll_id].fh_status != FH_FH_DISABLE){
-		FH_MSG("+fh");
-		__freqhopping_ctrl(&fh_ctl,enable);
-	}
-	else{
-		FH_MSG("-fh,skip");		
-	}
-	
-	//restore
-	g_fh_pll[pll_id].fh_status = fh_status;
-
-	//TODO: provelock issue spin_unlock(&freqhopping_lock);
-	spin_unlock_irqrestore(&freqhopping_lock, flags);
-	
-	return 0;
-}
-
-#define FREQ_HOPPING_DEVICE "mt-freqhopping"
-
-static struct miscdevice mt_fh_device = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name = "mtfreqhopping",
-	//.fops = &mt_fh_fops, //TODO: Interface for UI maybe...
-};
-
-
-
-
-static int mt_fh_probe(struct platform_device *dev)
-{
-	int	err;
-   
-   	FH_MSG("EN: mt_fh_probe()");
- 
-	if ((err = misc_register(&mt_fh_device)))
-		FH_MSG("register fh driver error!");    
-
-	return err;
-}
-
-static int mt_fh_remove(struct platform_device *dev)
-{
-	int	err;    
-
-	if ((err = misc_deregister(&mt_fh_device)))
-		FH_MSG("deregister fh driver error!");
-    
-	return err;
-}
-
-static void mt_fh_shutdown(struct platform_device *dev)
-{
-	FH_MSG("mt_fh_shutdown");
-}
-/*---------------------------------------------------------------------------*/
-static int mt_fh_suspend(struct platform_device *dev, pm_message_t state)
-{
-	struct 		freqhopping_ioctl fh_ctl;
-
-	FH_MSG("-supd-");
-
-	if (!slp_will_infra_pdn()) {
-		FH_MSG("+i+");
-		if(g_fh_pll[MT658X_FH_MEM_PLL].fh_status == FH_FH_ENABLE_SSC){
-			FH_MSG("-ssc@mem");
-		
-			fh_ctl.pll_id  = MT658X_FH_MEM_PLL;
-			fh_ctl.ssc_setting.df= 0;
-			fh_ctl.ssc_setting.dt= 0;
-			fh_ctl.ssc_setting.upbnd= 0;
-			fh_ctl.ssc_setting.lowbnd= 0;
-	
-			mt_freqhopping_ioctl(NULL,FH_CMD_DISABLE,(unsigned long)(&fh_ctl));	
-			g_resume_mempll_ssc = true;
-		}
-	}
-
-	return 0;
-}
-/*---------------------------------------------------------------------------*/
-static int mt_fh_resume(struct platform_device *dev)
-{
-	struct 		freqhopping_ioctl fh_ctl;
-
-	FH_MSG("+resm+");
-
-	if (!slp_will_infra_pdn()) {
-		FH_MSG("+i+");
-
-		if(g_resume_mempll_ssc == true){
-			FH_MSG("+ssc@mem");
-	
-			fh_ctl.pll_id  = MT658X_FH_MEM_PLL;
-			fh_ctl.ssc_setting.df= 0;
-			fh_ctl.ssc_setting.dt= 0;
-			fh_ctl.ssc_setting.upbnd= 0;
-			fh_ctl.ssc_setting.lowbnd= 0;
-	
-			mt_freqhopping_ioctl(NULL,FH_CMD_ENABLE,(unsigned long)(&fh_ctl));	
-			g_resume_mempll_ssc =false;
-		}
-	}
-
-	return 0;
-}
-
-
-static struct platform_driver freqhopping_driver = {
-	.probe		= mt_fh_probe,
-	.remove		= mt_fh_remove,
-	.shutdown	= mt_fh_shutdown,
-	.suspend	= mt_fh_suspend,
-	.resume		= mt_fh_resume,
-	.driver		= {
-		.name	= FREQ_HOPPING_DEVICE,
-		.owner	= THIS_MODULE,
-	},
-};
-
 //TODO: __init void mt_freqhopping_init(void)
-void mt_freqhopping_init(void)
+static void mt_fh_hal_init(void)
 {
 	int 		i;
-	int 		ret = 0;
 	unsigned long 	flags;
 	
 	FH_MSG("EN: %s",__func__);
@@ -2381,8 +1728,6 @@ void mt_freqhopping_init(void)
 	//init hopping table for mempll 200<->266
 	memset(g_mempll_fh_table, 0, sizeof(g_mempll_fh_table));
 
-	//frequency hopping debug proc initial
-	freqhopping_debug_proc_init();
 	
 	for(i=0;i<MT_FHPLL_MAX;i++) {
 		
@@ -2406,42 +1751,68 @@ void mt_freqhopping_init(void)
 	//TODO: ask sophie to call this init function during her init call (mt_clkmgr_init() ??)
 	//TODO: call __freqhopping_ctrl() to init each pll
 	
-	ret = platform_driver_register(&freqhopping_driver);
 
 	g_initialize = 1;
 	
-	
 	enable_clock(MT_CG_PERI1_FHCTL, "FREQHOP") ;
-#if 0 
-	freqhopping_config(MT658X_FH_MEM_PLL, 266000, true); //Enable MEMPLL SSC
-#if LVDS_PLL_IS_ON
-	freqhopping_config(MT658X_FH_LVDS_PLL, 1664000, true); //Enable LVDSPLL SSC
-#endif
-#endif 
- 
-#if 0
-	freqhopping_config(MT658X_FH_TVD_PLL, 1188000, true); //TODO: test only
-	freqhopping_config(MT658X_FH_LVDS_PLL, 1200000, true); //TODO: test only
-	freqhopping_config(MT658X_FH_MAIN_PLL, 1612000, true); //TODO: test only
-	freqhopping_config(MT658X_FH_MSDC_PLL, 1599000, true); //TODO: test only
-#endif 	
 }
 
-EXPORT_SYMBOL(mt_freqhopping_init);
-
-void mt_freqhopping_pll_init(void)
+static void mt_fh_hal_lock(unsigned long *flags)
 {
-	FH_MSG("EN: %s",__func__);
-
-	freqhopping_config(MT658X_FH_MEM_PLL, 266000, true); //Enable MEMPLL SSC
-	
-#if LVDS_PLL_IS_ON
-	freqhopping_config(MT658X_FH_LVDS_PLL, 1664000, true); //Enable LVDSPLL SSC
-#endif 
-	
+	spin_lock_irqsave(&freqhopping_lock, *flags);	
 }
 
-EXPORT_SYMBOL(mt_freqhopping_pll_init);
+static void mt_fh_hal_unlock(unsigned long *flags)
+{
+	spin_unlock_irqrestore(&freqhopping_lock, *flags);
+}
+
+static int mt_fh_hal_get_init(void)
+{
+	return(g_initialize);
+}
 
 //TODO: module_init(mt_freqhopping_init);
 //TODO: module_exit(cpufreq_exit);
+
+static struct mt_fh_hal_driver g_fh_hal_drv;
+
+struct mt_fh_hal_driver *mt_get_fh_hal_drv(void)
+{
+	memset(&g_fh_hal_drv, 0, sizeof(g_fh_hal_drv));
+	
+	g_fh_hal_drv.fh_pll			= g_fh_pll;
+	g_fh_hal_drv.fh_usrdef			= mt_ssc_fhpll_userdefined;
+	g_fh_hal_drv.pll_cnt 			= MT658X_FH_PLL_TOTAL_NUM;
+	g_fh_hal_drv.mempll 			= MT658X_FH_MEM_PLL;
+	g_fh_hal_drv.lvdspll 			= MT658X_FH_LVDS_PLL;
+
+	
+	g_fh_hal_drv.mt_fh_hal_init 		=  mt_fh_hal_init;
+
+#if MT_FH_CLK_GEN	
+	g_fh_hal_drv.proc.clk_gen_read 		=  freqhopping_clkgen_proc_read;
+	g_fh_hal_drv.proc.clk_gen_write 	=  freqhopping_clkgen_proc_write;
+#endif 
+	
+	g_fh_hal_drv.proc.dramc_read 		=  freqhopping_dramc_proc_read;
+	g_fh_hal_drv.proc.dramc_write 		=  freqhopping_dramc_proc_write;	
+	g_fh_hal_drv.proc.dumpregs_read 	=  freqhopping_dumpregs_proc_read;
+
+
+	g_fh_hal_drv.mt_fh_hal_ctrl		= __freqhopping_ctrl;
+	g_fh_hal_drv.mt_fh_lock			= mt_fh_hal_lock;
+	g_fh_hal_drv.mt_fh_unlock		= mt_fh_hal_unlock;
+	g_fh_hal_drv.mt_fh_get_init		= mt_fh_hal_get_init;
+
+	g_fh_hal_drv.mt_fh_popod_restore 	= mt_fh_hal_popod_restore;
+	g_fh_hal_drv.mt_fh_popod_save		= mt_fh_hal_popod_save;
+
+	g_fh_hal_drv.mt_l2h_mempll		= mt_fh_hal_l2h_mempll;
+	g_fh_hal_drv.mt_h2l_mempll		= mt_fh_hal_h2l_mempll;
+	g_fh_hal_drv.mt_dram_overclock		= mt_fh_hal_dram_overclock;
+	g_fh_hal_drv.mt_get_dramc		= mt_fh_hal_get_dramc;
+	g_fh_hal_drv.mt_fh_default_conf		= mt_fh_hal_default_conf;
+
+	return (&g_fh_hal_drv);
+}

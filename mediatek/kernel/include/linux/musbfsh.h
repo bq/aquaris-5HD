@@ -20,6 +20,7 @@ enum musbfsh_mode {
 	MUSBFSH_OTG		/* Mini-AB connector */
 };
 
+struct clk;
 enum musbfsh_fifo_style {
 	FIFO_RXTX,
 	FIFO_TX,
@@ -90,12 +91,15 @@ struct musbfsh_hdrc_platform_data {
 	/* MUSBFSH_HOST, MUSBFSH_PERIPHERAL, or MUSBFSH_OTG */
 	u8		mode;
 
+	const char	*clock;
 	/* (HOST or OTG) switch VBUS on/off */
 	int		(*set_vbus)(struct device *dev, int is_on);
 
 	/* (HOST or OTG) mA/2 power supplied on (default = 8mA) */
 	u8		power;
 
+	u8		min_power;
+	u8		potpgt;
 	/* (HOST or OTG) program PHY for external Vbus */
 	unsigned	extvbus:1;
 
@@ -105,6 +109,8 @@ struct musbfsh_hdrc_platform_data {
 	/* MUSB configuration-specific details */
 	struct musbfsh_hdrc_config	*config;
 
+	void		*board_data;
+	const void	*platform_ops;
 };
 
 #endif /* __LINUX_USB_MUSBFSH_H */

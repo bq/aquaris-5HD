@@ -799,7 +799,7 @@ nicAllocateAdapterMemory (
             kalAllocateIOBuffer(sizeof(ENHANCE_MODE_DATA_STRUCT_T));
 
         if(prAdapter->prSDIOCtrl == NULL) {
-            DBGLOG(INIT, ERROR, ("Could not allocate %ld bytes for interrupt response.\n", sizeof(ENHANCE_MODE_DATA_STRUCT_T)));
+            DBGLOG(INIT, ERROR, ("Could not allocate %u bytes for interrupt response.\n", sizeof(ENHANCE_MODE_DATA_STRUCT_T)));
             break;
         }
 
@@ -1106,7 +1106,7 @@ nicProcessIST (
         //DBGLOG(INIT, TRACE, ("u4IntStatus: 0x%x\n", u4IntStatus));
 
         if (u4IntStatus & ~(WHIER_DEFAULT | WHIER_FW_OWN_BACK_INT_EN)) {
-            DBGLOG(INTR, WARN, ("Un-handled HISR %#x, HISR = %#x (HIER:0x%x)\n",
+            DBGLOG(INTR, WARN, ("Un-handled HISR %#lx, HISR = %#lx (HIER:0x%lx)\n",
                 (u4IntStatus & ~WHIER_DEFAULT), u4IntStatus, WHIER_DEFAULT));
             u4IntStatus &= WHIER_DEFAULT;
         }
@@ -1169,7 +1169,7 @@ nicProcessIST_impl (
             }
             else {
                 DBGLOG(INTR , WARN,
-                        ("Empty INTR handler! ISAR bit#: %ld, event:%d, func: 0x%x\n",
+                        ("Empty INTR handler! ISAR bit#: %lu, event:%lu, func: %p\n",
                          prIntEventMap->u4Int, prIntEventMap->u4Event, apfnEventFuncTable[prIntEventMap->u4Event]));
 
                 ASSERT(0); // to trap any NULL interrupt handler
@@ -1204,8 +1204,8 @@ nicVerifyChipID (
 
     HAL_MCR_RD(prAdapter, MCR_WCIR, &u4CIR );
 
-    DBGLOG(INIT, TRACE,("Chip ID: 0x%x\n", u4CIR & WCIR_CHIP_ID));
-    DBGLOG(INIT, TRACE,("Revision ID: 0x%x\n", ((u4CIR & WCIR_REVISION_ID) >> 16)));
+    DBGLOG(INIT, TRACE,("Chip ID: 0x%lx\n", u4CIR & WCIR_CHIP_ID));
+    DBGLOG(INIT, TRACE,("Revision ID: 0x%lx\n", ((u4CIR & WCIR_REVISION_ID) >> 16)));
 
     if ((u4CIR & WCIR_CHIP_ID) != MTK_CHIP_REV) {
         return FALSE;
@@ -1343,7 +1343,7 @@ nicProcessAbnormalInterrupt (
     UINT_32 u4Value;
 
     HAL_MCR_RD(prAdapter, MCR_WASR, &u4Value);
-    DBGLOG(REQ, WARN, ("MCR_WASR: 0x%x \n", u4Value));
+    DBGLOG(REQ, WARN, ("MCR_WASR: 0x%lx \n", u4Value));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1410,7 +1410,7 @@ nicProcessSoftwareInterrupt(
     }
 #endif
 
-    DBGLOG(REQ, WARN, ("u4IntrBits: 0x%x \n", u4IntrBits));
+    DBGLOG(REQ, WARN, ("u4IntrBits: 0x%lx \n", u4IntrBits));
 
     return;
 } /* end of nicProcessSoftwareInterrupt() */
@@ -4275,7 +4275,7 @@ nicRlmArUpdateParms(
     ucArPerL = (UINT_8) (((u4ArSysParam1>>24) & BITS(0,7)));
 
 
-    DBGLOG(INIT, INFO, ("ArParam %u %u %u %u\n", u4ArSysParam0, u4ArSysParam1, u4ArSysParam2, u4ArSysParam3));
+    DBGLOG(INIT, INFO, ("ArParam %lu %lu %lu %lu\n", u4ArSysParam0, u4ArSysParam1, u4ArSysParam2, u4ArSysParam3));
     DBGLOG(INIT, INFO, ("ArVer %u AbwVer %u AgiVer %u\n", ucArVer, ucAbwVer, ucAgiVer));
     DBGLOG(INIT, INFO, ("HtMask %x LegacyMask %x\n", u2HtClrMask, u2LegacyClrMask));
     DBGLOG(INIT, INFO, ("CheckWin %u RateDownPer %u PerH %u PerL %u\n", ucArCheckWindow, ucArPerForceRateDownPer, ucArPerH, ucArPerL));

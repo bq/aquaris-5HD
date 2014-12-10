@@ -11,8 +11,8 @@ MODULE_PREFIX_KERNEL := CUSTOM_KERNEL_
 MODULE_PREFIX_HAL    := CUSTOM_HAL_
 machine-y       := $(call lc,$(MTK_PLATFORM))
 ifeq ($(strip $(KBUILD_OUTPUT_SUPPORT)),yes)
-MACHINE          := mediatek/platform/$(call lc,$(MTK_PLATFORM))/kernel/core/
-machdirs         := mediatek/platform/$(call lc,$(MTK_PLATFORM))/kernel/core/
+MACHINE         := mediatek/platform/$(call lc,$(MTK_PLATFORM))/kernel/core/
+machdirs        := mediatek/platform/$(call lc,$(MTK_PLATFORM))/kernel/core/
 else
 MACHINE         := $(MTK_PATH_PLATFORM)/core/
 machdirs        := $(MTK_PATH_PLATFORM)/core/
@@ -21,7 +21,7 @@ platdirs        :=
 
 ifeq ($(strip $(KBUILD_OUTPUT_SUPPORT)),yes)
 drivers-y       += mediatek/kernel/
-drivers-y       += mediatek/custom/out/$(FULL_PROJECT)/kernel/
+drivers-y       += mediatek/custom/out/kernel/
 drivers-y       += mediatek/platform/$(call lc,$(MTK_PLATFORM))/kernel/drivers/
 else
 drivers-y       += $(MTK_PATH_PLATFORM)/drivers/
@@ -31,7 +31,6 @@ endif
 
 LINUXINCLUDE    += -I$(MTK_PATH_PLATFORM)/core/include/
 LINUXINCLUDE    += -I$(MTK_PATH_SOURCE)/include/
-LINUXINCLUDE    += -I$(MTK_ROOT_CUSTOM)/$(MTK_PROJECT)/common/
 KBUILD_CFLAGS   += $(call mtk.custom.generate-macros)
 
 ifneq (,$(MTK_MODEM_SUPPORT))
@@ -53,10 +52,12 @@ mtkclean:
 	-o -name 'Module.markers' -o -name '.tmp_*.o.*' \
 	-o -name '*.gcno' \) -type f -print | grep -v "/prebuilt/" | xargs rm -f
 	find $(MTK_ROOT_GEN_CONFIG) -name kconfig -type f -print | xargs rm -f
+	find $(PWD)/out/include/mach -name *.h -type f -print | xargs rm -f
 endif
 
-custom-files-kernel := $(strip $(call mtk.custom.generate-rules,prepare,kernel))
-custom-files-hal    := $(strip $(call mtk.custom.generate-rules,prepare,hal))
+.PHONY: custgen
+custom-files-kernel := $(strip $(call mtk.custom.generate-rules,custgen,kernel))
+custom-files-hal    := $(strip $(call mtk.custom.generate-rules,custgen,hal))
 _module_inc_kernel  :=
 _module_inc_hal     :=
 $(foreach i,\
@@ -83,12 +84,14 @@ $(foreach i,\
 LINUXINCLUDE += $(strip $(addprefix -I$(MTK_ROOT_CUSTOM_OUT)/kernel/,$(_module_inc_kernel)))
 LINUXINCLUDE += $(strip $(addprefix -I$(MTK_ROOT_CUSTOM_OUT)/hal/,$(_module_inc_hal)))
 # add include path for ptgen output
-LINUXINCLUDE += -I$(MTK_ROOT_CUSTOM_OUT)/common
-#$(foreach p,$(strip $(addprefix -I$(MTK_ROOT_CUSTOM_OUT)/kernel/,$(_module_inc_kernel))),$(info --> $(p)))
-#$(foreach p,$(strip $(addprefix -I$(MTK_ROOT_CUSTOM_OUT)/hal/,$(_module_inc_hal))),$(info --> $(p)))
+#LINUXINCLUDE += -I$(MTK_ROOT_CUSTOM_OUT)/common
+LINUXINCLUDE += -I$(MTK_ROOT_OUT)/PTGEN/common
+LINUXINCLUDE += -I$(MTK_ROOT_OUT)/PTGEN/kernel
+# for nandgen
+LINUXINCLUDE += -I$(MTK_ROOT_OUT)/NANDGEN/common
 
-generated_files := $(call mtk.config.generate-rules)
-.config mediatek-configs: $(MTK_ROOT_GEN_CONFIG)/kconfig $(MTK_ROOT_GEN_CONFIG)
+# use custgen instead
+mediatek-configs: $(MTK_ROOT_GEN_CONFIG)/kconfig
 	@echo "[COPY] $< --> $@"
 	@cp $< $@
 	@echo "[COPY] $< --> .config"
@@ -97,3 +100,28 @@ ifeq (mediatek-configs,$(MAKECMDGOALS))
 include/config/auto.conf: ;
 endif
 
+ifeq ($(MTK_GPL_PACKAGE),yes)
+ifndef ARCH_MTK_PLATFORM
+  $(error ARCH_MTK_PLATFORM is not defined)
+endif
+include $(srctree)/../mediatek/build/libs/pack_dep_gen.mk
+# override
+MTK_DEPENDENCY_LOG :=
+mtk-print-dependency :=
+# pregen need by kernel
+include $(srctree)/../mediatek/build/libs/pregen.mk
+$(call mtk.projectconfig.generate-auto-rules)
+mtk-config-files := $(strip $(call mtk.config.generate-rules,custgen,autoconfig))
+#mtk-custom-files-common := $(strip $(call mtk.custom.generate-rules,custgen,common))
+ifeq ($(LEGACY_DFO_GEN), yes)
+custgen: $(if $(objtree),$(objtree)/)include/mach/dfo_boot.h
+custgen: $(if $(objtree),$(objtree)/)include/mach/dfo_boot_default.h
+endif
+prepare: custgen
+$(KCONFIG_CONFIG): mediatek-configs
+$(MTK_ROOT_GEN_CONFIG)/kconfig: custgen
+# custgen must be after pregen
+custgen: drvgen nandgen ptgen
+	+ make $(if $(TO_ROOT),-C $(TO_ROOT)) MTK_CUSTGEN_CUSTOM_FILES="kernel common" MTK_CUSTGEN_ERROR=no -f mediatek/build/custgen.mk $(DEAL_STDOUT_CUSTGEN)
+
+endif

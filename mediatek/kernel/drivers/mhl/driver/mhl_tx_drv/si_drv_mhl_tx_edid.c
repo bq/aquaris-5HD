@@ -19,7 +19,7 @@ uint8_t PLACE_IN_DATA_SEG g_CommData [GLOBAL_BYTE_BUF_BLOCK_SIZE];
 static uint8_t ParseEDID(uint8_t *pEdid, uint8_t *numExt);
 static uint8_t Parse861ShortDescriptors(uint8_t *Data);
 static uint8_t Parse861LongDescriptors(uint8_t *Data);
-static bool_t GetDDC_Access (uint8_t *reg_val);
+static bool_t GetBIT2 (uint8_t *reg_val);
 static bool_t ReleaseDDC(uint8_t reg_val);
 #define BITS_2_1                0x06
 #define TWO_LSBITS              0x03
@@ -27,7 +27,7 @@ static bool_t ReleaseDDC(uint8_t reg_val);
 #define FOUR_LSBITS             0x0F
 #define FIVE_LSBITS             0x1F
 #define TWO_MSBITS              0xC0
-#define T_DDC_ACCESS    50
+#define T_BIT2    50
 #define EDID_BLOCK_0_OFFSET 0x0000
 #define EDID_BLOCK_1_OFFSET 0x0080
 #define EDID_BLOCK_SIZE      128
@@ -141,7 +141,7 @@ uint8_t SiiDrvMhlTxReadEdid (void)
 	uint8_t Result = EDID_OK;
 	uint8_t NumOfExtensions;
     uint8_t reg_val;
-	if (GetDDC_Access(&reg_val))
+	if (GetBIT2(&reg_val))
 	{
         memset(g_CommData, 0x00, GLOBAL_BYTE_BUF_BLOCK_SIZE);
 		SiiRegEdidReadBlock(TX_PAGE_DDC_SEGM | 0x0000, TX_PAGE_DDC_EDID | EDID_BLOCK_0_OFFSET, g_CommData, EDID_BLOCK_SIZE);
@@ -645,32 +645,32 @@ static bool_t ParseDetailedTiming(uint8_t *Data, uint8_t DetailedTimingOffset, u
         return true;
 }
 #endif
-static bool_t GetDDC_Access (uint8_t *reg_val)
+static bool_t GetBIT2 (uint8_t *reg_val)
 {
-	uint8_t DDCReqTimeout = T_DDC_ACCESS;
-    *reg_val = SiiRegRead(REG_LM_DDC);
-    SiiRegModify(REG_LM_DDC, DDC_REQUEST, SET_BITS);
+	uint8_t DDCReqTimeout = T_BIT2;
+    *reg_val = SiiRegRead(TX_PAGE_L0 | 0x00C7);
+    SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT0, SET_BITS);
 	while (DDCReqTimeout--)
 	{
-		if (SiiRegRead(REG_LM_DDC) & DDC_GRANT)
+		if (SiiRegRead(TX_PAGE_L0 | 0x00C7) & BIT1)
 		{
-			SiiRegModify(REG_LM_DDC, DDC_ACCESS, SET_BITS);
-			TX_DEBUG_PRINT(("\nGetDDC_Access_sucessfully\n"));
+			SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT2, SET_BITS);
+			TX_DEBUG_PRINT(("\nGetBIT2_sucessfully\n"));
 			return true;
 		}
-		SiiRegModify(REG_LM_DDC, DDC_REQUEST, SET_BITS);
+		SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT0, SET_BITS);
 		HalTimerWait(20);
 	}
-	SiiRegModify(REG_LM_DDC, DDC_REQUEST, CLEAR_BITS);
+	SiiRegModify(TX_PAGE_L0 | 0x00C7, BIT0, CLEAR_BITS);
 	return false;
 }
 static bool_t ReleaseDDC(uint8_t reg_val)
 {
-	uint8_t DDCReqTimeout = T_DDC_ACCESS;
+	uint8_t DDCReqTimeout = T_BIT2;
 	while (DDCReqTimeout--)
 	{
-		SiiRegWrite(REG_LM_DDC, reg_val & ~(DDC_REQUEST|DDC_REQUEST));
-		if (!(SiiRegRead(REG_LM_DDC) & DDC_GRANT))
+		SiiRegWrite(TX_PAGE_L0 | 0x00C7, reg_val & ~(BIT0|BIT0));
+		if (!(SiiRegRead(TX_PAGE_L0 | 0x00C7) & BIT1))
 		{
 			return true;
 		}

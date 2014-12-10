@@ -29,6 +29,7 @@
 ********************************************************************************
 */
 #include "osal_typedef.h"
+#include "wmt_dbg.h"
 
 #include "wmt_dev.h"
 #include "wmt_lib.h"
@@ -41,6 +42,8 @@
 #include "btm_core.h"
 #include "psm_core.h"
 #include "stp_sdio.h"
+#include "stp_dbg.h"
+
 /*******************************************************************************
 *                              C O N S T A N T S
 ********************************************************************************
@@ -71,6 +74,9 @@ static UINT32 gPsIdleTime = STP_PSM_IDLE_TIME_SLEEP;
 static UINT32 gPsEnable = 1;
 static PF_WMT_SDIO_PSOP sdio_own_ctrl = NULL;
 #endif
+
+#define WMT_STP_CPUPCR_BUF_SIZE 6144
+static UINT8 g_cpupcr_buf[WMT_STP_CPUPCR_BUF_SIZE] = {0};
 
 
 /*******************************************************************************
@@ -226,7 +232,7 @@ wmt_lib_init (VOID)
     for (i = 0 ; i < WMTDRV_TYPE_WIFI ; i++) {
         pDevWmt->rFdrvCb.fDrvRst[i] = NULL;
     }
-    pDevWmt->hw_ver = WMTHWVER_MT6620_MAX;
+    pDevWmt->hw_ver = WMTHWVER_MAX;
     WMT_INFO_FUNC("***********Init, hw->ver = %x\n", pDevWmt->hw_ver);
 
     // TODO:[FixMe][GeorgeKuo]: wmt_lib_conf_init
@@ -283,7 +289,9 @@ wmt_lib_init (VOID)
 	/*5. register audio if control callback to WMT-PLAT*/
 	wmt_lib_plat_aif_cb_reg(wmt_lib_set_aif);
 
-	
+#ifdef MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+	mtk_wcn_wmt_exp_init();
+#endif
     WMT_DBG_FUNC("init success\n");
     return 0;
 }
@@ -356,6 +364,10 @@ wmt_lib_deinit (VOID)
     }
     osal_memset(&gDevWmt, 0, sizeof(gDevWmt));
 
+#ifdef MTK_WCN_WMT_STP_EXP_SYMBOL_ABSTRACT
+	mtk_wcn_wmt_exp_deinit();
+#endif
+
     return iResult;
 }
 
@@ -391,18 +403,23 @@ wmt_lib_set_patch_name (
     osal_strncpy(gDevWmt.cPatchName, cPatchName, NAME_MAX);
     return 0;
 }
-
-extern char *wmt_uart_port_desc; // defined in mtk_wcn_cmb_stub_alps.cpp
-
+#if WMT_PLAT_ALPS    
+extern PCHAR wmt_uart_port_desc; // defined in mtk_wcn_cmb_stub_alps.cpp
+#endif
 INT32
 wmt_lib_set_uart_name(
     CHAR *cUartName
 )
 {
+#if WMT_PLAT_ALPS
+
     WMT_INFO_FUNC("orig uart: %s\n", wmt_uart_port_desc);
+#endif
     osal_strncpy(gDevWmt.cUartName, cUartName, NAME_MAX);
+#if WMT_PLAT_ALPS
     wmt_uart_port_desc = gDevWmt.cUartName;
     WMT_INFO_FUNC("new uart: %s\n", wmt_uart_port_desc);
+#endif
     return 0;
 }
 
@@ -417,18 +434,22 @@ wmt_lib_set_hif (
     val = hifconf & 0xF;
     if (STP_UART_FULL == val) {
         pHif->hifType = WMT_HIF_UART;
+        pHif->uartFcCtrl = ((hifconf & 0xc) >> 2);
         val = (hifconf >> 8);
         pHif->au4HifConf[0] = val;
         pHif->au4HifConf[1] = val;
         mtk_wcn_stp_set_if_tx_type(STP_UART_IF_TX);
+		wmt_plat_set_comm_if_type(STP_UART_IF_TX);
     }
     else if (STP_SDIO == val) {
         pHif->hifType = WMT_HIF_SDIO;
         mtk_wcn_stp_set_if_tx_type(STP_SDIO_IF_TX);
+		wmt_plat_set_comm_if_type(STP_SDIO_IF_TX);
     }
     else {
-        WMT_WARN_FUNC("invalid stp mode: %u \n", val);
+        WMT_WARN_FUNC("invalid stp mode: %u %u \n", hifconf, val);
         mtk_wcn_stp_set_if_tx_type(STP_MAX_IF_TX);
+		wmt_plat_set_comm_if_type(STP_MAX_IF_TX);
         return -1;
     }
 
@@ -444,8 +465,9 @@ wmt_lib_set_hif (
         return -2;
     }
 
-    WMT_INFO_FUNC("new hifType: %d, baud:%d, fm:%d \n",
+    WMT_INFO_FUNC("new hifType:%d, fcCtrl:%d, baud:%d, fm:%d \n",
         pHif->hifType,
+        pHif->uartFcCtrl,
         pHif->au4HifConf[0],
         pHif->au4StrapConf[0]);
     return 0;
@@ -1144,7 +1166,7 @@ wmt_lib_is_therm_ctrl_support (VOID)
 {
     MTK_WCN_BOOL bIsSupportTherm = MTK_WCN_BOOL_TRUE;
     // TODO:[FixMe][GeorgeKuo]: move IC-dependent checking to ic-implementation file
-    if ( ((0x6620 == gDevWmt.chip_id) && (WMTHWVER_MT6620_E3 > gDevWmt.eWmtHwVer))
+    if ( ((0x6620 == gDevWmt.chip_id) && (WMTHWVER_E3 > gDevWmt.eWmtHwVer))
         || (WMTHWVER_INVALID == gDevWmt.eWmtHwVer) ) {
         WMT_ERR_FUNC("thermal command fail: chip version(WMTHWVER_TYPE:%d) is not valid\n", gDevWmt.eWmtHwVer);
         bIsSupportTherm = MTK_WCN_BOOL_FALSE;
@@ -1162,7 +1184,7 @@ MTK_WCN_BOOL
 wmt_lib_is_dsns_ctrl_support (VOID)
 {
     // TODO:[FixMe][GeorgeKuo]: move IC-dependent checking to ic-implementation file
-    if ( ((0x6620 == gDevWmt.chip_id) && (WMTHWVER_MT6620_E3 > gDevWmt.eWmtHwVer))
+    if ( ((0x6620 == gDevWmt.chip_id) && (WMTHWVER_E3 > gDevWmt.eWmtHwVer))
         || (WMTHWVER_INVALID == gDevWmt.eWmtHwVer) ) {
         WMT_ERR_FUNC("thermal command fail: chip version(WMTHWVER_TYPE:%d) is not valid\n", gDevWmt.eWmtHwVer);
         return MTK_WCN_BOOL_FALSE;
@@ -1408,6 +1430,10 @@ MTK_WCN_BOOL wmt_lib_btm_cb (MTKSTP_BTM_WMT_OP_T op)
 	{
 	    bRet = wmt_core_get_aee_dump_flag();
 	}
+	else if (op == BTM_TRIGGER_STP_ASSERT_OP)
+	{
+		bRet = wmt_core_trigger_stp_assert();
+	}
     return bRet;
 }
 
@@ -1419,10 +1445,11 @@ MTK_WCN_BOOL wmt_cdev_rstmsg_snd(ENUM_WMTRSTMSG_TYPE_T msg){
           "DRV_TYPE_BT",
           "DRV_TYPE_FM" ,
           "DRV_TYPE_GPS",
-          "DRV_TYPE_WIFI"
+          "DRV_TYPE_WIFI",
+          "DRV_TYPE_ANT"
     };
 
-    for(i = 0 ; i <= WMTDRV_TYPE_WIFI; i++){
+    for(i = 0 ; i <= WMTDRV_TYPE_ANT; i++){
         //<1> check if reset callback is registered
         if(pDevWmt->rFdrvCb.fDrvRst[i]){
             //<2> send the msg to this subfucntion
@@ -1684,7 +1711,7 @@ ENUM_WMTRSTRET_TYPE_T wmt_lib_cmb_rst(ENUM_WMTRSTSRC_TYPE_T src){
         }
         break;
     }
-
+	osal_clear_bit(WMT_STAT_RST_ON, &pDevWmt->state);
     if(bRet == MTK_WCN_BOOL_FALSE){
         WMT_INFO_FUNC("[whole chip reset] fail! retries = %d\n", RETRYTIMES-retries);
         retval = WMTRSTRET_FAIL;
@@ -1718,7 +1745,7 @@ MTK_WCN_BOOL wmt_lib_msgcb_reg (
     MTK_WCN_BOOL bRet = MTK_WCN_BOOL_FALSE;
     P_DEV_WMT pWmtDev = &gDevWmt;
 
-    if(eType >= 0 && eType <= WMTDRV_TYPE_WIFI){
+    if(eType >= 0 && eType <= WMTDRV_TYPE_ANT){
         WMT_DBG_FUNC("reg ok! \n");
         pWmtDev->rFdrvCb.fDrvRst[eType] = pCb;
         bRet = MTK_WCN_BOOL_TRUE;
@@ -1819,12 +1846,43 @@ P_OSAL_OP wmt_lib_get_current_op(P_DEV_WMT pWmtDev)
 
 INT32 wmt_lib_merge_if_flag_ctrl(UINT32 enable)
 {
+#if WMT_PLAT_ALPS
     return wmt_plat_merge_if_flag_ctrl(enable);
+#endif
 }
 
 
 INT32 wmt_lib_merge_if_flag_get(UINT32 enable)
 {
+#if WMT_PLAT_ALPS
     return wmt_plat_merge_if_flag_get();
+#endif
 }
 
+
+UINT8 *wmt_lib_get_cpupcr_xml_format(UINT32 *len)
+{
+    UINT8 *temp;
+    UINT32 i = 0;
+    osal_memset(&g_cpupcr_buf[0], 0, WMT_STP_CPUPCR_BUF_SIZE);
+    temp = g_cpupcr_buf;
+    stp_dbg_cpupcr_infor_format(&temp, len);
+
+    WMT_INFO_FUNC("print xml buffer,len(%d):\n\n", *len);
+    for (i = 0; i < *len; i++) {
+        WMT_INFO_FUNC("%c", g_cpupcr_buf[i]);
+    }
+
+    return &g_cpupcr_buf[0];
+}
+
+INT32 wmt_lib_tm_temp_query(void)
+{
+    return wmt_dev_tm_temp_query();
+}
+
+
+UINT32 wmt_lib_set_host_assert_info(UINT32 type,UINT32 reason,UINT32 en)
+{
+	return stp_dbg_set_host_assert_info(type,reason,en);	
+}

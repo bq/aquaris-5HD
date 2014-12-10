@@ -223,7 +223,8 @@ static void mt6628_RDS_Init_Data(rds_t *pstRDSData)
 {
     fm_memset(pstRDSData, 0 , sizeof(rds_t));
     bRDS_FirstIn = fm_true;
-
+	
+	pstRDSData->event_status = 0x0000;
     fm_memset(pstRDSData->RT_Data.TextData, 0x20, sizeof(pstRDSData->RT_Data.TextData));
     fm_memset(pstRDSData->PS_Data.PS, '\0', sizeof(pstRDSData->PS_Data.PS));
     fm_memset(pstRDSData->PS_ON, 0x20, sizeof(pstRDSData->PS_ON));
@@ -240,6 +241,7 @@ fm_bool mt6628_RDS_OnOff(rds_t *dst, fm_bool bFlag)
         mt6628_RDS_Init_Data(dst);
         mt6628_RDS_enable();
     } else {
+    	mt6628_RDS_Init_Data(dst);
         mt6628_RDS_disable();
     }
 

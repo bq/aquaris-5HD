@@ -31,17 +31,13 @@
 #include <linux/delay.h>
 #include <linux/wait.h>
 #include <linux/dma-mapping.h>
-#include <linux/timer.h>
-#include <asm/bitops.h>
 #include <asm/dma-mapping.h>
-#include <ccci.h>
-#include <ccci_tty.h>
-#include <ccci_common.h>
+#include <asm/bitops.h>
+#include <linux/timer.h>
 #include <mach/mt_typedefs.h>
-
-#include "ccmni_pfp.h"
-#include <ccci_err_no.h>
-#include <ccmni_net.h>
+#include <ccmni_pfp.h>
+#include <ccci_tty.h>
+#include <ccci.h>
 
 #define  CCMNI_TX_QUEUE         1000
 #define  CCMNI_UART_OFFSET      2
@@ -83,8 +79,9 @@ typedef struct _ccmni_v1_ctl_block
 {
 	int					m_md_id;
 	int					ccci_is_ready;
-	ccmni_instance_t	*ccmni_instance[CCMNI_MAX_CHANNELS];
+	ccmni_instance_t	*ccmni_instance[CCMNI_V1_PORT_NUM];
 	struct wake_lock	ccmni_wake_lock;
+	char                wakelock_name[16];
 	MD_CALL_BACK_QUEUE	ccmni_notifier;
 }ccmni_v1_ctl_block_t;
 
@@ -105,7 +102,7 @@ int ccmni_v1_ipo_h_restore(int md_id)
 	ccmni_v1_ctl_block_t	*ctlb;
 
 	ctlb = ccmni_ctl_block[md_id];
-	for(i=0; i<CCMNI_CHANNEL_CNT; i++)
+	for(i=0; i<CCMNI_V1_PORT_NUM; i++)
 		ccci_reset_buffers(ctlb->ccmni_instance[i]->shared_mem, CCCI1_CCMNI_BUF_SIZE);
 
 	return 0;
@@ -144,40 +141,50 @@ static void ccmni_notifier_call(MD_CALL_BACK_QUEUE *notifier, unsigned long val)
 
 	switch(val)
 	{
-	case CCCI_MD_EXCEPTION :
-		ctl_b->ccci_is_ready=0;
-		for(i=0;i<CCMNI_MAX_CHANNELS;i++)
-		{
-			instance = ctl_b->ccmni_instance[i];
-			if (instance)  
-				stop_ccmni_instance(instance);
-		}
-		break;
-
-	case CCCI_MD_RESET     :
-		ctl_b->ccci_is_ready=0;
-			for(i=0;i<CCMNI_MAX_CHANNELS;i++)
+		case CCCI_MD_EXCEPTION :
+			ctl_b->ccci_is_ready=0;
+			for(i=0;i<CCMNI_V1_PORT_NUM;i++)
+			{
+				instance = ctl_b->ccmni_instance[i];
+				if (instance)  
+					stop_ccmni_instance(instance);
+			}
+			break;
+		case CCCI_MD_STOP:
+			for(i=0;i<CCMNI_V1_PORT_NUM;i++)
 			{
 				instance = ctl_b->ccmni_instance[i];
 				if (instance) { 
 					stop_ccmni_instance(instance);
-					reset_ccmni_instance_buffer(instance);
 				}
 			}
-		break;
+			break;
+		case CCCI_MD_RESET     :
+			ctl_b->ccci_is_ready=0;
+				for(i=0;i<CCMNI_V1_PORT_NUM;i++)
+				{
+					instance = ctl_b->ccmni_instance[i];
+					if (instance) { 
+						reset_ccmni_instance_buffer(instance);
+					}
+				}
+			break;
 
-	case CCCI_MD_BOOTUP:
-		if (ctl_b->ccci_is_ready==0)
-		{
-			ctl_b->ccci_is_ready=1;
-			for(i=0;i<CCMNI_MAX_CHANNELS;i++)
+		case CCCI_MD_BOOTUP:
+			if (ctl_b->ccci_is_ready==0)
 			{
-				instance = ctl_b->ccmni_instance[i];
-				if (instance) 
-					restore_ccmni_instance(instance);
+				ctl_b->ccci_is_ready=1;
+				for(i=0;i<CCMNI_V1_PORT_NUM;i++)
+				{
+					instance = ctl_b->ccmni_instance[i];
+					if (instance) 
+						restore_ccmni_instance(instance);
+				}
 			}
-		}
-		break;
+			break;
+
+		default:
+			break;
 	}
 
 	return ;
@@ -550,7 +557,7 @@ static int ccmni_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (ctl_b->ccci_is_ready==0) 
 	{
-		CCCI_MSG_INF(md_id, "net", "CCMNI%d transfer data fail when modem not ready \n", ccmni->channel);
+		CCCI_DBG_MSG(md_id, "net", "CCMNI%d transfer data fail when modem not ready \n", ccmni->channel);
 		ret = NETDEV_TX_BUSY;
 		goto _ccmni_start_xmit_busy;
 	}
@@ -720,7 +727,7 @@ static int ccmni_create_instance(int md_id, int channel)
 	ccmni->channel = channel;
 	ccmni->owner   = ccmni_ctl_block[md_id];
 
-	if(md_id == 0) {
+	if(md_id == MD_SYS1) {
 		sprintf(dev->name, "ccmni%d", channel);
 	} else {
 		sprintf(dev->name, "cc%dmni%d", md_id+1, channel);
@@ -760,39 +767,31 @@ static int ccmni_create_instance(int md_id, int channel)
 	switch(ccmni->channel)
 	{
 		case 0:
-			{
-				uart_rx     = CCCI_CCMNI1_RX;
-				uart_rx_ack = CCCI_CCMNI1_RX_ACK;
-				uart_tx     = CCCI_CCMNI1_TX;
-				uart_tx_ack = CCCI_CCMNI1_TX_ACK;
-				break;            
-			}
+			uart_rx     = CCCI_CCMNI1_RX;
+			uart_rx_ack = CCCI_CCMNI1_RX_ACK;
+			uart_tx     = CCCI_CCMNI1_TX;
+			uart_tx_ack = CCCI_CCMNI1_TX_ACK;
+			break;            
 
 		case 1:
-			{
-				uart_rx     = CCCI_CCMNI2_RX;
-				uart_rx_ack = CCCI_CCMNI2_RX_ACK;
-				uart_tx     = CCCI_CCMNI2_TX;
-				uart_tx_ack = CCCI_CCMNI2_TX_ACK;
-				break;            
-			}
+			uart_rx     = CCCI_CCMNI2_RX;
+			uart_rx_ack = CCCI_CCMNI2_RX_ACK;
+			uart_tx     = CCCI_CCMNI2_TX;
+			uart_tx_ack = CCCI_CCMNI2_TX_ACK;
+			break;            
 
 		case 2:
-			{
-				uart_rx     = CCCI_CCMNI3_RX;
-				uart_rx_ack = CCCI_CCMNI3_RX_ACK;
-				uart_tx     = CCCI_CCMNI3_TX;
-				uart_tx_ack = CCCI_CCMNI3_TX_ACK;
-				break;            
-			}
+			uart_rx     = CCCI_CCMNI3_RX;
+			uart_rx_ack = CCCI_CCMNI3_RX_ACK;
+			uart_tx     = CCCI_CCMNI3_TX;
+			uart_tx_ack = CCCI_CCMNI3_TX_ACK;
+			break;            
 
 		default:
-			{
-				CCCI_MSG_INF(md_id, "net", "[Error]CCMNI%d Invalid ccmni number\n", ccmni->channel);
-				unregister_netdev(dev);
-				ret = -ENOSYS;
-				goto _ccmni_create_instance_exit;
-			}
+			CCCI_MSG_INF(md_id, "net", "[Error]CCMNI%d Invalid ccmni number\n", ccmni->channel);
+			unregister_netdev(dev);
+			ret = -ENOSYS;
+			goto _ccmni_create_instance_exit;
 	}
 	ccmni->m_md_id = md_id;
 
@@ -820,7 +819,8 @@ static int ccmni_create_instance(int md_id, int channel)
 
 _ccmni_create_instance_exit:
 	free_netdev(dev);
-
+	kfree(ccmni);
+    ctl_b->ccmni_instance[channel] = NULL;
 	return ret;
 }
 
@@ -832,19 +832,20 @@ static void ccmni_destroy_instance(int md_id, int channel)
 
 	if (ccmni != NULL)
 	{
+		ccmni->ready = 0;
 		un_register_to_logic_ch(md_id, ccmni->uart_rx);
 		un_register_to_logic_ch(md_id, ccmni->uart_tx_ack);
 
-		if (ccmni->shared_mem != NULL)
-		{
+		if (ccmni->shared_mem != NULL)	{
 			ccmni->shared_mem           = NULL;
 			ccmni->shared_mem_phys_addr = 0;
 		}
 
-		if(ccmni->dev != NULL)
+		if(ccmni->dev != NULL) {
 			unregister_netdev(ccmni->dev);
-		tasklet_kill(&ccmni->tasklet);
-		ccmni->ready = 0;
+			//free_netdev(ccmni->dev);
+		}
+		//tasklet_kill(&ccmni->tasklet);
 		ctl_b->ccmni_instance[channel] = NULL;
 	}
 }
@@ -854,7 +855,6 @@ int ccmni_v1_init(int md_id)
 {
 	int						count, ret, curr;
 	ccmni_v1_ctl_block_t	*ctl_b;
-	char					ccmni_lock_name[32];
 
 	// Create control block structure
 	ctl_b = (ccmni_v1_ctl_block_t *)kmalloc(sizeof(ccmni_v1_ctl_block_t), GFP_KERNEL);
@@ -868,15 +868,15 @@ int ccmni_v1_init(int md_id)
 	ctl_b->m_md_id = md_id;
 	ctl_b->ccmni_notifier.call = ccmni_notifier_call;
 	ctl_b->ccmni_notifier.next = NULL;
-	for(count = 0; count < CCMNI_CHANNEL_CNT; count++)
+
+	for(count = 0; count < CCMNI_V1_PORT_NUM; count++)
 	{
 		ret = ccmni_create_instance(md_id, count);
 		if (ret != 0) {
 			CCCI_MSG_INF(md_id, "net", "CCMNI%d create instance fail: %d\n", count, ret);
 			goto _CCMNI_INSTANCE_CREATE_FAIL;
-		}
-		else {
-			CCCI_MSG_INF(md_id, "net", "CCMNI%d create instance ok!\n", count);
+		} else {
+			//CCCI_MSG_INF(md_id, "net", "CCMNI%d create instance ok!\n", count);
 		}
 	}
 
@@ -886,12 +886,13 @@ int ccmni_v1_init(int md_id)
 		goto _CCMNI_INSTANCE_CREATE_FAIL;
 	}
 
-	snprintf(ccmni_lock_name, 32, "cc%dmni wake lock", md_id); 
-	wake_lock_init(&ctl_b->ccmni_wake_lock, WAKE_LOCK_SUSPEND, ccmni_lock_name);
+	snprintf(ctl_b->wakelock_name, sizeof(ctl_b->wakelock_name), "ccci%d_net_v1", (md_id+1));   
+	wake_lock_init(&ctl_b->ccmni_wake_lock, WAKE_LOCK_SUSPEND, ctl_b->wakelock_name);
+	
 	return ret;
 
 _CCMNI_INSTANCE_CREATE_FAIL:
-	for(curr=0; curr<count-1; curr++){
+	for(curr=0; curr<=count; curr++) {
 		ccmni_destroy_instance(md_id, curr);
 	}
 	kfree(ctl_b);
@@ -905,13 +906,15 @@ void ccmni_v1_exit(int md_id)
 	int						count;
 	ccmni_v1_ctl_block_t	*ctl_b = (ccmni_v1_ctl_block_t *)ccmni_ctl_block[md_id];
 
-	for(count = 0; count < CCMNI_MAX_CHANNELS; count++)
-		ccmni_destroy_instance(md_id, count);
+	if (ctl_b) {
+		for(count = 0; count < CCMNI_V1_PORT_NUM; count++)
+			ccmni_destroy_instance(md_id, count);
 
-	md_unregister_call_chain(md_id, &ctl_b->ccmni_notifier);
-	wake_lock_destroy(&ctl_b->ccmni_wake_lock);
-	kfree(ctl_b);
-	ccmni_ctl_block[md_id] = NULL;
+		md_unregister_call_chain(md_id, &ctl_b->ccmni_notifier);
+		wake_lock_destroy(&ctl_b->ccmni_wake_lock);
+		kfree(ctl_b);
+		ccmni_ctl_block[md_id] = NULL;
+	}
 
 	return;
 }

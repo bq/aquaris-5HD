@@ -19,7 +19,7 @@
 #include <mach/mt_freqhopping.h>
 #include <mach/mt_gpufreq.h>
 
-
+#include <linux/platform_device.h>
 
 /************************************************
  **********         log debug          **********
@@ -239,9 +239,9 @@ struct stat_node {
 
 static int initialized = 0;
 
-static struct pll __nosavedata plls[NR_PLLS];
-static struct subsys __nosavedata syss[NR_SYSS];
-static struct clkmux __nosavedata muxs[NR_MUXS];
+static struct pll plls[NR_PLLS];
+static struct subsys syss[NR_SYSS];
+static struct clkmux muxs[NR_MUXS];
 static struct cg_grp grps[NR_GRPS];
 static struct cg_clk clks[NR_CLKS];
 
@@ -1692,7 +1692,7 @@ static void larb_backup(int larb_idx)
 {
 	struct larb_monitor *pos;
 
-	//clk_info("[%s]: start to backup larb%d\n", __func__, larb_idx);
+    //clk_info("[%s]: start to backup larb%d\n", __func__, larb_idx);
     larb_clk_prepare(larb_idx);
 
 	list_for_each_entry(pos, &larb_monitor_handlers, link) {
@@ -1707,7 +1707,7 @@ static void larb_restore(int larb_idx)
 {
 	struct larb_monitor *pos;
 
-	//clk_info("[%s]: start to restore larb%d\n", __func__, larb_idx);
+    //clk_info("[%s]: start to restore larb%d\n", __func__, larb_idx);
     larb_clk_prepare(larb_idx);
 
 	list_for_each_entry(pos, &larb_monitor_handlers, link) {
@@ -3786,9 +3786,63 @@ void mt_clkmgr_debug_init(void)
     }
 }
 
+
+struct platform_device clkmgr_device =
+{
+    .name = "CLK",
+    .id   = -1,
+    .dev  = {},
+};
+
+int clk_pm_restore_noirq(struct device *device)
+{
+    struct subsys *sys;
+
+    sys = &syss[SYS_DIS];
+    sys->state = sys->ops->get_state(sys);
+
+    muxs[MT_MUX_DISP].cnt = 1;
+
+    clk_set_force_on_locked(&clks[MT_CG_DISP0_LARB2_SMI]);
+
+    clk_info("clk_pm_restore_noirq\n");
+
+    return 0;
+}
+
+struct dev_pm_ops clkmgr_pm_ops = {
+    .restore_noirq = clk_pm_restore_noirq,
+};
+
+static struct platform_driver clkmgr_driver =
+{
+	.driver     = {
+		.name	= "CLK",
+#ifdef CONFIG_PM
+        .pm     = &clkmgr_pm_ops,
+#endif
+        .owner      = THIS_MODULE,
+	},
+};
+
 static int mt_clkmgr_debug_bringup_init(void)
 {
+    int ret;
+    
     mt_clkmgr_debug_init(); 
+    
+    ret = platform_device_register(&clkmgr_device);
+    if (ret) {
+        clk_info("clkmgr_device register fail(%d)\n", ret);
+        return ret;
+    }
+
+    ret = platform_driver_register(&clkmgr_driver);
+    if (ret) {
+        clk_info("clkmgr_driver register fail(%d)\n", ret);
+        return ret;
+    }
+    
     return 0;
 }
 module_init(mt_clkmgr_debug_bringup_init);

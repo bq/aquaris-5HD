@@ -75,7 +75,9 @@
 #include <asm/system.h>
 //#include <linux/mm.h>
 #include <linux/pagemap.h>
-
+#ifndef JPEG_DEV
+#include <linux/proc_fs.h>
+#endif
 
 
 
@@ -120,10 +122,12 @@ extern kal_uint32 _jpeg_enc_int_status;
 extern kal_uint32 _jpeg_dec_int_status;
 extern kal_uint32 _jpeg_dec_mode ;
 
+#ifdef JPEG_DEV
 // device and driver
 static dev_t jpeg_devno;
 static struct cdev *jpeg_cdev;
 static struct class *jpeg_class = NULL;
+#endif
 
 // decoder
 static wait_queue_head_t dec_wait_queue;
@@ -1046,7 +1050,7 @@ static struct file_operations jpeg_fops = {
 
 static int jpeg_probe(struct platform_device *pdev)
 {
-    struct class_device;
+#ifdef JPEG_DEV
     
 	int ret;
     struct class_device *class_dev = NULL;
@@ -1071,6 +1075,11 @@ static int jpeg_probe(struct platform_device *pdev)
 
     jpeg_class = class_create(THIS_MODULE, JPEG_DEVNAME);
     class_dev = (struct class_device *)device_create(jpeg_class, NULL, jpeg_devno, NULL, JPEG_DEVNAME);
+#else // change mtk_jpeg dev to proc
+
+    proc_create("mtk_jpeg", 0, NULL, &jpeg_fops);
+
+#endif
 
     spin_lock_init(&jpeg_dec_lock);
     spin_lock_init(&jpeg_enc_lock);
@@ -1110,7 +1119,9 @@ static int jpeg_probe(struct platform_device *pdev)
 #endif
 	JPEG_MSG("JPEG Probe Done\n");
 
+#ifdef JPEG_DEV
 	NOT_REFERENCED(class_dev);
+#endif
 	return 0;
 }
 
@@ -1135,8 +1146,8 @@ static void jpeg_shutdown(struct platform_device *pdev)
 /* PM suspend */
 static int jpeg_suspend(struct platform_device *pdev, pm_message_t mesg)
 {
-    jpeg_drv_dec_deinit();
-    jpeg_drv_enc_deinit();
+    //jpeg_drv_dec_deinit();
+    //jpeg_drv_enc_deinit();
     return 0;
 }
 
@@ -1204,14 +1215,19 @@ static int __init jpeg_init(void)
 
 static void __exit jpeg_exit(void)
 {
+#ifdef JPEG_DEV
     cdev_del(jpeg_cdev);
     unregister_chrdev_region(jpeg_devno, 1);
-	//JPEG_MSG("Unregistering driver\n");
-    platform_driver_unregister(&jpeg_driver);
-	platform_device_unregister(&jpeg_device);
+    //JPEG_MSG("Unregistering driver\n");
 	
-	device_destroy(jpeg_class, jpeg_devno);
-	class_destroy(jpeg_class);
+    device_destroy(jpeg_class, jpeg_devno);
+    class_destroy(jpeg_class);
+#else
+    remove_proc_entry("mtk_jpeg", NULL);
+#endif
+   
+    platform_driver_unregister(&jpeg_driver);
+    platform_device_unregister(&jpeg_device);
 	
 	JPEG_MSG("Done\n");
 }

@@ -199,15 +199,15 @@ SST_Secure_Algo:
 	.file 6 "alps/kernel/mediatek/platform/mt6589/kernel/drivers/masp/asf/inc/hacc_export.h"
 	.section	.debug_info,"",%progbits
 .Ldebug_info0:
-	.4byte	0x1b7
+	.4byte	0x1bd
 	.2byte	0x2
 	.4byte	.Ldebug_abbrev0
 	.byte	0x4
 	.uleb128 0x1
-	.4byte	.LASF26
-	.byte	0x1
 	.4byte	.LASF27
+	.byte	0x1
 	.4byte	.LASF28
+	.4byte	.LASF29
 	.4byte	.Ltext0
 	.4byte	.Letext0
 	.4byte	.Ldebug_line0
@@ -269,7 +269,7 @@ SST_Secure_Algo:
 	.byte	0x4
 	.byte	0x6
 	.byte	0x2a
-	.4byte	0xa3
+	.4byte	0xa9
 	.uleb128 0x5
 	.4byte	.LASF12
 	.sleb128 0
@@ -279,56 +279,59 @@ SST_Secure_Algo:
 	.uleb128 0x5
 	.4byte	.LASF14
 	.sleb128 2
+	.uleb128 0x5
+	.4byte	.LASF15
+	.sleb128 3
 	.byte	0
 	.uleb128 0x6
-	.4byte	.LASF15
+	.4byte	.LASF16
 	.byte	0x2
 	.byte	0x32
 	.4byte	0x34
 	.uleb128 0x6
-	.4byte	.LASF16
+	.4byte	.LASF17
 	.byte	0x2
 	.byte	0x33
 	.4byte	0x49
 	.uleb128 0x7
 	.byte	0x1
-	.4byte	.LASF29
+	.4byte	.LASF30
 	.byte	0x1
 	.byte	0x49
 	.byte	0x1
 	.4byte	.LFB147
 	.4byte	.LFE147
 	.4byte	.LLST0
-	.4byte	0x171
-	.uleb128 0x8
-	.4byte	.LASF17
-	.byte	0x1
-	.byte	0x49
-	.4byte	0xae
-	.4byte	.LLST1
+	.4byte	0x177
 	.uleb128 0x8
 	.4byte	.LASF18
 	.byte	0x1
 	.byte	0x49
-	.4byte	0xa3
-	.4byte	.LLST2
+	.4byte	0xb4
+	.4byte	.LLST1
 	.uleb128 0x8
 	.4byte	.LASF19
 	.byte	0x1
 	.byte	0x49
-	.4byte	0xa3
-	.4byte	.LLST3
+	.4byte	0xa9
+	.4byte	.LLST2
 	.uleb128 0x8
 	.4byte	.LASF20
 	.byte	0x1
 	.byte	0x49
-	.4byte	0x171
-	.4byte	.LLST4
-	.uleb128 0x9
+	.4byte	0xa9
+	.4byte	.LLST3
+	.uleb128 0x8
 	.4byte	.LASF21
 	.byte	0x1
 	.byte	0x49
-	.4byte	0x171
+	.4byte	0x177
+	.4byte	.LLST4
+	.uleb128 0x9
+	.4byte	.LASF22
+	.byte	0x1
+	.byte	0x49
+	.4byte	0x177
 	.byte	0x2
 	.byte	0x91
 	.sleb128 0
@@ -336,43 +339,43 @@ SST_Secure_Algo:
 	.ascii	"err\000"
 	.byte	0x1
 	.byte	0x4b
-	.4byte	0xa3
+	.4byte	0xa9
 	.4byte	.LLST5
 	.uleb128 0xa
 	.ascii	"src\000"
 	.byte	0x1
 	.byte	0x4c
-	.4byte	0x171
+	.4byte	0x177
 	.4byte	.LLST6
 	.uleb128 0xa
 	.ascii	"dst\000"
 	.byte	0x1
 	.byte	0x4c
-	.4byte	0x171
+	.4byte	0x177
 	.4byte	.LLST7
 	.uleb128 0xb
-	.4byte	.LASF22
+	.4byte	.LASF23
 	.byte	0x1
 	.byte	0x4c
-	.4byte	0x171
+	.4byte	0x177
 	.4byte	.LLST8
 	.uleb128 0xa
 	.ascii	"i\000"
 	.byte	0x1
 	.byte	0x4d
-	.4byte	0xa3
+	.4byte	0xa9
 	.4byte	.LLST9
 	.uleb128 0xc
-	.4byte	.LASF30
+	.4byte	.LASF31
 	.byte	0x1
 	.byte	0x85
 	.4byte	.L3
 	.byte	0
 	.uleb128 0xd
 	.byte	0x4
-	.4byte	0xae
+	.4byte	0xb4
 	.uleb128 0xe
-	.4byte	.LASF23
+	.4byte	.LASF24
 	.byte	0x3
 	.byte	0x23
 	.4byte	0x34
@@ -380,30 +383,30 @@ SST_Secure_Algo:
 	.byte	0x1
 	.uleb128 0xf
 	.4byte	0x5e
-	.4byte	0x18f
+	.4byte	0x195
 	.uleb128 0x10
 	.byte	0
 	.uleb128 0xe
-	.4byte	.LASF24
+	.4byte	.LASF25
 	.byte	0x4
 	.byte	0x1b
-	.4byte	0x184
+	.4byte	0x18a
 	.byte	0x1
 	.byte	0x1
 	.uleb128 0xf
 	.4byte	0x3b
-	.4byte	0x1a7
+	.4byte	0x1ad
 	.uleb128 0x10
 	.byte	0
 	.uleb128 0x11
-	.4byte	.LASF25
+	.4byte	.LASF26
 	.byte	0x5
 	.2byte	0x18a
-	.4byte	0x1b5
+	.4byte	0x1bb
 	.byte	0x1
 	.byte	0x1
 	.uleb128 0x12
-	.4byte	0x19c
+	.4byte	0x1a2
 	.byte	0
 	.section	.debug_abbrev,"",%progbits
 .Ldebug_abbrev0:
@@ -801,8 +804,8 @@ SST_Secure_Algo:
 	.4byte	0x22
 	.2byte	0x2
 	.4byte	.Ldebug_info0
-	.4byte	0x1bb
-	.4byte	0xb9
+	.4byte	0x1c1
+	.4byte	0xbf
 	.ascii	"SST_Secure_Algo\000"
 	.4byte	0
 	.section	.debug_pubtypes,"",%progbits
@@ -810,7 +813,7 @@ SST_Secure_Algo:
 	.4byte	0xf0
 	.2byte	0x2
 	.4byte	.Ldebug_info0
-	.4byte	0x1bb
+	.4byte	0x1c1
 	.4byte	0x2d
 	.ascii	"long unsigned int\000"
 	.4byte	0x34
@@ -837,9 +840,9 @@ SST_Secure_Algo:
 	.ascii	"_Bool\000"
 	.4byte	0x81
 	.ascii	"float\000"
-	.4byte	0xa3
+	.4byte	0xa9
 	.ascii	"uint32\000"
-	.4byte	0xae
+	.4byte	0xb4
 	.ascii	"uchar\000"
 	.4byte	0
 	.section	.debug_aranges,"",%progbits
@@ -857,40 +860,44 @@ SST_Secure_Algo:
 	.section	.debug_line,"",%progbits
 .Ldebug_line0:
 	.section	.debug_str,"MS",%progbits,1
-.LASF24:
-	.ascii	"console_printk\000"
 .LASF25:
+	.ascii	"console_printk\000"
+.LASF26:
 	.ascii	"hex_asc\000"
-.LASF27:
+.LASF28:
 	.ascii	""
-	.ascii	""
-	.ascii	""
-	.ascii	"\000"
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/mediatek/platform/mt6589/"
+	.ascii	"kernel/drivers/masp/asf/mach/hacc_lib.c\000"
 .LASF11:
 	.ascii	"float\000"
 .LASF4:
 	.ascii	"unsigned char\000"
-.LASF20:
+.LASF21:
 	.ascii	"CustomSeed\000"
 .LASF0:
 	.ascii	"long unsigned int\000"
 .LASF6:
 	.ascii	"short unsigned int\000"
-.LASF26:
+.LASF27:
 	.ascii	"GNU C 4.6.x-google 20120106 (prerelease)\000"
-.LASF16:
-	.ascii	"uchar\000"
-.LASF21:
-	.ascii	"ResText\000"
-.LASF23:
-	.ascii	"elf_hwcap\000"
-.LASF19:
-	.ascii	"ContentLen\000"
+.LASF29:
+	.ascii	""
+	.ascii	"P/ALPS.JB2.MP/alps/kernel/out\000"
 .LASF15:
+	.ascii	"HACC_USER4\000"
+.LASF17:
+	.ascii	"uchar\000"
+.LASF22:
+	.ascii	"ResText\000"
+.LASF24:
+	.ascii	"elf_hwcap\000"
+.LASF20:
+	.ascii	"ContentLen\000"
+.LASF16:
 	.ascii	"uint32\000"
 .LASF1:
 	.ascii	"unsigned int\000"
-.LASF29:
+.LASF30:
 	.ascii	"SST_Secure_Algo\000"
 .LASF8:
 	.ascii	"long long unsigned int\000"
@@ -898,22 +905,19 @@ SST_Secure_Algo:
 	.ascii	"long long int\000"
 .LASF2:
 	.ascii	"char\000"
-.LASF28:
-	.ascii	""
-	.ascii	"\000"
 .LASF5:
 	.ascii	"short int\000"
 .LASF12:
 	.ascii	"HACC_USER1\000"
-.LASF22:
+.LASF23:
 	.ascii	"seed\000"
-.LASF17:
+.LASF18:
 	.ascii	"Direction\000"
 .LASF9:
 	.ascii	"long int\000"
 .LASF3:
 	.ascii	"signed char\000"
-.LASF18:
+.LASF19:
 	.ascii	"ContentAddr\000"
 .LASF13:
 	.ascii	"HACC_USER2\000"
@@ -921,7 +925,7 @@ SST_Secure_Algo:
 	.ascii	"HACC_USER3\000"
 .LASF10:
 	.ascii	"_Bool\000"
-.LASF30:
+.LASF31:
 	.ascii	"_error\000"
 	.ident	"GCC: (GNU) 4.6.x-google 20120106 (prerelease)"
 	.section	.note.GNU-stack,"",%progbits

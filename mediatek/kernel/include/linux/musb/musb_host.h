@@ -35,6 +35,8 @@
 #ifndef _MUSB_HOST_H
 #define _MUSB_HOST_H
 
+#include <linux/scatterlist.h>
+
 static inline struct usb_hcd *musb_to_hcd(struct musb *musb)
 {
 	return container_of((void *) musb, struct usb_hcd, hcd_priv);
@@ -71,6 +73,7 @@ struct musb_qh {
 	u16			maxpacket;
 	u16			frame;		/* for periodic schedule */
 	unsigned		iso_idx;	/* in urb->iso_frame_desc[] */
+	struct sg_mapping_iter sg_miter;	/* for highmem in PIO mode */
 };
 
 /* map from control or bulk queue head to the first qh on that ring */
@@ -96,7 +99,6 @@ extern const struct hc_driver musb_hc_driver;
 
 static inline struct urb *next_urb(struct musb_qh *qh)
 {
-#ifdef CONFIG_USB_MTK_HDRC_HCD
 	struct list_head	*queue;
 
 	if (!qh)
@@ -105,9 +107,6 @@ static inline struct urb *next_urb(struct musb_qh *qh)
 	if (list_empty(queue))
 		return NULL;
 	return list_entry(queue->next, struct urb, urb_list);
-#else
-	return NULL;
-#endif
 }
 
 #endif				/* _MUSB_HOST_H */

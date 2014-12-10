@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     /* dump information                      */
     /* ------------------------------------- */    
     MSG("\n=========================================\n");
-    MSG("[Android SignTool v3.1 (FB)]\n\n");
+    MSG("[Android SignTool v4.0 (FB)]\n\n");
     MSG("Built at %s\n",BUILD_TIME);    
     MSG("=========================================\n\n");    
 

@@ -21,21 +21,6 @@
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
-#ifdef MT6575
-#include "tpd_custom_gt813tb.h"
-#include <mach/mt6575_pm_ldo.h>
-#include <mach/mt6575_typedefs.h>
-#include <mach/mt6575_boot.h>
-#include <mach/mt6575_gpt.h>
-#endif
-
-#ifdef MT6577
-#include "tpd_custom_gt813tb.h"
-#include <mach/mt6577_pm_ldo.h>
-#include <mach/mt6577_typedefs.h>
-#include <mach/mt6577_boot.h>
-#include <mach/mt6577_gpt.h>
-#endif
 #include "tpd.h"
 #include "tpd_custom_gt813tb.h"
 #include <mach/mt_pm_ldo.h>
@@ -77,18 +62,12 @@ static int tpd_def_calmat_local_rotation_0[8]   = TPD_CALIBRATION_MATRIX_ROTATIO
 static void tpd_eint_interrupt_handler(void);
 static int touch_event_handler(void *unused);
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id);
-static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
+static int tpd_i2c_detect(struct i2c_client *client, struct i2c_board_info *info);
 static int tpd_i2c_remove(struct i2c_client *client);
-extern void mt65xx_eint_unmask(unsigned int line);
-extern void mt65xx_eint_mask(unsigned int line);
-extern void mt65xx_eint_set_hw_debounce(kal_uint8 eintno, kal_uint32 ms);
-extern kal_uint32 mt65xx_eint_set_sens(kal_uint8 eintno, kal_bool sens);
-extern void mt65xx_eint_registration(kal_uint8 eintno, kal_bool Dbounce_En,
-                                     kal_bool ACT_Polarity, void (EINT_FUNC_PTR)(void),
-                                     kal_bool auto_umask);
 
-extern void tpd_close_gpio();                                                                    
-extern void tpd_open_gpio();
+
+//extern void tpd_close_gpio();                                                                    
+//extern void tpd_open_gpio();
 
 #define TPD_OK 0
 
@@ -172,7 +151,7 @@ unsigned char esd_check_data[ESD_CHECK_TIME*ESD_CHECK_DATA_LEN];
 int esd_checked_time = 0;
 #endif
 
-static tpd_reset_guitar(){
+static void tpd_reset_guitar(void){
 	//Reset Guitar
     mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
     mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
@@ -195,7 +174,7 @@ static int gt813_config_read_proc(char *page, char **start, off_t off, int count
 {
     char *ptr = page;
     char temp_data[CONFIG_LEN] = {0};
-	int panel_id[1]={0};
+	char panel_id[1]={0};
 	int i;
 
     ptr += sprintf( ptr, "==== GT813 config init value====\n" );
@@ -275,7 +254,7 @@ static int gt813_config_write_proc(struct file *file, const char *buffer, unsign
     return count;
 }
 
-int tpd_init_panel()
+int tpd_init_panel(void)
 {
 	int err = 0;
  	
@@ -296,16 +275,16 @@ int i2c_enable_commands( struct i2c_client *client, u16 addr)
 	txbuf[0] = ( addr >> 8 ) & 0xFF;
 	txbuf[1] = addr & 0xFF;
 
-	i2c_client->addr = i2c_client->addr & I2C_MASK_FLAG;// | I2C_ENEXT_FLAG;
+	client->addr = client->addr & I2C_MASK_FLAG;// | I2C_ENEXT_FLAG;
 
 	retry = 0;
-    while ( i2c_master_send(i2c_client, &txbuf[0], I2C_DEVICE_ADDRESS_LEN ) < 0 )
+    while ( i2c_master_send(client, &txbuf[0], I2C_DEVICE_ADDRESS_LEN ) < 0 )
     {
         retry++;
 
         if ( retry == 5 )
         {
-            i2c_client->addr = i2c_client->addr & I2C_MASK_FLAG;
+            client->addr = client->addr & I2C_MASK_FLAG;
             TPD_DEBUG("I2C read 0x%X length=%d failed\n", addr, I2C_DEVICE_ADDRESS_LEN);
             return -1;
         }
@@ -320,11 +299,7 @@ static tpd_reset_power(){
 #ifdef TPD_POWER_SOURCE_CUSTOM
     hwPowerDown(TPD_POWER_SOURCE_CUSTOM,  "TP");
 #else
-    #ifdef MT6589
-        hwPowerDown(TPD_POWER_LDO, "TP");
-    #else    
-        hwPowerDown(MT65XX_POWER_LDO_VGP2,  "TP");
-    #endif
+    hwPowerDown(TPD_POWER_LDO, "TP");
 #endif
 #ifdef TPD_POWER_SOURCE_1800
     hwPowerDown(TPD_POWER_SOURCE_1800,  "TP");
@@ -333,13 +308,9 @@ static tpd_reset_power(){
     
     //Power on TP
 #ifdef TPD_POWER_SOURCE_CUSTOM
-    hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_2800, "TP");
+    hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_3300, "TP");
 #else
-    #ifdef MT6589   
-        hwPowerOn(TPD_POWER_LDO, VOL_3300, "TP");
-    #else
-        hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
-    #endif
+    hwPowerOn(TPD_POWER_LDO, VOL_3300, "TP");
 #endif
 #ifdef TPD_POWER_SOURCE_1800
     hwPowerOn(TPD_POWER_SOURCE_1800, VOL_1800, "TP");
@@ -359,10 +330,10 @@ static force_reset_guitar()
 	tpd_reset_power();
 	#else
     //Power off TP
-    hwPowerDown(MT65XX_POWER_LDO_VGP2, "TP");
+    hwPowerDown(TPD_POWER_LDO, "TP");
     msleep(30);
     //Power on TP
-    hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
+    hwPowerOn(TPD_POWER_LDO, VOL_3300, "TP");
     msleep(30);
     #endif
 
@@ -447,7 +418,7 @@ static void tpd_esd_check_func(struct work_struct *work)
     }
 
     if(tpd_halt) {
-		mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+		mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
     } else {
         queue_delayed_work(tpd_esd_check_workqueue, &tpd_esd_check_work, 1000);
     }
@@ -455,7 +426,7 @@ static void tpd_esd_check_func(struct work_struct *work)
     return;
 }
 #endif
-
+#if 0
 static int gt813_check_data(unsigned char *buffer, int count)
 {
     unsigned char buf[128] = {0}; // need > sizeof(buffer)
@@ -507,6 +478,7 @@ static int gt813_check_data(unsigned char *buffer, int count)
 
     return error;
 }
+#endif
 
 int i2c_read_bytes( struct i2c_client *client, u16 addr, u8 *rxbuf, int len )
 {
@@ -659,7 +631,7 @@ static int i2c_write_dummy( struct i2c_client *client, u16 addr )
     return 0;
 }
 
-static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_info *info)
+static int tpd_i2c_detect(struct i2c_client *client, struct i2c_board_info *info)
 {
     strcpy(info->type, "mtk-tpd");
     return 0;
@@ -668,24 +640,21 @@ static int tpd_i2c_detect(struct i2c_client *client, int kind, struct i2c_board_
 static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {             
     int err = 0;
+    #ifdef TPD_HAVE_BUTTON
     int retry = 0;
+    #endif
+    #if 0
     static u8 buffer[ 120 ];
 	int i;
 	int ret;
+    #endif
 //#ifdef ESD_PROTECT
 	//int ret;
 //#endif
     TPD_DMESG("tpd_i2c_probe\n");
-#ifdef MT6575
-    //power on, need confirm with SA
-//    hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
-//    hwPowerOn(MT65XX_POWER_LDO_VGP, VOL_1800, "TP");  
-#endif    
     //Power on
-    #ifdef MT6589
     hwPowerOn(TPD_POWER_LDO, VOL_3300, "TP");
     printk("MediaTek touch panel sets hwPowerOn!!!\n");
-    #endif
     //tpd_open_gpio();
     //msleep(10);  
 	
@@ -702,19 +671,6 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     msleep(50);
 
 
-#ifdef MT6573
-    // power down CTP
-    mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_EN_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_EN_PIN, GPIO_OUT_ZERO);
-    msleep(10);
-
-    // power on CTP
-    mt_set_gpio_mode(GPIO_CTP_EN_PIN, GPIO_CTP_EN_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_EN_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_EN_PIN, GPIO_OUT_ONE);
-    msleep(10);
-#endif    
 
     memset( &tpd_info, 0, sizeof( struct tpd_info_t ) );
    // i2c_write_dummy( client, TPD_HANDSHAKING_START_REG );
@@ -734,7 +690,7 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
     }
 
     i2c_client = client;
-   
+#if 0 //linux-3.10 procfs API changed   
     // Create proc file system
     gt813_config_proc = create_proc_entry( GT813_CONFIG_PROC_FILE, 0666, NULL);
 
@@ -747,7 +703,7 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
         gt813_config_proc->read_proc = gt813_config_read_proc;
         gt813_config_proc->write_proc = gt813_config_write_proc;
     }
-  
+#endif  
     #ifdef TPD_HAVE_BUTTON
     for(retry =0; retry < 3; retry ++)
     {
@@ -794,10 +750,9 @@ static int tpd_i2c_probe(struct i2c_client *client, const struct i2c_device_id *
  
 
 
-    mt65xx_eint_set_sens(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_SENSITIVE);
-    mt65xx_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
-    mt65xx_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_EN, CUST_EINT_TOUCH_PANEL_POLARITY, tpd_eint_interrupt_handler, 1);
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+    //mt_eint_set_hw_debounce(CUST_EINT_TOUCH_PANEL_NUM, CUST_EINT_TOUCH_PANEL_DEBOUNCE_CN);
+    mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, EINTF_TRIGGER_RISING, tpd_eint_interrupt_handler, 1);
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
 
     tpd_load_status = 1;
 
@@ -881,8 +836,8 @@ static void tpd_up(int x, int y, int id)
 /*Coordination mapping*/
 void tpd_calibrate_driver(int *x, int *y)
 {
+    int tx;//, i;
     TPD_DEBUG("Call tpd_calibrate of this driver ..\n");
-    int tx, i;
     //if(tpd_calmat[0]==0) for(i=0;i<6;i++) tpd_calmat[i]=tpd_def_calmat[i];    
     tx = ( (tpd_calmat_driver[0] * (*x)) + (tpd_calmat_driver[1] * (*y)) + (tpd_calmat_driver[2]) ) >> 12;
     *y = ( (tpd_calmat_driver[3] * (*x)) + (tpd_calmat_driver[4] * (*y)) + (tpd_calmat_driver[5]) ) >> 12;
@@ -899,7 +854,9 @@ static int touch_event_handler(void *unused)
     int finger_num = 0;
     static u8 buffer[ TPD_POINT_INFO_LEN*TPD_MAX_POINTS + 3 ];
     static u8 id_mask = 0;
+    #ifdef TPD_HAVE_BUTTON
     static u8 key_history = 0;
+    #endif
     u8 key;
     u8 chk_sum = 0;
     u8 cur_mask;
@@ -907,7 +864,7 @@ static int touch_event_handler(void *unused)
     static int x_history[TPD_MAX_POINTS+1];
     static int y_history[TPD_MAX_POINTS+1];
 
-	int buf_id;
+	//int buf_id;
 
     sched_setscheduler(current, SCHED_RR, &param); 
 
@@ -1018,7 +975,7 @@ static int touch_event_handler(void *unused)
                 tpd_down( x, y, size, id);
 
 //                tpd_down( TPD_WARP_X(x), TPD_WARP_Y(y), size, id);
-                printk("[touch]x:%d, y:%d, size:%d, id:%d.\n", x, y, size, id);
+                //printk("[touch]x:%d, y:%d, size:%d, id:%d.\n", x, y, size, id);
 
                 x_history[id] = x;
                 y_history[id] = y;
@@ -1126,6 +1083,8 @@ static int tpd_local_init(void)
     tpd->dev->id.product = tpd_info.product_id;
     tpd->dev->id.version = (tpd_info.version_2 << 8 ) | tpd_info.version_1;
 
+    input_set_abs_params(tpd->dev, ABS_MT_TRACKING_ID, 0, TPD_MAX_POINTS-1, 0, 0);//for linux3.8
+
     TPD_DMESG("end %s, %d\n", __FUNCTION__, __LINE__);  
     tpd_type_cap = 1;
 
@@ -1145,7 +1104,7 @@ static void tpd_suspend( struct early_suspend *h )
   //  i2c_write_dummy( i2c_client, TPD_HANDSHAKING_START_REG );
     i2c_write_bytes( i2c_client, TPD_POWER_MODE_REG, &mode, 1 );
     i2c_write_dummy( i2c_client, TPD_HANDSHAKING_END_REG );    
-    mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
+    mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 
 #ifdef ESD_PROTECT
     flush_workqueue(tpd_esd_check_workqueue);
@@ -1179,7 +1138,7 @@ static void tpd_resume( struct early_suspend *h )
     mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_EINT);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
 
-    mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+    mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
 
     tpd_halt = 0;
     TPD_DMESG(TPD_DEVICE " tpd_resume end \n" ); 	    

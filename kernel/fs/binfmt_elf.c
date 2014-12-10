@@ -1094,6 +1094,11 @@ out:
  * Jeremy Fitzhardinge <jeremy@sw.oz.au>
  */
 
+#ifdef CONFIG_MTK_EXTMEM
+extern bool extmem_in_mspace(struct vm_area_struct *vma);
+extern unsigned long get_virt_from_mspace(unsigned long pa);
+#endif
+
 /*
  * The purpose of always_dump_vma() is to make sure that special kernel mappings
  * that are useful for post-mortem analysis are included in every core dump.
@@ -1114,6 +1119,10 @@ static bool always_dump_vma(struct vm_area_struct *vma)
 	if (arch_vma_name(vma))
 		return true;
 
+#ifdef CONFIG_MTK_EXTMEM
+	if (extmem_in_mspace(vma))
+		return true;
+#endif
 	return false;
 }
 
@@ -1710,30 +1719,19 @@ static int elf_note_info_init(struct elf_note_info *info)
 		return 0;
 	info->psinfo = kmalloc(sizeof(*info->psinfo), GFP_KERNEL);
 	if (!info->psinfo)
-		goto notes_free;
+		return 0;
 	info->prstatus = kmalloc(sizeof(*info->prstatus), GFP_KERNEL);
 	if (!info->prstatus)
-		goto psinfo_free;
+		return 0;
 	info->fpu = kmalloc(sizeof(*info->fpu), GFP_KERNEL);
 	if (!info->fpu)
-		goto prstatus_free;
+		return 0;
 #ifdef ELF_CORE_COPY_XFPREGS
 	info->xfpu = kmalloc(sizeof(*info->xfpu), GFP_KERNEL);
 	if (!info->xfpu)
-		goto fpu_free;
+		return 0;
 #endif
 	return 1;
-#ifdef ELF_CORE_COPY_XFPREGS
- fpu_free:
-	kfree(info->fpu);
-#endif
- prstatus_free:
-	kfree(info->prstatus);
- psinfo_free:
-	kfree(info->psinfo);
- notes_free:
-	kfree(info->notes);
-	return 0;
 }
 
 static int fill_note_info(struct elfhdr *elf, int phdrs,
@@ -2072,6 +2070,21 @@ static int elf_core_dump(struct coredump_params *cprm)
 		unsigned long end;
 
 		end = vma->vm_start + vma_dump_size(vma, cprm->mm_flags);
+
+#ifdef CONFIG_MTK_EXTMEM
+		if (extmem_in_mspace(vma)) {
+			void *extmem_va = (void *)get_virt_from_mspace(vma->vm_pgoff << PAGE_SHIFT);
+			for (addr = vma->vm_start; addr < end; addr += PAGE_SIZE, extmem_va += PAGE_SIZE) {
+				int stop;
+				stop = ((size += PAGE_SIZE) > cprm->limit) ||
+					!dump_write(cprm->file, extmem_va,
+						    PAGE_SIZE);
+				if (stop)
+					goto end_coredump;
+			}
+			continue;
+		}
+#endif
 
 		for (addr = vma->vm_start; addr < end; addr += PAGE_SIZE) {
 			struct page *page;

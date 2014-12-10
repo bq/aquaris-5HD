@@ -1,14 +1,6 @@
 #ifndef _CCCI_PMIC_H
 #define _CCCI_PMIC_H
-#if 0
-#if defined(CONFIG_ARCH_MT6516)
-	#include <mach/mt6516_typedefs.h>
-#elif defined(CONFIG_ARCH_MT6573)
-	#include <mach/mt6573_typedefs.h>
-#else
-	#error "ARCH not supported!"
-#endif
-#endif
+
 #include "ccci.h"
 typedef enum
 {

@@ -1,148 +1,103 @@
-#include <string.h>
+/* MTK Proprietary Customization File */
 
-#define SHA1_HASH_LEN       (20)
-#define SHA256_HASH_LEN     (32)
-#define RSA1024_SIG_LEN     (128)
-#define RSA2048_SIG_LEN     (256)
+#define RSA2048_KEY_LENGTH          (256)
+#define RSA1024_KEY_LENGTH          (128)
+#define SHA256_LENGTH_IN_BYTE       (32)
+#define SHA1_LENGTH_IN_BYTE         (20)
 
-
-/**************************************************************************
- *  AUTH KEY INIT
- **************************************************************************/
-void cust_init_key (unsigned char *key_rsa_n, unsigned int nKey_len,
-                        unsigned char *key_rsa_d, unsigned int dKey_len,
-                        unsigned char *key_rsa_e, unsigned int eKey_len)
+void cust_init_key (unsigned char *rsa_n, unsigned int n_len, 
+    unsigned char *rsa_d, unsigned int d_len, 
+    unsigned char *rsa_e, unsigned int e_len)
 {
-    /* TODO : the key will pass in, need to judge if the key is for RSA1024 or RSA2048 and save it for later use */    
-    /* customer needs to customized this function */
-        
     return;
 }
 
-/**************************************************************************
- *  HASH (should support SHA1 and SHA256)
- **************************************************************************/     
-int cust_hash (unsigned char* data_buf,  unsigned int data_len, unsigned char* hash_buf, unsigned int hash_len)
+int cust_hash (unsigned char* d_buf,  unsigned int d_len, unsigned char* h_buf, unsigned int h_len)
 {
-    memset(hash_buf, 0x00, hash_len);
-    
-    if(SHA1_HASH_LEN == hash_len)
+    //SHA1
+ 	if(h_len == SHA1_LENGTH_IN_BYTE)
     {
-        /* =============== */
-        /* SHA1            */
-        /* =============== */
-        
-        /* TODO : use cust_hash to generate hash value */    
-        /* customer needs to customized this function */
-        
-        return 0;        
+
     }
-    else if(SHA256_HASH_LEN == hash_len)
+    //SHA256
+    else if(h_len == SHA256_LENGTH_IN_BYTE)
     {
-        /* =============== */
-        /* SHA256          */
-        /* =============== */
-        
-        /* TODO : use cust_hash to generate hash value */    
-        /* customer needs to customized this function */
-        
-        return 0;        
+
     }
-    else
-    {
-        /* unsupported, just return hash failed */
-        return -1;
-    }    
+
+    //If length is not supported, then go here directly
+    return -1;
 }
 
-/**************************************************************************
- *  RSA Sign (should support RSA1024 and RSA2048)
- **************************************************************************/     
-int cust_sign(unsigned char* data_buf,  unsigned int data_len, unsigned char* sig_buf, unsigned int sig_len)
+
+int cust_verify (unsigned char* d_buf,  unsigned int d_len, unsigned char* s_buf, unsigned int s_len)
 {
-    memset(sig_buf, 0x00, sig_len);
-    
-    if(RSA1024_SIG_LEN == sig_len)
-    {
-        unsigned char sha1sum[SHA1_HASH_LEN] = {0};
-
-        /* SHA1 */        
-        if( cust_hash(data_buf, data_len, sha1sum, SHA1_HASH_LEN) != 0 )
+    //RSA1024
+	if(s_len == RSA1024_KEY_LENGTH)
+	{
+        unsigned char sha1_buf[SHA1_LENGTH_IN_BYTE] = {0};    
+            
+        if( cust_hash(d_buf, d_len, sha1_buf, SHA1_LENGTH_IN_BYTE) != 0 )
         {
-            /* return sign pass */
-            return 0;
-        }
-    
-        /* TODO : use cust_sign to sign data buffer with RSA1024 */    
-        /* customer needs to customized this function */
-        
-        return 0;        
-    }
-    else if(RSA2048_SIG_LEN == sig_len)
-    {
-        unsigned char sha256sum[SHA256_HASH_LEN] = {0};
+            return -1;
+        }        
 
-        /* SHA256 */      
-        if( cust_hash(data_buf, data_len, sha256sum, SHA256_HASH_LEN) != 0 )
+        //To verify here
+        
+        return -1;        
+    }
+    //RSA2048
+    else if(s_len == RSA2048_KEY_LENGTH)
+    {
+        unsigned char sha256_buf[SHA256_LENGTH_IN_BYTE] = {0};
+       
+        if( cust_hash(d_buf, d_len, sha256_buf, SHA256_LENGTH_IN_BYTE) != 0 )
         {
-            /* return sign pass */
-            return 0;
-        }
+            return -1;
+        }        
         
-        /* TODO : use cust_sign to sign data buffer with RSA2048*/    
-        /* customer needs to customized this function */
+        //To verify here
         
-        return 0;        
-    }
-    else
-    {
-        /* unsupported, just return sign failed */
-        return -1;
+        return -1;        
     }
 
+    //If length is not supported, then go here directly
+    return -1;
 }
 
-/**************************************************************************
- *  RSA Verify (should support RSA1024 and RSA2048)
- **************************************************************************/     
-int cust_verify (unsigned char* data_buf,  unsigned int data_len, unsigned char* sig_buf, unsigned int sig_len)
-{    
-    if(RSA1024_SIG_LEN == sig_len)
-    {
-        unsigned char sha1sum[SHA1_HASH_LEN] = {0};
 
-        /* SHA1 */        
-        if( cust_hash(data_buf, data_len, sha1sum, SHA1_HASH_LEN) != 0 )
+int cust_sign (unsigned char* d_buf,  unsigned int d_len, unsigned char* s_buf, unsigned int s_len)
+{
+    //RSA1024
+	if(s_len == RSA1024_KEY_LENGTH)
+	{
+        unsigned char sha1_buf[SHA1_LENGTH_IN_BYTE] = {0};    
+            
+        if( cust_hash(d_buf, d_len, sha1_buf, SHA1_LENGTH_IN_BYTE) != 0 )
         {
-            /* return verify pass */
-            return 0;
-        }
-    
-        /* TODO : use cust_verify to verify data buffer with RSA1024 */    
-        /* customer needs to customized this function */
-        
-        return 0;        
-    }
-    else if(RSA2048_SIG_LEN == sig_len)
-    {
-        unsigned char sha256sum[SHA256_HASH_LEN] = {0};
+            return -1;
+        }        
 
-        /* SHA256 */      
-        if( cust_hash(data_buf, data_len, sha256sum, SHA256_HASH_LEN) != 0 )
-        {
-            /* return verify pass */
-            return 0;
-        }
+        //To sign here
         
-        /* TODO : use cust_verify to verify data buffer with RSA2048*/    
-        /* customer needs to customized this function */
-        
-        return 0;        
+        return -1;        
     }
-    else
+    //RSA2048
+    else if(s_len == RSA2048_KEY_LENGTH)
     {
-        /* unsupported, just return verify failed */
-        return -1;
+        unsigned char sha256_buf[SHA256_LENGTH_IN_BYTE] = {0};
+       
+        if( cust_hash(d_buf, d_len, sha256_buf, SHA256_LENGTH_IN_BYTE) != 0 )
+        {
+            return -1;
+        }        
+        
+        //To sign here
+        
+        return -1;        
     }
+
+    //If length is not supported, then go here directly
+    return -1;
 }
 

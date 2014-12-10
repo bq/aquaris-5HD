@@ -10,6 +10,9 @@ extern "C"
 
 #define MMProfileMaxEventCount 4096
 
+#define MMP_EVENT_STATE_ENABLED	(1 << 0)
+#define MMP_EVENT_STATE_FTRACE	(1 << 1)
+
 typedef struct
 {
 	unsigned int parentId;

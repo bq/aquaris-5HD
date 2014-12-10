@@ -630,7 +630,8 @@ static ssize_t ccci_ipc_write(struct file *file, const char __user *buf, size_t 
 	if (hard_ware_ok==0)
 	{
 		ret=-EIO;
-		goto out_unlock;
+    spin_unlock_irq(&task->lock);
+		goto out_free;
 	}
 	spin_unlock_irq(&task->lock);
 	task->jiffies=jiffies;
@@ -649,22 +650,17 @@ static ssize_t ccci_ipc_write(struct file *file, const char __user *buf, size_t 
 		}
 		
 	}
-//	do{
-//		loop++;
+
 		
-		ret=ccci_ipc_write_stream(CCCI_IPC_TX,task->ilm_phy_addr,sizeof(ipc_ilm_t),id_map->extq_id);
-//		cond_resched();
-//	}while(ret==CCCI_NO_PHY_CHANNEL) ;
-//	dump(ilm,count);
+	ret=ccci_ipc_write_stream(CCCI_IPC_TX,task->ilm_phy_addr,sizeof(ipc_ilm_t),id_map->extq_id);
+
 	if (ret!=CCCI_SUCCESS)
-	{	// ret==CCCI_IN_USE  this should not happened.
+	{	
 		CCCI_MSG_INF("ipc", "ccci_ipc_write_stream fialed (ret=%d)!\n",ret);
 		clear_bit(CCCI_TASK_PENDING,&task->flag);
 		ret=-EAGAIN;
 		goto out_free;
 	}
-out_unlock:
-	spin_unlock_irq(&task->lock);	
 
 out_free:
 	kfree(ilm);

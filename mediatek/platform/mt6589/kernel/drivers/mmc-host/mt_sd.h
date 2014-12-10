@@ -5,6 +5,7 @@
 #include <linux/mmc/host.h>
 #include <mach/sync_write.h>
 #include <mach/mt_reg_base.h>
+#include <linux/semaphore.h>
 #define MAX_GPD_NUM         (1 + 1)  /* one null gpd */
 #define MAX_BD_NUM          (1024)
 #define MAX_BD_PER_GPD      (MAX_BD_NUM)
@@ -22,6 +23,7 @@
 #define CUST_EINT_DEBOUNCE_ENABLE           1
 #define CUST_EINT_EDGE_SENSITIVE            0
 #define CUST_EINT_LEVEL_SENSITIVE           1
+#define SDIO_ERROR_BYPASS
 //////////////////////////////////////////////////////////////////////////////
 
 
@@ -1167,6 +1169,13 @@ struct msdc_saved_para
 	u8							int_dat_latch_ck_sel;
 	u8							ckgen_msdc_dly_sel;
 };
+
+struct msdc_error_record{
+    struct mmc_command         cmd;
+    struct mmc_data            data;
+    struct mmc_command         stop;
+};
+
 struct msdc_host
 {
     struct msdc_hw              *hw;
@@ -1180,6 +1189,7 @@ struct msdc_host
     int                         cmd_r1b_done;
 
     int                         error; 
+    
     spinlock_t                  lock;           /* mutex */
     spinlock_t                  clk_gate_lock;
 	spinlock_t                  remove_bad_card;	/*to solve removing bad card race condition with hot-plug enable*/
@@ -1245,7 +1255,11 @@ struct msdc_host
 	int 						sd_cd_polarity;
 	int							sd_cd_insert_work; //to make sure insert mmc_rescan this work in start_host when boot up
 												   //driver will get a EINT(Level sensitive) when boot up phone with card insert
-	bool						block_bad_card;											   
+	bool						block_bad_card;	
+#ifdef SDIO_ERROR_BYPASS      
+    int                         sdio_error;     /* sdio error can't recovery */
+    struct msdc_error_record    sdio_error_rec; 		/* sdio last error mrq */								   
+#endif    
 	void	(*power_control)(struct msdc_host *host,u32 on);
 	void	(*power_switch)(struct msdc_host *host,u32 on);
 };

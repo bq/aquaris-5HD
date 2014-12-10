@@ -7,6 +7,7 @@
 
 #include <mach/irqs.h>
 #include <mach/mt_spm.h>
+#include <mach/wd_api.h>
 
 /**************************************
  * for General
@@ -15,7 +16,7 @@ DEFINE_SPINLOCK(spm_lock);
 
 static irqreturn_t spm_irq_handler(int irq, void *dev_id)
 {
-    spm_error("!!! SPM ISR SHOULD NOT BE EXECUTED !!!\n");
+    spm_error("ISR SHOULD NOT BE EXECUTED (0x%x)\n", spm_read(SPM_SLEEP_ISR_STATUS));
 
     spin_lock(&spm_lock);
     /* clean ISR status */
@@ -30,6 +31,7 @@ void spm_module_init(void)
 {
     int r;
     unsigned long flags;
+    struct wd_api *wd_api;
 
     spin_lock_irqsave(&spm_lock, flags);
     /* enable register control */
@@ -63,7 +65,15 @@ void spm_module_init(void)
     r = request_irq(MT_SPM_IRQ_ID, spm_irq_handler, IRQF_TRIGGER_LOW,
                     "mt-spm", NULL);
     if (r) {
-        spm_error("SPM IRQ register failed (%d)\n", r);
+        spm_error("FAILED TO REQUEST SPM IRQ (%d)\n", r);
+        WARN_ON(1);
+    }
+
+    get_wd_api(&wd_api);
+    if (wd_api->wd_thermal_mode_config) {
+        wd_api->wd_thermal_mode_config(WD_REQ_EN, WD_REQ_RST_MODE);
+    } else {
+        spm_error("FAILED TO GET WD API\n");
         WARN_ON(1);
     }
 }
@@ -100,4 +110,4 @@ int spm_dvfs_ctrl_volt(u32 value)
     return 0;
 }
 
-MODULE_DESCRIPTION("MT6589 SPM Driver v0.1");
+MODULE_DESCRIPTION("SPM Driver v0.1");

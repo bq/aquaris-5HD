@@ -19,6 +19,12 @@
 #define OV8825AF_LENS_ID					 0x0003
 #define BU6429AF_LENS_ID					 0x0004
 #define BU6424AF_LENS_ID					 0x0005
+#define AD5823_LENS_ID					   0x5823
+#define AD5823AF_LENS_ID					 0x5823
+#define DW9718AF_LENS_ID 					 0x9718
+#define AD5820AF_LENS_ID					 0x5820
+#define DW9714AF_LENS_ID 					 0x9714
+#define S5K3H2YXAF_LENS_ID                   0x0009
 
 /* AF LAMP THRESHOLD*/
 #define AF_LAMP_LV_THRES 60

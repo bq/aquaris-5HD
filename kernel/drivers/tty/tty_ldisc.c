@@ -494,6 +494,26 @@ static void tty_ldisc_restore(struct tty_struct *tty, struct tty_ldisc *old)
 	}
 }
 
+static int tty_ldisc_check_idle(struct tty_struct *tty)
+{
+	unsigned long flags;
+	int users = 0;
+
+	spin_lock_irqsave(&tty_ldisc_lock, flags);
+	clear_bit(TTY_LDISC, &tty->flags);
+	users = atomic_read(&tty->ldisc->users);
+	spin_unlock_irqrestore(&tty_ldisc_lock, flags);
+	return users;
+}
+
+static int tty_ldisc_wait_idle_2(struct tty_struct *tty, long timeout)
+{
+	long ret;
+	ret = wait_event_timeout(tty_ldisc_idle,
+			tty_ldisc_check_idle(tty) == 1, timeout);
+	return ret > 0 ? 0 : -EBUSY;
+}
+
 /**
  *	tty_ldisc_halt		-	shut down the line discipline
  *	@tty: tty device
@@ -510,7 +530,14 @@ static void tty_ldisc_restore(struct tty_struct *tty, struct tty_ldisc *old)
 
 static int tty_ldisc_halt(struct tty_struct *tty)
 {
+	char cur_n[TASK_COMM_LEN], tty_n[64];
 	clear_bit(TTY_LDISC, &tty->flags);
+	while(tty_ldisc_wait_idle_2(tty, MAX_SCHEDULE_TIMEOUT) == -EBUSY) {
+		printk_ratelimited(KERN_WARNING
+					"%s: waiting (%s) for %s took too long, but we keep waiting...\n",
+					__func__, get_task_comm(cur_n, current),
+					tty_name(tty, tty_n));
+	}
 	return cancel_work_sync(&tty->buf.work);
 }
 
@@ -832,7 +859,7 @@ retry:
 			long timeout = 3 * HZ;
 			tty_unlock();
 
-			while (tty_ldisc_wait_idle(tty, timeout) == -EBUSY) {
+			while (tty_ldisc_wait_idle_2(tty, timeout) == -EBUSY) {
 				timeout = MAX_SCHEDULE_TIMEOUT;
 				printk_ratelimited(KERN_WARNING
 					"%s: waiting (%s) for %s took too long, but we keep waiting...\n",

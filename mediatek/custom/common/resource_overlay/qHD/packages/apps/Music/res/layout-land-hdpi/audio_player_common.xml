@@ -28,7 +28,8 @@
         android:background="#ff5a5a5a"
         android:paddingTop="1dip"
         android:paddingBottom="1dip"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:layout_weight="1">
 
         <TextView android:id="@+id/currenttime"
             android:textAppearance="?android:attr/textAppearanceMedium"
@@ -82,7 +83,7 @@
         android:background="#ff5a5a5a"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="40dip"
+        android:layout_height="wrap_content"
         android:paddingLeft="16dip"
         android:paddingRight="16dip"
         android:paddingBottom="8dip" />

@@ -3,6 +3,9 @@
 
 #include <linux/kernel.h>
 #include <linux/mmprofile.h>
+#include <linux/aee.h>
+
+
 extern struct DDP_MMP_Events_t
 {
     MMP_Event DDP;
@@ -37,6 +40,11 @@ extern unsigned int irq_log;
 #define DISP_MSG(string, args...) printk("[DDP]"string,##args)  // default on, important msg, not err
 #define DISP_ERR(string, args...) printk("[DDP]error:"string,##args)  //default on, err msg
 
+#define ddp_aee_mmp_dump(string, args...) do{\
+    MMProfileLogEx(DDP_MMP_Events.Mutex[5], MMProfileFlagPulse, 1, 1); \
+    DISP_MSG("DDP dump MMP start at file=%s, line=%d, time=%s", __FILE__, __LINE__, __TIME__); \
+    aee_kernel_warning_api(__FILE__, __LINE__, DB_OPT_MMPROFILE_BUFFER, "DDP", "[DDP]"string, ##args);  \
+}while(0)
 
 void ddp_debug_init(void);
 void ddp_debug_exit(void);

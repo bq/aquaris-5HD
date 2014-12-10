@@ -6,8 +6,8 @@
 *****************************************************/
 #define DEVICE_MAX_VOLUME           (12)
 #define DEVICE_VOICE_MAX_VOLUME     (12)
-#define DEVICE_MIN_VOLUME           (-4)
-#define DEVICE_VOICE_MIN_VOLUME     (-4)
+#define DEVICE_MIN_VOLUME           (-32)
+#define DEVICE_VOICE_MIN_VOLUME     (-32)
 #define DEVICE_VOLUME_RANGE     (64)
 #define DEVICE_VOLUME_STEP (256)
 
@@ -29,8 +29,13 @@
 
 /***************************************************
 * Define this will enable DRC for loudspeaker.
+* If defined MTK_HD_AUDIO_ARCHITECTURE , don't support DRC in HAL, AudioFlinger will do DRC
+* If undefined MTK_HD_AUDIO_ARCHITECTURE , support DRC in HAL, AudioFlinger won't do DRC
 *****************************************************/
+#ifndef MTK_HD_AUDIO_ARCHITECTURE
 #define ENABLE_AUDIO_DRC_SPEAKER
+#endif
+
 
 
 /***************************************************
@@ -84,9 +89,25 @@
 *****************************************************/
 //#define AUDIO_HQA_SUPPORT
 
+/****************************************************
+* Define this  , Audio Policy will apply ro.camera.sound.forced setting in mediatek/config/project_name/system.prop 
+* (Add this optionn because JB2 load is invalid
+*****************************************************/
+//#define ENABLE_CAMERA_SOUND_FORCED_SET
+
 #define AUDIO_DROP_FRAME_COUNT_NORMAL 5
 #define AUDIO_DROP_FRAME_COUNT_RECORD 5
 #define AUDIO_DROP_FRAME_COUNT_CTS 5
+
+/***************************************************
+*(0)->copyright is asserted; (1)->no copyright is asserted.
+*****************************************************/
+#define CHANNEL_STATUS_COPY_BIT (1)
+
+/***************************************************
+*Specify category code (1 byte).
+*****************************************************/
+#define CHANNEL_STATUS_CATEGORY_CODE  (0x00)
 
 
 /****************************************************
@@ -94,6 +115,16 @@
 *****************************************************/
 #define DEFAULT_HDRecordEnhanceParas \
 	0, 479, 16388, 36892, 37124, 8192,  768, 0,  4048, 2245, 611, 0, 0, 0, 0, 8192
+
+
+/****************************************************
+*Define MagiLoudness_TE_mode
+*bit 0 earpiece DRC2.0  on=> bits 0 = 1
+*bit 1 headset  DRC2.0  on=> bits 1 = 1
+*bit 2 speaker  DRC2.0  on=> bits 2 = 1
+*****************************************************/
+#define MagiLoudness_TE_mode (0x0)
+
 
 #define DEFAULT_HDRecordCompenFilter \
     32767,     0,     0,     0,     0,     0,     0,     0,     0,     0, \

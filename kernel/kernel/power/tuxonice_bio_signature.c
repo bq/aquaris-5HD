@@ -159,7 +159,7 @@ int toi_bio_mark_have_image(void)
 int remove_old_signature(void)
 {
 	union p_diskpage swap_header_page = (union p_diskpage) toi_cur_sig_page;
-	char *orig_sig, *no_image_signature_contents;
+	char *orig_sig;
 	char *header_start = (char *) toi_get_zeroed_page(38, TOI_ATOMIC_GFP);
 	int result;
 	struct block_device *header_bdev;
@@ -183,8 +183,7 @@ int remove_old_signature(void)
 		orig_sig = "SWAPSPACE2";
 
 	memcpy(swap_header_page.pointer->swh.magic.magic, orig_sig, 10);
-	memcpy(swap_header_page.ptr, header_start,
-			sizeof(no_image_signature_contents));
+	memcpy(swap_header_page.ptr, header_start, 10);
 
 	result = toi_bio_ops.bdev_page_io(WRITE, resume_block_device,
 		resume_firstblock, virt_to_page(swap_header_page.ptr));
